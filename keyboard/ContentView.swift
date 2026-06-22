@@ -1,86 +1,37 @@
-//
-//  ContentView.swift
-//  keyboard
-//
-//  Created by Meher Deepak on 21/06/26.
-//
-
 import SwiftUI
-import CoreData
+
+// ⚠️ This file must be a member of the APP target ONLY — never the keyboard
+// extension. It uses UIApplication, which app extensions are not allowed to call.
+// (That's why it lives here and not in the shared KeyboardView.swift.)
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
-
-    var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-            Text("Select an item")
-        }
-    }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
-    }
+	@State private var typed = ""
+	@State private var themeIndex = 0
+	
+	var body: some View {
+		VStack(spacing: 0) {
+			
+			// ── Onboarding ──────────────────────────────────────────────
+			VStack(spacing: 8) {
+				Text("Enable the keyboard")
+					.font(.headline)
+				Text("Settings → General → Keyboard → Keyboards → Add New Keyboard → demo_keyboard, then tap 🌐 in any app to switch to it.")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+					.multilineTextAlignment(.center)
+				
+				Button("Open Settings") {
+					if let url = URL(string: UIApplication.openSettingsURLString) {
+						UIApplication.shared.open(url)
+					}
+				}
+				.buttonStyle(.borderedProminent)
+			}
+			.padding()
+		}
+	}
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
 #Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+	ContentView()
 }

@@ -1,0 +1,48 @@
+## --- Xcode ---
+## User settings and personal layouts that change constantly
+xcuserdata/
+*.xcuserstate
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Xcode 13+ and Swift Playgrounds caches
+.ccache
+*.xcscmblueprint
+*.xccheckout
+
+## --- Build Artifacts ---
+## Where Xcode compiles your app; sharing this wastes space and causes conflicts
+build/
+DerivedData/
+Products/
+
+## --- Swift Package Manager ---
+## SPM downloads dependencies here automatically; no need to track them
+.build/
+.swiftpm/
+
+## --- Dependency Managers (Optional) ---
+## Un-comment these if you use CocoaPods or Carthage
+# Pods/
+# Carthage/Build/
+
+## --- Secrets and Configurations ---
+## Block environment files and configuration files holding sensitive API keys
+.env
+.env.*
+GoogleService-Info.plist
+*Secret*.swift
+*Config*.plist
+
+## --- OS / System Files ---
+## Folder attributes created by macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
