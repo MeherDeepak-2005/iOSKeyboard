@@ -12,6 +12,8 @@ import CoreData
 struct keyboardApp: App {
     let persistenceController = PersistenceController.shared
 
+    init() { FontInstaller.registerBundledFonts() }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

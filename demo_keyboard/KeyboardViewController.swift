@@ -1,12 +1,13 @@
 import UIKit
 
-// The keystroke path is now: insertText (+ a fast one-word autocorrect on word
-// boundaries). NOTHING blocks. Suggestions are DEBOUNCED onto a later run-loop
-// tick, so fast typing never schedules a slow completion lookup per key.
+// Keystroke path = insertText only. Autocorrect is a fast read on word boundaries;
+// suggestions are debounced. The engine now receives up to two words of context
+// (for the trigram), assembled by `contextWords`.
 
 final class KeyboardViewController: UIInputViewController {
 
 	private var keyboard: KeyboardView!
+	private var heightConstraint: NSLayoutConstraint?
 	private let engine = KeyboardEngine()
 
 	private enum Mode { case predict, complete(String), revert(String) }
@@ -19,11 +20,30 @@ final class KeyboardViewController: UIInputViewController {
 
 	override func viewDidLoad() {
 		super.viewDidLoad()
-		
+		FontInstaller.registerBundledFonts()
+		view.backgroundColor = .clear
+		buildKeyboard()
+		scheduleSuggestions()
 
-		let theme = traitCollection.userInterfaceStyle == .dark ? KeyboardTheme.doistDark : KeyboardTheme.doistLight
-		
+		// Follow the host app's light/dark appearance and rebuild on changes.
+		registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
+			self.buildKeyboard()
+			self.scheduleSuggestions()
+		}
+	}
+
+	private func currentTheme() -> KeyboardTheme {
+		.system(dark: traitCollection.userInterfaceStyle == .dark)
+	}
+
+	private func buildKeyboard() {
+		keyboard?.removeFromSuperview()
+
+		let theme = currentTheme()
+		view.backgroundColor = .clear
+
 		let kb = KeyboardView(theme: theme, showsGlobe: needsInputModeSwitchKey)
+		kb.hapticsEnabled   = KBSettings.haptics
 		kb.onInsert         = { [weak self] in self?.handleInsert($0) }
 		kb.onDelete         = { [weak self] in self?.handleDelete() }
 		kb.onReturn         = { [weak self] in self?.handleReturn() }
@@ -41,23 +61,57 @@ final class KeyboardViewController: UIInputViewController {
 		let h = view.heightAnchor.constraint(equalToConstant: kb.keyboardHeight)
 		h.priority = .required - 1
 		h.isActive = true
+		heightConstraint = h
 		keyboard = kb
+		updateActionKey()
+	}
 
-		scheduleSuggestions()
+	// MARK: Contextual action key — mirrors the host field's Return key (go / search / send …)
+
+	override func viewWillAppear(_ animated: Bool) {
+		super.viewWillAppear(animated)
+		updateActionKey()
+		keyboard?.prepareHaptics()     // prime the engine so the first tap isn't delayed
+	}
+
+	override func textDidChange(_ textInput: UITextInput?) {
+		super.textDidChange(textInput)
+		updateActionKey()
+	}
+
+	private func updateActionKey() {
+		keyboard?.setActionTitle(actionTitle(for: textDocumentProxy.returnKeyType ?? .default))
+	}
+
+	/// Map the host text field's Return key style to a label. nil → plain newline glyph.
+	private func actionTitle(for type: UIReturnKeyType) -> String? {
+		switch type {
+		case .go:                       return "go"
+		case .search, .google, .yahoo:  return "search"
+		case .send:                     return "send"
+		case .join:                     return "join"
+		case .next:                     return "next"
+		case .route:                    return "route"
+		case .done:                     return "done"
+		case .continue:                 return "continue"
+		case .emergencyCall:            return "SOS"
+		case .default:                  return nil   // plain return → newline glyph
+		@unknown default:               return nil
+		}
 	}
 
 	// MARK: Key handling — the hot path
 
 	private func handleInsert(_ ch: String) {
 		if ch.count == 1, let u = ch.unicodeScalars.first, boundary.contains(u) {
-			pendingRevert = applyAutocorrectIfNeeded()        // fast, main thread, one word
+			pendingRevert = applyAutocorrectIfNeeded()
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 			let w = trailingWord(ctx)
-			if !w.isEmpty { engine.learn(previous: previousWord(ctx), word: w) }
+			if !w.isEmpty { engine.learn(context: contextWords(ctx, max: 2), word: w) }
 		} else {
 			pendingRevert = nil
 		}
-		textDocumentProxy.insertText(ch)                       // the ONLY guaranteed-immediate work
+		textDocumentProxy.insertText(ch)
 		scheduleSuggestions()
 	}
 
@@ -65,7 +119,7 @@ final class KeyboardViewController: UIInputViewController {
 		pendingRevert = applyAutocorrectIfNeeded()
 		let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 		let w = trailingWord(ctx)
-		if !w.isEmpty { engine.learn(previous: previousWord(ctx), word: w) }
+		if !w.isEmpty { engine.learn(context: contextWords(ctx, max: 2), word: w) }
 		textDocumentProxy.insertText("\n")
 		scheduleSuggestions()
 	}
@@ -79,14 +133,14 @@ final class KeyboardViewController: UIInputViewController {
 	private func handlePick(_ s: String) {
 		switch mode {
 		case .complete(let partial):
-			let prev = previousWord(textDocumentProxy.documentContextBeforeInput ?? "")
+			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 2)
 			for _ in 0..<partial.count { textDocumentProxy.deleteBackward() }
 			textDocumentProxy.insertText(s + " ")
-			engine.learn(previous: prev, word: s)
+			engine.learn(context: ctx, word: s)
 		case .predict:
-			let prev = lastCompleteWord(textDocumentProxy.documentContextBeforeInput ?? "")
+			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 2)
 			textDocumentProxy.insertText(s + " ")
-			engine.learn(previous: prev, word: s)
+			engine.learn(context: ctx, word: s)
 		case .revert(let original):
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 			if s == original, let corrected = lastCompleteWord(ctx) {
@@ -109,7 +163,7 @@ final class KeyboardViewController: UIInputViewController {
 		let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 		let word = trailingWord(ctx)
 		guard !word.isEmpty,
-			  let correction = engine.autocorrection(for: word, previous: previousWord(ctx)),
+			  let correction = engine.autocorrection(for: word, context: contextWords(ctx, max: 2)),
 			  correction != word else { return nil }
 		for _ in 0..<word.count { textDocumentProxy.deleteBackward() }
 		textDocumentProxy.insertText(correction)
@@ -131,10 +185,10 @@ final class KeyboardViewController: UIInputViewController {
 		let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 		let current = trailingWord(ctx)
 		let revert = pendingRevert
+		let context = contextWords(ctx, max: 2)
 
 		if current.isEmpty {
-			let prev = lastCompleteWord(ctx)
-			engine.suggestions(currentWord: "", previous: prev) { [weak self] preds in
+			engine.suggestions(currentWord: "", context: context) { [weak self] preds in
 				guard let self, gen == self.generation else { return }
 				if let revert {
 					self.mode = .revert(revert)
@@ -145,8 +199,7 @@ final class KeyboardViewController: UIInputViewController {
 				}
 			}
 		} else {
-			let prev = previousWord(ctx)
-			engine.suggestions(currentWord: current, previous: prev) { [weak self] comps in
+			engine.suggestions(currentWord: current, context: context) { [weak self] comps in
 				guard let self, gen == self.generation else { return }
 				self.mode = .complete(current)
 				self.keyboard.setSuggestions(comps)
@@ -172,9 +225,19 @@ final class KeyboardViewController: UIInputViewController {
 		return w.isEmpty ? nil : w
 	}
 
-	private func previousWord(_ s: String) -> String? {
+	/// Up to `max` complete words immediately before any trailing partial word, oldest→newest.
+	private func contextWords(_ s: String, max: Int) -> [String] {
 		var chars = Array(s)
-		while let last = chars.last, isWordChar(last) { chars.removeLast() }
-		return lastCompleteWord(String(chars))
+		while let last = chars.last, isWordChar(last) { chars.removeLast() }   // drop trailing partial
+		var words: [String] = []
+		while words.count < max {
+			while let last = chars.last, !isWordChar(last) { chars.removeLast() }
+			if chars.isEmpty { break }
+			var w = ""
+			while let last = chars.last, isWordChar(last) { w.insert(last, at: w.startIndex); chars.removeLast() }
+			if w.isEmpty { break }
+			words.insert(w, at: 0)
+		}
+		return words
 	}
 }
