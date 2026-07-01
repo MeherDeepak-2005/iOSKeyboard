@@ -59,10 +59,18 @@
 		837F018D2FE8D47D0033ED99 /* Exceptions for "keyboard" folder in "demo_keyboard" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				dictionary.txt,
 				Keyboard.swift,
 				Keyboardengine.swift,
 			);
 			target = 83C6F3052FE821180014EA39 /* demo_keyboard */;
+		};
+		837F01AF2FEE99820033ED99 /* Exceptions for "keyboard" folder in "keyboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				dictionary.txt,
+			);
+			target = 83C6F2B82FE7B47E0014EA39 /* keyboard */;
 		};
 		83C6F3112FE821180014EA39 /* Exceptions for "demo_keyboard" folder in "demo_keyboard" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
@@ -77,6 +85,7 @@
 		83C6F2BB2FE7B47E0014EA39 /* keyboard */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				837F01AF2FEE99820033ED99 /* Exceptions for "keyboard" folder in "keyboard" target */,
 				837F018D2FE8D47D0033ED99 /* Exceptions for "keyboard" folder in "demo_keyboard" target */,
 			);
 			path = keyboard;
@@ -504,6 +513,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = keyboard/keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
@@ -536,6 +546,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = keyboard/keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
@@ -646,6 +657,7 @@
 		83C6F30F2FE821180014EA39 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = demo_keyboard/demo_keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
@@ -674,6 +686,7 @@
 		83C6F3102FE821180014EA39 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = demo_keyboard/demo_keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
