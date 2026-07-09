@@ -46,3 +46,24 @@ GoogleService-Info.plist
 .AppleDouble
 .LSOverride
 ._*
+
+## --- Language-data build cache (tools/build_language_data.py) ---
+tools/.cache
+tools/lm/data/
+# Python caching
+__pycache__/
+*.pyc
+
+# ML Weights & Binaries
+*.pt
+*.bin
+*.kbguard
+*.mlpackage/
+
+# JetBrains IDE
+.idea/
+
+# graphify knowledge-graph output
+graphify-out/
+
+*.txt
