@@ -58,11 +58,6 @@
       allowLocationSimulation = "YES"
       launchAutomaticallySubstyle = "2"
       queueDebuggingEnableBacktraceRecording = "Yes">
-      <RemoteRunnable
-         runnableDebuggingMode = "0"
-         BundleIdentifier = "com.apple.AppStore"
-         RemotePath = "/var/containers/Bundle/Application/DAFD9E8D-B49E-4DE3-B5A1-36688259989B/AppStore.app">
-      </RemoteRunnable>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"

@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Build keyboard/emoji.bin — the emoji catalog as one mmap-able binary.
+
+The catalog used to live in Keyboard.swift as big string literals that were
+split into ~1,300 heap Strings (plus arrays) the first time the emoji page
+opened — dirty memory in a keyboard extension that fights for every MB. As a
+mapped file the data stays in clean, evictable pages and EmojiStore decodes
+one emoji at a time, per collection-view cell.
+
+Emoji are Unicode text: we ship code points, not images. The lists below are
+the single source of truth (the Swift literals remain only as a fallback for
+a missing resource).
+
+FORMAT v2 (little-endian, all u32 unless noted):
+
+  header   magic 'KBEM', version=2, categoryCount C, stringCount N, mapCount M
+  cats     C x (nameIdx, iconIdx, emojiStart, emojiCount)
+           emoji string indices are [emojiStart, emojiStart+emojiCount)
+  offsets  u32 x (N+1)     byte offsets into blob, per string index
+  map      M x (wordIdx, emojiIdx)   word->emoji, SORTED by word bytes (bsearch)
+  blob     utf8 bytes of all strings back to back
+
+v1 had no map section (header was 4 u32, no mapCount). The reader still accepts
+it (mapCount treated as 0).
+"""
+
+import struct
+from pathlib import Path
+
+OUT = Path(__file__).resolve().parent.parent / "keyboard" / "emoji.bin"
+MAGIC = 0x4B42454D  # "KBEM" (as a little-endian u32 constant, mirror of EmojiStore)
+
+CATEGORIES = [
+    ("Smileys & People", "face.smiling",
+     "😀 😃 😄 😁 😆 😅 😂 🤣 🥲 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥳 🤩 😏 😒 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 👋 🤚 ✋ 🖖 👌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🙏 💪 🦶 🦵 👀 👁 👅 👄 🧠"),
+    ("Animals & Nature", "pawprint",
+     "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🐛 🦋 🐌 🐞 🐜 🦗 🕷 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🐘 🦏 🐫 🦒 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🐐 🌵 🎄 🌲 🌳 🌴 🌱 🌿 ☘️ 🍀 🎍 🌾 🌺 🌻 🌹 🌷 🌸 🌼 🌞 🌝 🌚 ⭐️ 🌟 ✨ ⚡️ 🔥 🌈 ☀️ ⛅️ ☁️ 🌧 ⛈ ❄️ ☃️ 💧 🌊"),
+    ("Food & Drink", "fork.knife",
+     "🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶 🌽 🥕 🧄 🧅 🥔 🍠 🥐 🍞 🥖 🥨 🧀 🥚 🍳 🥞 🧇 🥓 🥩 🍗 🍖 🌭 🍔 🍟 🍕 🥪 🌮 🌯 🥗 🍝 🍜 🍲 🍣 🍱 🍛 🍤 🍙 🍚 🍥 🥟 🍦 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 ☕️ 🍵 🥤 🧃 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🧉"),
+    ("Activity", "figure.run",
+     "⚽️ 🏀 🏈 ⚾️ 🥎 🎾 🏐 🏉 🥏 🎱 🏓 🏸 🏒 🏑 🥍 🏏 🥅 ⛳️ 🏹 🎣 🥊 🥋 🎽 ⛸ 🥌 🛷 🎿 ⛷ 🏂 🏋️ 🤼 🤸 ⛹️ 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🚴 🚵 🎪 🎭 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🎷 🎺 🎸 🎻 🎲 🎯 🎳 🎮 🎰 🧩 🏆 🥇 🥈 🥉 🏅"),
+    ("Travel & Places", "car",
+     "🚗 🚕 🚙 🚌 🚎 🏎 🚓 🚑 🚒 🚐 🚚 🚛 🚜 🛴 🚲 🛵 🏍 🚨 🚔 🚍 🚘 🚖 🚡 🚠 🚟 🚃 🚋 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 💺 🚁 🚀 🛸 🚤 ⛵️ 🛶 🚢 ⚓️ 🗺 🗽 🗼 🏰 🏯 🏟 🎡 🎢 🎠 ⛲️ 🏖 🏝 ⛰ 🏔 🗻 🌋 🏕 ⛺️ 🏠 🏡 🏘 🏢 🏬 🏦 🏨 🏪 🏫 🏩 💒 🏛 ⛪️ 🕌 🕍 🛕"),
+    ("Objects", "lightbulb",
+     "⌚️ 📱 💻 ⌨️ 🖥 🖨 🖱 💽 💾 💿 📷 📸 📹 🎥 📞 ☎️ 📟 📺 📻 ⏱ ⏰ 🕰 ⌛️ ⏳ 📡 🔋 🔌 💡 🔦 🕯 🧯 💸 💵 💴 💶 💷 💰 💳 🧾 💎 ⚖️ 🔧 🔨 🛠 🔩 ⚙️ 🧰 🧲 🔫 💣 🔪 🚬 ⚰️ 🏺 🔮 📿 💈 🔭 🔬 🕳 💊 💉 🩸 🌡 🧷 🧵 🧶 👓 🕶 🌂 ☂️ 🧳 🎒 👜 👛 👝 🛍 🎁 🎈 🎏 🎀 🎉 🎊"),
+    ("Symbols", "heart",
+     "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 ✅ ❌ ❎ ➕ ➖ ➗ ✖️ ♾ 💲 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫️ ⚪️ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◼️ ◻️ ⬛️ ⬜️ 🟥 🟧 🟨 🟩 🟦 🟪 ⭐️ 🌟 ❓ ❗️ ‼️ ⁉️ 💤 🎵 🎶"),
+]
+
+# Word -> emoji, surfaced in the suggestion bar's last slot on an exact word match
+# (SwiftKey / stock QuickType behavior). Lowercase single words only; first emoji
+# wins. Deliberately conservative — a wrong emoji suggestion is worse than none.
+WORD_EMOJI = {
+    "love": "❤️", "heart": "❤️", "like": "👍", "yes": "👍", "no": "👎", "ok": "👌",
+    "okay": "👌", "thanks": "🙏", "thank": "🙏", "please": "🙏", "pray": "🙏",
+    "happy": "😊", "smile": "😊", "sad": "😢", "cry": "😭", "crying": "😭",
+    "laugh": "😂", "lol": "😂", "lmao": "🤣", "funny": "😂", "wink": "😉",
+    "cool": "😎", "angry": "😡", "mad": "😡", "love you": "❤️", "kiss": "😘",
+    "hug": "🤗", "wow": "😮", "shocked": "😱", "scared": "😨", "sleep": "😴",
+    "sleepy": "😴", "tired": "😴", "sick": "🤒", "party": "🥳", "celebrate": "🥳",
+    "fire": "🔥", "lit": "🔥", "hot": "🔥", "cold": "🥶", "star": "⭐️",
+    "sun": "☀️", "sunny": "☀️", "rain": "🌧", "rainy": "🌧", "snow": "❄️",
+    "moon": "🌙", "rainbow": "🌈", "cloud": "☁️", "storm": "⛈",
+    "dog": "🐶", "puppy": "🐶", "cat": "🐱", "kitten": "🐱", "bird": "🐦",
+    "fish": "🐟", "bear": "🐻", "lion": "🦁", "tiger": "🐯", "monkey": "🐵",
+    "cow": "🐮", "pig": "🐷", "frog": "🐸", "snake": "🐍", "bee": "🐝",
+    "butterfly": "🦋", "bug": "🐛", "spider": "🕷", "unicorn": "🦄",
+    "flower": "🌸", "rose": "🌹", "tree": "🌳", "plant": "🌱", "leaf": "🍀",
+    "pizza": "🍕", "burger": "🍔", "fries": "🍟", "taco": "🌮", "sushi": "🍣",
+    "coffee": "☕️", "tea": "🍵", "beer": "🍺", "wine": "🍷", "cake": "🎂",
+    "birthday": "🎂", "cookie": "🍪", "candy": "🍬", "chocolate": "🍫",
+    "apple": "🍎", "banana": "🍌", "egg": "🥚", "bread": "🍞", "cheese": "🧀",
+    "car": "🚗", "bus": "🚌", "train": "🚆", "plane": "✈️", "flight": "✈️",
+    "rocket": "🚀", "bike": "🚲", "boat": "🚤", "ship": "🚢", "home": "🏠",
+    "house": "🏠", "money": "💰", "cash": "💵", "gift": "🎁", "present": "🎁",
+    "phone": "📱", "camera": "📷", "music": "🎵", "song": "🎶", "game": "🎮",
+    "book": "📚", "gym": "🏋️", "run": "🏃", "running": "🏃", "soccer": "⚽️",
+    "football": "🏈", "basketball": "🏀", "baseball": "⚾️", "tennis": "🎾",
+    "trophy": "🏆", "win": "🏆", "winner": "🏆", "medal": "🏅", "crown": "👑",
+    "gem": "💎", "diamond": "💎", "clock": "⏰", "time": "⏰", "bomb": "💣",
+    "skull": "💀", "ghost": "👻", "alien": "👽", "robot": "🤖", "poop": "💩",
+    "eyes": "👀", "brain": "🧠", "muscle": "💪", "strong": "💪", "wave": "👋",
+    "hi": "👋", "hello": "👋", "bye": "👋", "clap": "👏", "hundred": "💯",
+    "check": "✅", "done": "✅", "cross": "❌", "question": "❓", "idea": "💡",
+    "baby": "👶", "king": "🤴", "queen": "👸", "angel": "😇", "devil": "😈",
+}
+
+
+def main() -> None:
+    strings: list[str] = []
+    cats: list[tuple[int, int, int, int]] = []
+    for name, icon, emojis in CATEGORIES:
+        name_idx = len(strings); strings.append(name)
+        icon_idx = len(strings); strings.append(icon)
+        items = emojis.split(" ")
+        assert all(items), f"double space in {name!r}"
+        start = len(strings); strings.extend(items)
+        cats.append((name_idx, icon_idx, start, len(items)))
+
+    # Word->emoji map entries as (wordIdx, emojiIdx) into the string table, sorted by
+    # the word's utf8 bytes so the reader can binary-search. Emoji strings are
+    # interned (reused if already present as a catalog item or an earlier map value).
+    interned: dict[str, int] = {}
+
+    def intern(s: str) -> int:
+        i = interned.get(s)
+        if i is None:
+            i = len(strings); strings.append(s); interned[s] = i
+        return i
+
+    map_pairs = []
+    for word in sorted(WORD_EMOJI, key=lambda w: w.encode()):
+        map_pairs.append((intern(word), intern(WORD_EMOJI[word])))
+
+    blob = bytearray()
+    offsets = [0]
+    for s in strings:
+        blob += s.encode()
+        offsets.append(len(blob))
+
+    with OUT.open("wb") as f:
+        f.write(struct.pack("<5I", MAGIC, 2, len(cats), len(strings), len(map_pairs)))
+        for rec in cats:
+            f.write(struct.pack("<4I", *rec))
+        f.write(struct.pack(f"<{len(offsets)}I", *offsets))
+        for pair in map_pairs:
+            f.write(struct.pack("<2I", *pair))
+        f.write(blob)
+    total = sum(c[3] for c in cats)
+    print(f"wrote {OUT} ({OUT.stat().st_size} B): {len(cats)} categories, "
+          f"{total} emoji, {len(map_pairs)} word->emoji")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import os
 
 // ⚠️ This file must be a member of the APP target ONLY — never the keyboard
 // extension. It uses UIApplication, which app extensions are not allowed to call.
@@ -95,6 +96,14 @@ struct ContentView: View {
 
 						Section("Setup") {
 							EnableKeyboardRow()
+							NavigationLink {
+								DiagnosticsView()
+							} label: {
+								SettingRow(icon: "waveform.path.ecg",
+										   tint: store.accent.representative(dark: isDark),
+										   title: "Keyboard health",
+										   value: KBDiagnostics.read().modelActive ? "active" : nil)
+							}
 						}
 					}
 					.listStyle(.insetGrouped)
@@ -130,6 +139,79 @@ struct ContentView: View {
 					   title: "Language",
 					   value: store.language.rawValue)
 		}
+	}
+}
+
+// MARK: - Keyboard health (reads the extension's App Group telemetry)
+
+struct DiagnosticsView: View {
+	@State private var snap = KBDiagnostics.read()
+	@State private var verbose = KBDiagnostics.verbose
+	private let log = Logger(subsystem: KBSettings.appGroup, category: "diag-app")
+
+	var body: some View {
+		List {
+			Section {
+				row("Neural model", snap.modelActive ? "active" : "inactive")
+				row("Times loaded", "\(snap.loadCount)")
+				row("Times dropped", "\(snap.dropCount)")
+				row("Active for", duration(snap.activeSeconds))
+				row("Last load", snap.lastLoadMs > 0 ? "\(Int(snap.lastLoadMs)) ms" : "—")
+			} header: {
+				Text("Neural model")
+			} footer: {
+				Text("Measured inside the keyboard extension during your last typing session, not live.")
+			}
+
+			Section {
+				row("Peak footprint", mb(snap.peakFootprintMB))
+				row("Lowest headroom", snap.minAvailableMB > 0 ? mb(snap.minAvailableMB) : "—")
+				row("Inferred kill limit", snap.limitMB > 0 ? mb(snap.limitMB) : "—")
+				row("Memory warnings", "\(snap.warningCount)")
+				row("Critical events", "\(snap.criticalCount)")
+			} header: {
+				Text("Memory (jetsam)")
+			} footer: {
+				Text("iOS kills the extension near the inferred limit. The model is dropped on pressure and reloaded later.")
+			}
+
+			Section {
+				Toggle("Verbose ranking log", isOn: $verbose)
+					.onChange(of: verbose) { _, on in KBDiagnostics.verbose = on }
+			} header: {
+				Text("Live logging")
+			} footer: {
+				Text("Logs every candidate's neural vs n-gram score as you type. Watch it live in Console.app (pick your device) or run:\nlog stream --predicate 'subsystem == \"group.com.swiftuimasterclass.keyboard\"' --level info")
+					.textSelection(.enabled)
+			}
+
+			Section {
+				if snap.updated == .distantPast {
+					Text("No data yet — type with the keyboard, then reopen this screen.")
+						.foregroundStyle(.secondary)
+				} else {
+					row("Updated", snap.updated.formatted(date: .abbreviated, time: .shortened))
+				}
+				Button("Refresh") { reload() }
+				Button("Reset", role: .destructive) { KBDiagnostics.reset(); snap = KBDiagnostics.read() }
+			}
+		}
+		.navigationTitle("Keyboard health")
+		.navigationBarTitleDisplayMode(.inline)
+		.onAppear(perform: reload)
+	}
+
+	private func reload() {
+		snap = KBDiagnostics.read()
+		log.notice("diag active=\(snap.modelActive) loads=\(snap.loadCount) drops=\(snap.dropCount) activeSec=\(Int(snap.activeSeconds)) peakMB=\(Int(snap.peakFootprintMB)) limitMB=\(Int(snap.limitMB)) warn=\(snap.warningCount) crit=\(snap.criticalCount)")
+	}
+	private func row(_ title: String, _ value: String) -> some View {
+		HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
+	}
+	private func mb(_ v: Double) -> String { String(format: "%.1f MB", v) }
+	private func duration(_ s: Double) -> String {
+		if s <= 0 { return "—" }
+		return s < 60 ? "\(Int(s)) s" : String(format: "%.1f min", s / 60)
 	}
 }
 
