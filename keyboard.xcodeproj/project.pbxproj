@@ -60,13 +60,29 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				emoji.bin,
-				Keyboard.swift,
-				Keyboardengine.swift,
 				langdata.bin,
-				NeuralScorer.swift,
 				rescorer.mlpackage,
 				safety.kbguard,
 				tokenizer.bin,
+				"Engine/Keyboardengine.swift",
+				"Engine/LangData.swift",
+				"Engine/LanguageScorer.swift",
+				"Engine/Lexicon.swift",
+				"Engine/NeuralScorer.swift",
+				"Engine/NgramScorer.swift",
+				"Engine/SpatialModel.swift",
+				"Engine/Trie.swift",
+				"Engine/UserModel.swift",
+				"Shared/FontInstaller.swift",
+				"Shared/KBDiagnostics.swift",
+				"Shared/KBSafetyLexicon.swift",
+				"Shared/KBSettings.swift",
+				"Shared/UIColor+Hex.swift",
+				"Views/Emoji.swift",
+				"Views/Keyboard.swift",
+				"Views/KeyButton.swift",
+				"Views/KeyboardTheme.swift",
+				"Views/SuggestionBar.swift",
 			);
 			target = 83C6F3052FE821180014EA39 /* demo_keyboard */;
 		};

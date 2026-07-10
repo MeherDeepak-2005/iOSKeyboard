@@ -51,7 +51,13 @@ def export_model():
         minimum_deployment_target=ct.target.iOS17,
         compute_units=ct.ComputeUnit.CPU_AND_NE,
     )
-    op_cfg = ct.optimize.coreml.OpLinearQuantizerConfig(mode="linear_symmetric")
+    # PER-CHANNEL is load-bearing, not a tweak. The output head is TIED to the token
+    # embedding (one [vocab, d] matrix), so per-TENSOR int8 gives all 6000 rows a
+    # single scale; a few large rows blow up that scale and the rest collapse toward
+    # zero, wrecking the logits (measured: last-position top-1 agreement 0%, cosine
+    # 0.78). Per-channel gives each output row its own scale — cosine 1.0000,
+    # top-5 agreement 1.00, same ~4.8 MB. Verify with tools/lm parity checks before shipping.
+    op_cfg = ct.optimize.coreml.OpLinearQuantizerConfig(mode="linear_symmetric", granularity="per_channel")
     cfg = ct.optimize.coreml.OptimizationConfig(global_config=op_cfg)
     mlm = ct.optimize.coreml.linear_quantize_weights(mlm, config=cfg)
     mlm.save(str(OUT / "rescorer.mlpackage"))
@@ -77,3 +83,4 @@ def export_tokenizer():
 if __name__ == "__main__":
     export_tokenizer()      # first — coremltools' teardown abort can't clobber it
     export_model()
+    import os; os._exit(0)  # coremltools mutex teardown aborts; files already saved

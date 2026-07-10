@@ -41,6 +41,32 @@ class Block(nn.Module):
         x = x + self.ff(self.n2(x))
         return x
 
+    def forward_cached(self, x, past_k, past_v):
+        """Incremental attention for KV-cache decoding. `x` is the NEW token(s)
+        [B, T, d]; `past_k`/`past_v` are the cached keys/values [B, H, P, hd] for the
+        P tokens already seen. The new tokens attend over all P+T positions (causal is
+        automatic — nothing after them exists yet). Returns the updated hidden state
+        plus the appended K/V so the caller threads them to the next step. Math is
+        identical to `forward`; only the mask range differs."""
+        B, T, d = x.shape
+        h = self.n1(x)
+        q, k, v = self.qkv(h).split(d, dim=2)
+        def heads(t): return t.view(B, T, self.heads, self.hd).transpose(1, 2)
+        q, k, v = heads(q), heads(k), heads(v)          # [B, H, T, hd]
+        K = torch.cat([past_k, k], dim=2)               # [B, H, P+T, hd]
+        V = torch.cat([past_v, v], dim=2)
+        Tk = K.shape[2]                                 # = P + T
+        # New token t (0..T-1) sits at absolute position P+t and may attend to <= P+t.
+        # For the steady-state T=1 step this is all-zeros (attend to everything so far).
+        col = torch.arange(Tk)
+        row = torch.arange(T) + (Tk - T)
+        mask = torch.where(col[None, :] <= row[:, None], 0.0, float("-inf"))
+        att = ((q @ K.transpose(-2, -1)) / (self.hd ** 0.5) + mask).softmax(dim=-1)
+        o = (att @ V).transpose(1, 2).reshape(B, T, d)
+        x = x + self.proj(o)
+        x = x + self.ff(self.n2(x))
+        return x, K, V
+
 
 class TinyLM(nn.Module):
     # Fixed sequence length (no shape-derived indexing anywhere in forward) so the
@@ -84,3 +110,27 @@ class TinyLM(nn.Module):
         for block in self.blocks:
             x = block(x, self.causal)
         return self.head(self.norm(x))                # [B, maxlen, vocab]
+
+    def empty_cache(self, batch=1):
+        """Per-layer (K, V) buffers with zero length — the starting cache before any
+        token has been seen. Shapes match Block.forward_cached's `past_k`/`past_v`."""
+        d = self.emb.embedding_dim
+        heads = self.blocks[0].heads
+        hd = d // heads
+        return [(torch.zeros(batch, heads, 0, hd), torch.zeros(batch, heads, 0, hd))
+                for _ in self.blocks]
+
+    def forward_cached(self, tokens, cache, start_pos):
+        """KV-cache step: encode `tokens` [B, T] placed at absolute positions
+        [start_pos, start_pos+T), reusing `cache` (list of per-layer (K, V) for the
+        start_pos tokens already seen). Returns (logits [B, T, vocab], new_cache).
+        Feeding tokens one at a time with the returned cache reproduces the full
+        stateless forward on the same sequence — no left-padding, no re-encode."""
+        B, T = tokens.shape
+        pos = self.pos_ids[start_pos:start_pos + T]
+        x = self.emb(tokens) + self.pos(pos)
+        new_cache = []
+        for block, (pk, pv) in zip(self.blocks, cache):
+            x, k, v = block.forward_cached(x, pk, pv)
+            new_cache.append((k, v))
+        return self.head(self.norm(x)), new_cache

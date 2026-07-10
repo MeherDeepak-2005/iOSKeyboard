@@ -94,6 +94,8 @@ final class KeyboardViewController: UIInputViewController {
 		kb.onReturn         = { [weak self] in self?.handleReturn() }
 		kb.onNextKeyboard   = { [weak self] in self?.advanceToNextInputMode() }
 		kb.onPickSuggestion = { [weak self] in self?.handlePick($0) }
+		kb.onGlideBegan     = { [weak self] in self?.handleGlideBegan() }
+		kb.onGlide          = { [weak self] in self?.handleGlide($0) }
 
 		kb.translatesAutoresizingMaskIntoConstraints = false
 		view.addSubview(kb)
@@ -396,6 +398,25 @@ final class KeyboardViewController: UIInputViewController {
 		recentCorrections.append((original: word, corrected: correction))
 		if recentCorrections.count > 4 { recentCorrections.removeFirst() }
 		return Correction(original: word, corrected: correction, trailing: "", fromAutocorrect: true)
+	}
+
+	// MARK: Glide typing
+
+	/// A tap turned into a glide: the start letter was inserted on contact, so remove
+	/// it — the whole word will come from the swipe decoder when the finger lifts.
+	private func handleGlideBegan() {
+		textDocumentProxy.deleteBackward()
+		wordTaps.removeAll(keepingCapacity: true)
+		lastCorrection = nil
+	}
+
+	/// The swipe lifted with its full trajectory. Turning the path into a word is a
+	/// later phase; for now the stroke produces nothing (the start letter is already
+	/// gone), and we just resync the keyboard state to the (unchanged) field.
+	private func handleGlide(_ path: [CGPoint]) {
+		resetEraseTracking()
+		updateAutoShift()
+		scheduleSuggestions()
 	}
 
 	// MARK: Manual-fix detection (backspace-erase → retype, no one-tap undo involved)

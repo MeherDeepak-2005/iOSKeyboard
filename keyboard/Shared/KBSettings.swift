@@ -1,0 +1,214 @@
+import UIKit
+
+// Shared settings + theming model (App Group) — extracted from Keyboard.swift.
+
+enum KBLanguage: String, CaseIterable {
+	case english  = "English"
+	case tenglish = "Tenglish"
+	case telugu   = "Telugu"
+
+	var subtitle: String {
+		switch self {
+		case .english:  return "QWERTY"
+		case .tenglish: return "Type in English, get Telugu"
+		case .telugu:   return "Telugu script"
+		}
+	}
+	/// Only English is wired up today; the others are visible but inert.
+	var isAvailable: Bool { self == .english }
+}
+
+enum KBFont: String, CaseIterable {
+	case system   = "System"
+	case rounded  = "Rounded"
+	case serif    = "Serif"
+	case mono     = "Monospaced"
+	// Custom families need a bundled .ttf/.otf in the EXTENSION target. Until the file
+	// is added these fall back to System (see FontInstaller.register / customFamily).
+	case jetBrains = "JetBrains Mono"
+	case hack      = "Hack"
+
+	var subtitle: String {
+		switch self {
+		case .system:    return "San Francisco"
+		case .rounded:   return "SF Rounded"
+		case .serif:     return "New York"
+		case .mono:      return "SF Mono"
+		case .jetBrains: return "Nerd Font · needs file"
+		case .hack:      return "Nerd Font · needs file"
+		}
+	}
+
+	private var systemDesign: UIFontDescriptor.SystemDesign? {
+		switch self {
+		case .system:  return .default
+		case .rounded: return .rounded
+		case .serif:   return .serif
+		case .mono:    return .monospaced
+		default:       return nil
+		}
+	}
+	/// PostScript name of the bundled custom font, if any. Update these to match the
+	/// real names of the files you drop in (see the Fonts guide).
+	var customFamily: String? {
+		switch self {
+		case .jetBrains: return "JetBrainsMonoNFM-Regular"
+		case .hack:      return "HackNFM-Regular"
+		default:         return nil
+		}
+	}
+
+	/// Substring identifying this font's file(s) in the bundle, for selective
+	/// registration in the extension (see FontInstaller.registerSelectedFont). nil for
+	/// system-design fonts, which ship no files.
+	var fileToken: String? {
+		switch self {
+		case .jetBrains: return "JetBrains"
+		case .hack:      return "Hack"
+		default:         return nil
+		}
+	}
+
+	func uiFont(ofSize size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+		if let family = customFamily, let custom = UIFont(name: family, size: size) { return custom }
+		let base = UIFont.systemFont(ofSize: size, weight: weight)
+		if let design = systemDesign, let d = base.fontDescriptor.withDesign(design) {
+			return UIFont(descriptor: d, size: size)
+		}
+		return base
+	}
+}
+
+struct KBGradient: Hashable {
+	let start: UInt32
+	let end: UInt32
+	var startColor: UIColor { UIColor(hex: start) }
+	var endColor: UIColor { UIColor(hex: end) }
+}
+
+/// An accent the user can pick. Each has a Light and Dark gradient so it sits well
+/// on either background. Drives the action button + active accents.
+struct KBAccent: Identifiable, Hashable {
+	let id: String
+	let name: String
+	let light: KBGradient
+	let dark: KBGradient
+
+	func gradient(dark: Bool) -> KBGradient { dark ? self.dark : self.light }
+	/// A single representative colour for small UI (swatch border, tints).
+	func tint(dark: Bool) -> UIColor { gradient(dark: dark).endColor }
+}
+
+/// The palette for the Themes page. Each accent ships a Light and a Dark gradient; the
+/// keyboard (and the Themes preview) automatically render the variant for the user's
+/// current Light/Dark mode. Grouped by colour family for easy browsing.
+enum KBPalette {
+	static let `default` = emerald
+
+	static let emerald = KBAccent(id: "emerald", name: "Emerald",
+		light: KBGradient(start: 0x37C26B, end: 0x1E9E5A),
+		dark:  KBGradient(start: 0x33B566, end: 0x18854C))
+
+	static let groups: [(title: String, accents: [KBAccent])] = [
+		("Greens", [
+			emerald,
+			KBAccent(id: "leaf", name: "Leaf",
+				light: KBGradient(start: 0x6FB544, end: 0x4E8E2E),
+				dark:  KBGradient(start: 0x78C84E, end: 0x57A338)),
+			KBAccent(id: "mint", name: "Mint",
+				light: KBGradient(start: 0x44CFA0, end: 0x21B287),
+				dark:  KBGradient(start: 0x53DCAB, end: 0x2FC795)),
+			KBAccent(id: "teal", name: "Teal",
+				light: KBGradient(start: 0x16A89B, end: 0x0B7C76),
+				dark:  KBGradient(start: 0x1CB4A6, end: 0x108A82)),
+			KBAccent(id: "forest", name: "Forest",
+				light: KBGradient(start: 0x4C9E45, end: 0x2C6E30),
+				dark:  KBGradient(start: 0x4F9E45, end: 0x357A38)),
+		]),
+		("Blues", [
+			KBAccent(id: "sky", name: "Sky",
+				light: KBGradient(start: 0x55B4FF, end: 0x2F97EC),
+				dark:  KBGradient(start: 0x63BCFF, end: 0x39A4F5)),
+			KBAccent(id: "ocean", name: "Ocean",
+				light: KBGradient(start: 0x3A7BF0, end: 0x2056D6),
+				dark:  KBGradient(start: 0x4585F0, end: 0x2A60D9)),
+			KBAccent(id: "indigo", name: "Indigo",
+				light: KBGradient(start: 0x5560E0, end: 0x3A44C6),
+				dark:  KBGradient(start: 0x5F69E8, end: 0x434FD6)),
+		]),
+		("Purples", [
+			KBAccent(id: "lavender", name: "Lavender",
+				light: KBGradient(start: 0xAE9BFF, end: 0x8E78FA),
+				dark:  KBGradient(start: 0xBBA6FF, end: 0x9C84FF)),
+			KBAccent(id: "plum", name: "Plum",
+				light: KBGradient(start: 0x9A4FD0, end: 0x7733AE),
+				dark:  KBGradient(start: 0xA75FE0, end: 0x8642C2)),
+		]),
+		("Warm", [
+			KBAccent(id: "coral", name: "Coral",
+				light: KBGradient(start: 0xFF8C76, end: 0xF2654E),
+				dark:  KBGradient(start: 0xFF9079, end: 0xF56A52)),
+			KBAccent(id: "rose", name: "Rose",
+				light: KBGradient(start: 0xFF87B0, end: 0xE5588C),
+				dark:  KBGradient(start: 0xFF92B8, end: 0xF56AA0)),
+			KBAccent(id: "amber", name: "Amber",
+				light: KBGradient(start: 0xFFC24B, end: 0xF5A11F),
+				dark:  KBGradient(start: 0xFFC85A, end: 0xF7AE2E)),
+			KBAccent(id: "rust", name: "Rust",
+				light: KBGradient(start: 0xE2682E, end: 0xBE4C1A),
+				dark:  KBGradient(start: 0xE87238, end: 0xCC5A22)),
+		]),
+		("Neutral", [
+			KBAccent(id: "graphite", name: "Graphite",
+				light: KBGradient(start: 0x70757E, end: 0x474B52),
+				dark:  KBGradient(start: 0x7A7F88, end: 0x4E535A)),
+			KBAccent(id: "slate", name: "Slate",
+				light: KBGradient(start: 0x78828F, end: 0x566070),
+				dark:  KBGradient(start: 0x6E7889, end: 0x4C5666)),
+		]),
+	]
+
+	static var all: [KBAccent] { groups.flatMap { $0.accents } }
+	static func accent(id: String) -> KBAccent { all.first { $0.id == id } ?? `default` }
+}
+
+enum KBSettings {
+	static let appGroup = "group.com.swiftuimasterclass.keyboard"
+	private static var store: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
+
+	private enum Key {
+		static let language = "kb.language"
+		static let accent   = "kb.accent"
+		static let font     = "kb.font"
+		static let haptics  = "kb.haptics"
+		static let neural   = "kb.neural"
+	}
+
+	static var language: KBLanguage {
+		get { KBLanguage(rawValue: store.string(forKey: Key.language) ?? "") ?? .english }
+		set { store.set(newValue.rawValue, forKey: Key.language) }
+	}
+	static var accentID: String {
+		get { store.string(forKey: Key.accent) ?? KBPalette.default.id }
+		set { store.set(newValue, forKey: Key.accent) }
+	}
+	static var accent: KBAccent { KBPalette.accent(id: accentID) }
+	static var font: KBFont {
+		get { KBFont(rawValue: store.string(forKey: Key.font) ?? "") ?? .system }
+		set { store.set(newValue.rawValue, forKey: Key.font) }
+	}
+	/// Haptic tap on each key press. Default on. Requires keyboard Full Access to fire.
+	static var haptics: Bool {
+		get { store.object(forKey: Key.haptics) as? Bool ?? true }
+		set { store.set(newValue, forKey: Key.haptics) }
+	}
+	/// Load the on-device neural rescorer. Default OFF: it adds ~20-30 MB of resident
+	/// working set when active, which on a tight keyboard-extension budget is a real
+	/// jetsam risk — opt in only where the memory headroom and quality win justify it.
+	/// (Gated further at load time by NeuralScorer.minAvailableMBToLoad.)
+	static var neuralRescorer: Bool {
+		get { store.object(forKey: Key.neural) as? Bool ?? false }
+		set { store.set(newValue, forKey: Key.neural) }
+	}
+}
+
