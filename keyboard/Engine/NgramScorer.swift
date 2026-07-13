@@ -35,8 +35,7 @@ final class NgramScorer: LanguageScorer {
 		let n = context.count
 		if n >= 2 {
 			let key = context[n - 2] + " " + context[n - 1]
-			var c = user.tri[key]?[w] ?? 0
-			var t = user.triTot[key] ?? 0
+			var (c, t) = user.triLookup(key, w)
 			if let wid, let a = resolveID(context[n - 2]), let b = resolveID(context[n - 1]),
 			   let hit = data?.trigrams(after: a, b) {
 				t += hit.total
@@ -46,16 +45,15 @@ final class NgramScorer: LanguageScorer {
 		}
 		if n >= 1 {
 			let p = context[n - 1]
-			var c = user.bi[p]?[w] ?? 0
-			var t = user.biTot[p] ?? 0
+			var (c, t) = user.biLookup(p, w)
 			if let wid, let a = resolveID(p), let hit = data?.bigrams(after: a) {
 				t += hit.total
 				c += hit.entries.first(where: { $0.word == wid })?.count ?? 0
 			}
 			if c > 0, t > 0 { return log(0.4 * Double(c) / Double(t)) }       // backoff weight
 		}
-		let u = Double((user.unigrams[w] ?? 0) + 1)
-		return log(0.16 * u / Double(user.unigramTotal + user.unigrams.count + 1))   // 0.4^2 backoff
+		let (uc, total, distinct) = user.uniBackoff(w)
+		return log(0.16 * Double(uc + 1) / Double(total + distinct + 1))      // 0.4^2 backoff
 	}
 
 	/// Next-word predictions from the combined counts (trigram first, then bigram).
@@ -66,18 +64,18 @@ final class NgramScorer: LanguageScorer {
 		if n >= 2 {
 			let base = (resolveID(ctx[n - 2]), resolveID(ctx[n - 1]))
 			let hit = (base.0 != nil && base.1 != nil) ? data?.trigrams(after: base.0!, base.1!) : nil
-			let top = merged(hit?.entries, user.tri[ctx[n - 2] + " " + ctx[n - 1]]).prefix(limit)
+			let top = merged(hit?.entries, user.triDist(ctx[n - 2] + " " + ctx[n - 1])).prefix(limit)
 			if !top.isEmpty { return Array(top) }
 		}
 		if n >= 1 {
 			let hit = resolveID(ctx[n - 1]).flatMap { data?.bigrams(after: $0) }
-			let top = merged(hit?.entries, user.bi[ctx[n - 1]]).prefix(limit)
+			let top = merged(hit?.entries, user.biDist(ctx[n - 1])).prefix(limit)
 			if !top.isEmpty { return Array(top) }
 		}
-		return Array(user.unigrams.sorted { $0.value > $1.value }.prefix(limit).map(\.key))
+		return user.topUnigrams(limit)
 	}
-	private func merged(_ base: [(word: Int32, count: Int)]?, _ userCounts: [String: Int]?) -> [String] {
-		var m = userCounts ?? [:]
+	private func merged(_ base: [(word: Int32, count: Int)]?, _ userCounts: [String: Int]) -> [String] {
+		var m = userCounts
 		for e in base ?? [] { m[data?.word(Int(e.word)) ?? "", default: 0] += e.count }
 		m[""] = nil
 		return m.sorted { $0.value > $1.value }.map(\.key)

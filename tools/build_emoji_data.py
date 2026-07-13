@@ -8,8 +8,7 @@ mapped file the data stays in clean, evictable pages and EmojiStore decodes
 one emoji at a time, per collection-view cell.
 
 Emoji are Unicode text: we ship code points, not images. The lists below are
-the single source of truth (the Swift literals remain only as a fallback for
-a missing resource).
+the single source of truth used to generate the runtime binary resource.
 
 FORMAT v2 (little-endian, all u32 unless noted):
 
@@ -47,17 +46,23 @@ CATEGORIES = [
      "❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 ✅ ❌ ❎ ➕ ➖ ➗ ✖️ ♾ 💲 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫️ ⚪️ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◼️ ◻️ ⬛️ ⬜️ 🟥 🟧 🟨 🟩 🟦 🟪 ⭐️ 🌟 ❓ ❗️ ‼️ ⁉️ 💤 🎵 🎶"),
 ]
 
-# Word -> emoji, surfaced in the suggestion bar's last slot on an exact word match
-# (SwiftKey / stock QuickType behavior). Lowercase single words only; first emoji
-# wins. Deliberately conservative — a wrong emoji suggestion is worse than none.
+# Word -> emoji aliases, surfaced in the suggestion bar's last slot on an exact
+# word match (SwiftKey / stock QuickType behavior) and scanned by emoji search.
+# First emoji wins. Deliberately conservative: a wrong emoji suggestion is worse
+# than none.
 WORD_EMOJI = {
     "love": "❤️", "heart": "❤️", "like": "👍", "yes": "👍", "no": "👎", "ok": "👌",
     "okay": "👌", "thanks": "🙏", "thank": "🙏", "please": "🙏", "pray": "🙏",
-    "happy": "😊", "smile": "😊", "sad": "😢", "cry": "😭", "crying": "😭",
-    "laugh": "😂", "lol": "😂", "lmao": "🤣", "funny": "😂", "wink": "😉",
-    "cool": "😎", "angry": "😡", "mad": "😡", "love you": "❤️", "kiss": "😘",
-    "hug": "🤗", "wow": "😮", "shocked": "😱", "scared": "😨", "sleep": "😴",
-    "sleepy": "😴", "tired": "😴", "sick": "🤒", "party": "🥳", "celebrate": "🥳",
+    "happy": "😊", "smile": "😊", "grin": "😁", "blush": "😊", "cute": "🥰",
+    "sad": "😢", "unhappy": "😢", "upset": "😢", "cry": "😭", "crying": "😭",
+    "sob": "😭", "sobbing": "😭", "tears": "😭", "tear": "😭", "bawl": "😭",
+    "bawling": "😭", "laugh": "😂", "haha": "😂", "hahaha": "😂", "joy": "😂",
+    "lol": "😂", "lmao": "🤣", "rofl": "🤣", "funny": "😂", "wink": "😉",
+    "cool": "😎", "angry": "😡", "mad": "😡", "rage": "😡", "annoyed": "😒",
+    "love you": "❤️", "loveyou": "❤️", "kiss": "😘", "hug": "🤗", "wow": "😮",
+    "shocked": "😱", "scared": "😨", "fear": "😨", "sleep": "😴",
+    "sleepy": "😴", "tired": "😴", "sick": "🤒", "party": "🥳", "yay": "🥳",
+    "celebrate": "🥳", "congrats": "🥳", "congratulations": "🥳",
     "fire": "🔥", "lit": "🔥", "hot": "🔥", "cold": "🥶", "star": "⭐️",
     "sun": "☀️", "sunny": "☀️", "rain": "🌧", "rainy": "🌧", "snow": "❄️",
     "moon": "🌙", "rainbow": "🌈", "cloud": "☁️", "storm": "⛈",

@@ -90,3 +90,39 @@ When adding a shared file: create it under the right folder, then add "Folder/Fi
   export) is fragile in this coremltools env; #22-23 (Swift MLState backend) build but
   cannot be runtime-verified without iOS 18 HW; #24 needs a device. #20 is the ready
   foundation to resume from. Deferred per modest-ROI-at-4L/256d tradeoff (see roadmap).
+
+## Glide typing (#25-29) — COMPLETE (on-device tuning pending)
+- P1 lift-commit capture: keys register on LIFT (Apple-style) + rollover (new press
+  commits held key); delete stays fire-on-contact + repeat. Glide never inserts a
+  letter, so no insert-undo dance. Trail via CAShapeLayer.
+- P2 preprocessing (Engine/GlidePath.swift): view→grid via GlideLayout snapshot,
+  even arc-length resample, pivot detection. Verified: synthetic "hello" → pivots h,e,l,o.
+- P3 decoder: shape matching — swipe vs word's IDEAL path (polyline through letters),
+  both resampled to N=32, mean point-to-point distance; beam over mmap trie (width 40).
+  TWO WRONG METRICS REJECTED on measurement: DTW-to-letter-centers (sparse words win;
+  "tho" 0.911 < "hello" 1.144) and full-path pruning (kills off-center first letters).
+- P4 rerank+commit: -shape/σ + 0.6·logP(ctx) [blended scorer seam] + 0.25·logFreq;
+  shape gate 0.57 (nothing commits on scribbles). Commit = word+space, auto-space
+  after letters, sentence-case, learn(), one-Backspace whole-word delete
+  (Correction original:""), alternatives on bar via mode .glided (repeat-swappable,
+  heals via wordReplaced). Secure fields: glide disabled.
+- P5 harness tools/glide_eval/ (run.sh): compiles PRODUCTION sources (zero drift),
+  synthesizes noisy swipes (jitter .16, endpoint .10, overshoot .30, SplitMix64
+  seed 42), 300 freq-weighted words. RESULTS: shape-only 58.0/78.7 (top1/top3 %);
+  +freq rerank 79.0/83.7 at σ=0.15 fw=0.25 (grid-searched; constants baked). Gate:
+  correct p95 .468 vs scribble p10 .665 → 0.57. LM context term untested off-device.
+
+## Contractions (#33) — vocab-level fix, not just glide
+- DISCOVERY: FrequencyWords source strips apostrophes → vocab had ZERO contractions.
+  EXCLUDE removed "dont"/"whats" expecting "don't"/"what's" to exist — they never did,
+  so tap-autocorrect dont→don't was silently impossible too.
+- Fix in build_language_data.py: merge_contractions() harvests interior-apostrophe
+  tokens from corpus.txt, scales counts to vocab scale via anchor words (x82), merges
+  +101 (it's, i'm, don't...), re-sorts by freq. N-grams now count contraction contexts
+  (bigrams after "i'm": not/going/sorry).
+- GlideDecoder: apostrophe = geometry-free letter (zero-cost trie edge, no path
+  consumed, ideal path unchanged). Contractions decode from letter-only swipes.
+- Harness (contraction-inclusive): overall 80.9/85.2 top1/top3 (was 79.0/83.7);
+  contractions 73.3/100 shape-only. Gate re-derived 0.57→0.53 (baked).
+- Next planned (#34-37): band-DTW skip-tolerant shape metric; funnel widening +
+  maxFreq-aware beam; offline real-swipe calibration capture; per-user adaptation v2.

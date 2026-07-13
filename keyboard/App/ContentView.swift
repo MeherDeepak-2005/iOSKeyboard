@@ -147,6 +147,8 @@ struct ContentView: View {
 struct DiagnosticsView: View {
 	@State private var snap = KBDiagnostics.read()
 	@State private var verbose = KBDiagnostics.verbose
+	@State private var glideCapture = KBSettings.glideCapture
+	@State private var neural = KBSettings.neuralRescorer
 	private let log = Logger(subsystem: KBSettings.appGroup, category: "diag-app")
 
 	var body: some View {
@@ -157,10 +159,12 @@ struct DiagnosticsView: View {
 				row("Times dropped", "\(snap.dropCount)")
 				row("Active for", duration(snap.activeSeconds))
 				row("Last load", snap.lastLoadMs > 0 ? "\(Int(snap.lastLoadMs)) ms" : "—")
+				row("Ranking passes scored", "\(snap.neuralRankPasses)")
+				row("Changed the top pick", helpfulRate)
 			} header: {
 				Text("Neural model")
 			} footer: {
-				Text("Measured inside the keyboard extension during your last typing session, not live.")
+				Text("Measured inside the keyboard extension during your last typing session, not live. \"Changed the top pick\" counts passes where blending the neural score reordered the winner vs the n-gram alone — the model's live helpfulness rate.")
 			}
 
 			Section {
@@ -186,6 +190,28 @@ struct DiagnosticsView: View {
 			}
 
 			Section {
+				Toggle("Neural rescorer", isOn: $neural)
+					.onChange(of: neural) { _, on in KBSettings.neuralRescorer = on }
+				Toggle("Glide capture (debug)", isOn: $glideCapture)
+					.onChange(of: glideCapture) { _, on in KBSettings.glideCapture = on }
+				if let url = KBDiagnostics.glideCaptureURL,
+				   let size = glideCaptureSize(url) {
+					ShareLink(item: url) {
+						Label("Export glide capture (\(size))", systemImage: "square.and.arrow.up")
+					}
+				} else {
+					Text("No glide capture yet — enable the toggle, swipe some words, then reopen.")
+						.font(.footnote)
+						.foregroundStyle(.secondary)
+				}
+			} header: {
+				Text("Advanced")
+			} footer: {
+				Text("Neural rescorer adds ~20-30 MB of working set for better ranking (dropped under memory pressure). Glide capture records your real swipes to glide_capture.jsonl in the App Group container for offline calibration (tools/glide_eval/calibrate.py) — on-device only, never uploaded. Restart the keyboard after changing these.")
+					.textSelection(.enabled)
+			}
+
+			Section {
 				if snap.updated == .distantPast {
 					Text("No data yet — type with the keyboard, then reopen this screen.")
 						.foregroundStyle(.secondary)
@@ -201,6 +227,12 @@ struct DiagnosticsView: View {
 		.onAppear(perform: reload)
 	}
 
+	private var helpfulRate: String {
+		guard snap.neuralRankPasses > 0 else { return "—" }
+		let pct = 100.0 * Double(snap.neuralTop1Changed) / Double(snap.neuralRankPasses)
+		return "\(snap.neuralTop1Changed) (\(String(format: "%.0f", pct))%)"
+	}
+
 	private func reload() {
 		snap = KBDiagnostics.read()
 		log.notice("diag active=\(snap.modelActive) loads=\(snap.loadCount) drops=\(snap.dropCount) activeSec=\(Int(snap.activeSeconds)) peakMB=\(Int(snap.peakFootprintMB)) limitMB=\(Int(snap.limitMB)) warn=\(snap.warningCount) crit=\(snap.criticalCount)")
@@ -209,6 +241,12 @@ struct DiagnosticsView: View {
 		HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
 	}
 	private func mb(_ v: Double) -> String { String(format: "%.1f MB", v) }
+	/// Human-readable size of the glide capture file, or nil if it doesn't exist / is empty.
+	private func glideCaptureSize(_ url: URL) -> String? {
+		guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+			  let bytes = attrs[.size] as? Int, bytes > 0 else { return nil }
+		return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+	}
 	private func duration(_ s: Double) -> String {
 		if s <= 0 { return "—" }
 		return s < 60 ? "\(Int(s)) s" : String(format: "%.1f min", s / 60)

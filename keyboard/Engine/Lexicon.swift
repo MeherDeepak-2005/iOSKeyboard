@@ -8,7 +8,7 @@ final class Lexicon {
 	/// static trie (clean, evictable pages), and this heap trie holds only adopted +
 	/// contact words — dozens, not tens of thousands. With a v2 file the full vocab
 	/// loads here as before.
-	private let dynamicTrie = Trie()
+	private var dynamicTrie = Trie()
 	/// The mmap'd bundle data; also used by NgramScorer. nil in the host app / tests.
 	private(set) var langData: LangData?
 	/// True when langData carries the v3 static trie section.
@@ -21,6 +21,14 @@ final class Lexicon {
 	private static let maxBoosts = 3000
 	/// Highest-frequency words, for the empty-context suggestion bar on a fresh install.
 	private(set) var topWords: [String] = []
+
+	/// Mutable state (dynamicTrie, boosts, the load-time flags) is written on the engine
+	/// queue but ALSO read from the MAIN thread: the space key's synchronous fast-autocorrect
+	/// runs the candidate search inline, precisely so the keystroke never waits on the engine
+	/// queue. Every method below takes this lock; the mmap'd static trie itself is immutable,
+	/// so the lock is only held for heap-trie walks and dictionary lookups — never disk or
+	/// neural work. (isProfane needs no lock: safety + roots are immutable.)
+	private let lock = NSLock()
 
 	// The exact-match blocklist now lives in the bundled `safety.kbguard` binary
 	// (curated LDNOOBW en + Wiktionary te, 429 terms), memory-mapped and hash-indexed —
@@ -47,16 +55,23 @@ final class Lexicon {
 	}
 
 	func contains(_ lw: String) -> Bool {
-		(staticTrie && langData?.trieContains(lw) == true) || dynamicTrie.contains(lw)
+		lock.lock(); defer { lock.unlock() }
+		return (staticTrie && langData?.trieContains(lw) == true) || dynamicTrie.contains(lw)
 	}
 	func isPrefix(_ lw: String) -> Bool {
-		(staticTrie && langData?.trieHasPrefix(lw) == true) || dynamicTrie.hasPrefix(lw)
+		lock.lock(); defer { lock.unlock() }
+		return (staticTrie && langData?.trieHasPrefix(lw) == true) || dynamicTrie.hasPrefix(lw)
 	}
-	func insert(_ lw: String, freq: Int) { dynamicTrie.insert(lw, freq: freq) }
+	func insert(_ lw: String, freq: Int) {
+		lock.lock(); defer { lock.unlock() }
+		dynamicTrie.insert(lw, freq: freq)
+	}
 	func wordID(_ lw: String) -> Int32? {
-		staticTrie ? langData?.trieWordID(lw) : dynamicTrie.wordID(lw)
+		lock.lock(); defer { lock.unlock() }
+		return staticTrie ? langData?.trieWordID(lw) : dynamicTrie.wordID(lw)
 	}
 	func corrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil) -> [Candidate] {
+		lock.lock(); defer { lock.unlock() }
 		var out = dynamicTrie.search(lw, maxCost: maxCost, taps: taps)
 		if staticTrie, let ld = langData {
 			out += ld.trieSearch(lw, maxCost: maxCost, taps: taps).map(boosted)
@@ -68,7 +83,8 @@ final class Lexicon {
 	/// log-scaled subtree max frequency, normalized to [0, 1] of the strongest child.
 	/// Read straight off the mmap trie — no heap tables, no language-model call.
 	func nextCharPriors(prefix lw: String) -> [Character: Double] {
-		guard staticTrie, let ld = langData else { return [:] }
+		lock.lock(); let ld0 = staticTrie ? langData : nil; lock.unlock()
+		guard let ld = ld0 else { return [:] }
 		let kids = ld.trieChildren(after: lw)
 		guard let top = kids.map(\.maxFreq).max(), top > 0 else { return [:] }
 		let denom = log(Double(top) + 1)
@@ -82,6 +98,7 @@ final class Lexicon {
 
 	/// The frequency term a word carries in ranking (nil when unknown).
 	func logFreq(of lw: String) -> Double? {
+		lock.lock(); defer { lock.unlock() }
 		if staticTrie, let ld = langData, let id = ld.trieWordID(lw) {
 			let base = log(Double(max(ld.freq(Int(id)), 1)) + 1)
 			guard let b = boosts[lw] else { return base }
@@ -90,6 +107,7 @@ final class Lexicon {
 		return dynamicTrie.logFreq(lw)
 	}
 	func completions(prefix lw: String, limit: Int) -> [Candidate] {
+		lock.lock(); defer { lock.unlock() }
 		var out = dynamicTrie.completions(prefix: lw, limit: limit)
 		if staticTrie, let ld = langData {
 			out += ld.trieCompletions(prefix: lw, limit: limit).map(boosted)
@@ -98,7 +116,7 @@ final class Lexicon {
 	}
 
 	/// Personal-use lift on a static word's frequency term — mirrors what `Trie.bump`
-	/// does to heap nodes: each use adds one effective count.
+	/// does to heap nodes: each use adds one effective count. Caller must hold `lock`.
 	private func boosted(_ c: Candidate) -> Candidate {
 		guard let b = boosts[c.word] else { return c }
 		return Candidate(word: c.word, cost: c.cost, logFreq: log(exp(c.logFreq) + Double(b)))
@@ -107,6 +125,7 @@ final class Lexicon {
 	/// Adoption: known words get their frequency bumped; unknown words enter the
 	/// dynamic trie once the user has typed them `adoptAfter` times.
 	func noteUse(of lw: String, timesUsed: Int, adoptAfter: Int) {
+		lock.lock(); defer { lock.unlock() }
 		if staticTrie, langData?.trieContains(lw) == true {
 			boosts[lw] = min((boosts[lw] ?? 0) + 1, 100)
 			// Bound the key count: halve every entry, drop what falls to zero. Habits
@@ -121,43 +140,64 @@ final class Lexicon {
 		}
 	}
 
+	/// Capitalize a cold-start opener (the empty bar is a sentence start): the→The,
+	/// i→I, i'm→I'm.
+	private func sentenceCase(_ w: String) -> String {
+		guard let f = w.first else { return w }
+		return f.uppercased() + w.dropFirst()
+	}
+
 	func loadFromBundle() {
 		if let url = Bundle.main.url(forResource: "langdata", withExtension: "bin"),
 		   let ld = LangData(url: url) {
-			langData = ld
+			lock.lock(); langData = ld; lock.unlock()
 			if ld.hasTrie {
 				// v3: the dictionary is searched in place — nothing to copy to the heap.
-				// Top words for the fresh-install bar: scan the freq array (ints only),
-				// materialize just the winners.
-				staticTrie = true
-				var top: [(id: Int, f: Int)] = []
-				for id in 0..<ld.wordCount {
-					let f = ld.freq(id)
-					if top.count < 32 {
-						top.append((id, f))
-						if top.count == 32 { top.sort { $0.f > $1.f } }
-					} else if f > top[top.count - 1].f {
-						top[top.count - 1] = (id, f)
-						var i = top.count - 1
-						while i > 0, top[i].f > top[i - 1].f { top.swapAt(i, i - 1); i -= 1 }
+				lock.lock(); staticTrie = true; lock.unlock()
+				// Cold-start bar: prefer SENTENCE-INITIAL words (v4 starters) — openers
+				// like "I, The, I'm, You" — over global frequency, which surfaces
+				// mid-sentence function words (and, of, to). Capitalize: the empty bar is
+				// a sentence start. Falls back to top-frequency for a pre-v4 file.
+				let starterIDs = ld.starterIDs(limit: 24)
+				if !starterIDs.isEmpty {
+					topWords = starterIDs.map { sentenceCase(ld.word($0)) }
+						.filter { !isProfane($0) }.prefix(8).map { $0 }
+				} else {
+					var top: [(id: Int, f: Int)] = []
+					for id in 0..<ld.wordCount {
+						let f = ld.freq(id)
+						if top.count < 32 {
+							top.append((id, f))
+							if top.count == 32 { top.sort { $0.f > $1.f } }
+						} else if f > top[top.count - 1].f {
+							top[top.count - 1] = (id, f)
+							var i = top.count - 1
+							while i > 0, top[i].f > top[i - 1].f { top.swapAt(i, i - 1); i -= 1 }
+						}
 					}
+					topWords = Array(top.map { ld.word($0.id) }.filter { !isProfane($0) }.prefix(8))
 				}
-				topWords = Array(top.map { ld.word($0.id) }.filter { !isProfane($0) }.prefix(8))
 			} else {
-				// v2 fallback: materialize the vocab into the heap trie as before.
+				// v2 fallback: materialize the vocab into a LOCAL heap trie, then swap it in
+				// under the lock — never hold the lock for the 60k-word build (a keystroke's
+				// main-thread fast path would stall behind it at launch).
+				let t = Trie()
 				var top: [(String, Int)] = []
 				ld.forEachWord { word, freq, id in
-					dynamicTrie.insert(word, freq: freq, id: id)
+					t.insert(word, freq: freq, id: id)
 					if !isProfane(word) {
 						top.append((word, freq))
 						if top.count > 32 { top.sort { $0.1 > $1.1 }; top.removeLast(16) }
 					}
 				}
+				lock.lock(); dynamicTrie = t; lock.unlock()
 				topWords = top.sorted { $0.1 > $1.1 }.prefix(8).map(\.0)
 			}
 		} else {
 			let seed = "the be to of and a in that have i it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us is are was word".split(separator: " ")
-			for (i, w) in seed.enumerated() { dynamicTrie.insert(String(w), freq: seed.count - i) }
+			let t = Trie()
+			for (i, w) in seed.enumerated() { t.insert(String(w), freq: seed.count - i) }
+			lock.lock(); dynamicTrie = t; lock.unlock()
 			topWords = seed.prefix(8).map(String.init)
 		}
 	}

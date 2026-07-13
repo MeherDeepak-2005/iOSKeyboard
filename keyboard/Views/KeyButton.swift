@@ -17,6 +17,8 @@ final class KeyButton: UIView {
 	private let baseRadius: CGFloat
 	private var label: UILabel?                    // set for text keys — updated in place on shift
 	private var iconView: UIImageView?            // set for symbol keys (e.g. the shift glyph)
+	private var contentView: UIView?               // the glyph (label or icon) — hidden while covered
+	private let recessColor: UIColor               // cap fill while the balloon is floating
 
 	/// Character to show in the press balloon (nil = no balloon). Reads the live label
 	/// so it always reflects the current shift/case.
@@ -32,6 +34,9 @@ final class KeyButton: UIView {
 		self.dark = theme.isDark
 		self.gradient = spec.role == .accent ? CAGradientLayer() : nil
 		self.dimColor = theme.isDark ? UIColor(white: 1, alpha: 0.18) : UIColor(white: 0, alpha: 0.12)
+		// Recessed "empty slot" look while the balloon floats: darken in both themes so the
+		// cap reads as a blackish transparent well and only the raised balloon shows the glyph.
+		self.recessColor = theme.isDark ? UIColor(white: 0, alpha: 0.34) : UIColor(white: 0, alpha: 0.16)
 		self.isPill = spec.pill
 		self.baseRadius = theme.cornerRadius
 		super.init(frame: .zero)
@@ -86,6 +91,7 @@ final class KeyButton: UIView {
 			label = lbl
 		}
 		content.translatesAutoresizingMaskIntoConstraints = false
+		contentView = content
 		addSubview(content)
 		NSLayoutConstraint.activate([
 			content.centerXAnchor.constraint(equalTo: centerXAnchor),
@@ -116,7 +122,19 @@ final class KeyButton: UIView {
 		layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: r).cgPath
 	}
 
-	func setHighlighted(_ on: Bool) { dim.backgroundColor = on ? dimColor : .clear }
+	private var covered = false
+	func setHighlighted(_ on: Bool) {
+		guard !covered else { return }            // covered wins — don't undo the recess with a highlight
+		dim.backgroundColor = on ? dimColor : .clear
+	}
+
+	/// While its press balloon floats, the key hides its own glyph and sinks to a recessed
+	/// slot, so only the raised balloon shows the character (Gboard / Apple behavior).
+	func setCovered(_ on: Bool) {
+		covered = on
+		contentView?.isHidden = on
+		dim.backgroundColor = on ? recessColor : .clear
+	}
 
 	static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 19, weight: .regular)
 
