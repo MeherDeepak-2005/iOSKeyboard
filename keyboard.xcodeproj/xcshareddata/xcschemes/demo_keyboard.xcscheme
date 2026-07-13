@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "2650"
+   LastUpgradeVersion = "2660"
    wasCreatedForAppExtension = "YES"
    version = "2.0">
    <BuildAction
@@ -58,6 +58,11 @@
       allowLocationSimulation = "YES"
       launchAutomaticallySubstyle = "2"
       queueDebuggingEnableBacktraceRecording = "Yes">
+      <RemoteRunnable
+         runnableDebuggingMode = "0"
+         BundleIdentifier = "net.whatsapp.WhatsApp"
+         RemotePath = "/var/containers/Bundle/Application/B333BAF9-A4CE-4744-A488-99B61568CC0F/WhatsApp.app">
+      </RemoteRunnable>
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"

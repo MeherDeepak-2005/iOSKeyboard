@@ -61,6 +61,9 @@ MIN_WORD_FREQ = 5          # drop one-off OCR/subtitle junk from the long tail
 BI_PER_CTX = 32            # predictions per context worth keeping
 TRI_PER_CTX = 16
 TRI_MIN_COUNT = 3          # a trigram seen twice in the corpus is noise
+STARTERS_KEEP = 256        # sentence-initial words kept for the cold-start bar
+CONTRACTIONS_KEEP = 300    # corpus-harvested interior-apostrophe words merged into vocab
+CONTRACTIONS_MIN = 100     # min corpus count — below this it's a typo, not a contraction
 HASH_LOAD = 0.7            # hash-table load factor (buckets = nextPow2(n / load))
 EMPTY = 0xFFFFFFFF         # empty-bucket sentinel (word ids are < DICT_SIZE)
 
@@ -116,18 +119,27 @@ def build_vocab() -> list[tuple[str, int]]:
 
 
 def build_ngrams(ids: dict[str, int]):
-    """Count bi/trigrams over our own corpus.txt (messaging register)."""
+    """Count bi/trigrams AND sentence starters over corpus.txt (messaging register).
+
+    Starters = the first in-vocab word of each line. This is the fix for cold-start
+    suggestions: ranking the empty-context bar by GLOBAL frequency surfaces mid-sentence
+    function words (and, of, to) that almost never open a message. Sentence-initial
+    counts instead surface openers — i, the, i'm, you, what — the way stock keyboards do.
+    NOT TF/IDF: that would wrongly suppress 'the', which is a fine opener."""
     if not CORPUS.exists():
         sys.exit(f"missing {CORPUS} — run tools/lm/prepare_data.py first")
     by_ctx_bi: dict[int, Counter] = defaultdict(Counter)
     tri_counts: Counter = Counter()
-    print(f"counting bi/trigrams over {CORPUS.name} ...", flush=True)
+    starter_counts: Counter = Counter()
+    print(f"counting bi/trigrams + starters over {CORPUS.name} ...", flush=True)
     with CORPUS.open(errors="replace") as f:
         for line in f:
             toks = line.split()
             if toks and toks[0].startswith("<"):        # drop the register tag
                 toks = toks[1:]
             ti = [ids[t] for t in toks if t in ids]
+            if ti:
+                starter_counts[ti[0]] += 1              # first word of the sentence
             for i in range(len(ti) - 1):
                 by_ctx_bi[ti[i]][ti[i + 1]] += 1
             for i in range(len(ti) - 2):
@@ -138,7 +150,8 @@ def build_ngrams(ids: dict[str, int]):
         if n >= TRI_MIN_COUNT:
             by_ctx_tri[(a, b)].append((c, n))
     trigrams = {k: sorted(v, key=lambda e: -e[1]) for k, v in by_ctx_tri.items()}
-    return bigrams, trigrams
+    starters = [(w, n) for w, n in starter_counts.most_common(STARTERS_KEEP)]
+    return bigrams, trigrams, starters
 
 
 def next_pow2(n: int) -> int:
@@ -224,7 +237,7 @@ def build_trie(vocab) -> list[list[int]]:
     return records
 
 
-def write_bin(vocab, bigrams, trigrams) -> None:
+def write_bin(vocab, bigrams, trigrams, starters) -> None:
     blob = bytearray()
     offsets = [0]
     for w, _ in vocab:
@@ -251,8 +264,11 @@ def write_bin(vocab, bigrams, trigrams) -> None:
     trie = build_trie(vocab)
 
     with OUT.open("wb") as f:
-        f.write(struct.pack("<8I", 0x4B424C4D, 3, len(vocab),
-                            bi_buckets, len(bi_ent), tri_buckets, len(tri_ent), len(trie)))
+        # v4 = v3 + a sentence-starters section (starterCount in the header, an array of
+        # (wordId, count) sorted by count desc, placed between the trie and the blob).
+        f.write(struct.pack("<9I", 0x4B424C4D, 4, len(vocab),
+                            bi_buckets, len(bi_ent), tri_buckets, len(tri_ent), len(trie),
+                            len(starters)))
         f.write(struct.pack(f"<{len(vocab)}I", *(c for _, c in vocab)))
         f.write(struct.pack(f"<{len(offsets)}I", *offsets))
         for row in bi_table:
@@ -265,18 +281,53 @@ def write_bin(vocab, bigrams, trigrams) -> None:
             f.write(struct.pack("<2I", *row))
         for rec in trie:
             f.write(struct.pack("<BBIII", *rec))
+        for w, n in starters:
+            f.write(struct.pack("<2I", w, min(n, 0xFFFFFFFF)))
         f.write(blob)
     mb = OUT.stat().st_size / 1e6
+    top = ", ".join(vocab[w][0] for w, _ in starters[:6])
     print(f"wrote {OUT} ({mb:.1f} MB): {len(vocab)} words, "
           f"{len(bi_ent)} bigrams/{len(bi_rows)} ctx ({bi_buckets} buckets), "
           f"{len(tri_ent)} trigrams/{len(tri_rows)} ctx ({tri_buckets} buckets), "
-          f"{len(trie)} trie nodes")
+          f"{len(trie)} trie nodes, {len(starters)} starters [{top} ...]")
+
+
+def merge_contractions(vocab: list[tuple[str, int]]) -> list[tuple[str, int]]:
+    """The FrequencyWords source strips apostrophes, so the vocab ships with ZERO
+    contractions — autocorrect can't produce "don't" and glide can't decode "what's"
+    (EXCLUDE removed the apostrophe-less forms expecting the real ones to exist).
+    Harvest interior-apostrophe tokens from our own corpus, scale their counts onto
+    the vocab's frequency scale (via anchor words present in both), and merge."""
+    if not CORPUS.exists():
+        sys.exit(f"missing {CORPUS} — run tools/lm/prepare_data.py first")
+    pat = re.compile(r"^[a-z]+'[a-z]+$")
+    counts: Counter = Counter()
+    anchors = {"you": 0, "the": 0, "and": 0, "that": 0}
+    print("harvesting contractions from corpus ...", flush=True)
+    with CORPUS.open(errors="replace") as f:
+        for line in f:
+            for tok in line.split():
+                if tok in anchors:
+                    anchors[tok] += 1
+                elif "'" in tok and pat.match(tok):
+                    counts[tok] += 1
+    vfreq = dict(vocab)
+    ratios = [vfreq[w] / c for w, c in anchors.items() if c > 0 and w in vfreq]
+    scale = sum(ratios) / len(ratios) if ratios else 1.0
+    have = set(vfreq)
+    added = [(w, min(int(c * scale), 0xFFFFFFFF))
+             for w, c in counts.most_common(CONTRACTIONS_KEEP)
+             if c >= CONTRACTIONS_MIN and w not in have]
+    merged = sorted(vocab + added, key=lambda e: -e[1])   # keep "earlier id = more frequent"
+    top = ", ".join(w for w, _ in added[:8])
+    print(f"contractions: +{len(added)} merged (scale x{scale:.0f}) [{top} ...]")
+    return merged
 
 
 if __name__ == "__main__":
     if not OUT.parent.is_dir():
         sys.exit(f"expected keyboard/ folder at {OUT.parent}")
-    vocab = build_vocab()
+    vocab = merge_contractions(build_vocab())
     ids = {w: i for i, (w, _) in enumerate(vocab)}
     print(f"vocab: {len(vocab)} words")
     write_bin(vocab, *build_ngrams(ids))

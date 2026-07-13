@@ -24,6 +24,12 @@ enum KB {
 		let d2 = (a.0 - b.0) * (a.0 - b.0) + (a.1 - b.1) * (a.1 - b.1)
 		return min(3.0, d2 / (2 * sigma * sigma) + 0.3)
 	}
+	/// Grid position of a letter (col+rowOffset, row) — the coordinate space glide
+	/// decoding maps the swipe trajectory into.
+	static func grid(for letter: Character) -> (Double, Double)? {
+		guard let a = letter.asciiValue else { return nil }
+		return pos[a]
+	}
 	/// Continuous variant: distance from the intended key's center to the actual
 	/// landing point. Parity with the discrete table when the tap is dead-center
 	/// (cost → 0 for the pressed key); the 0.3 cross-key floor still separates

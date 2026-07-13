@@ -57,6 +57,7 @@ __pycache__/
 # ML Weights & Binaries
 *.pt
 *.bin
+!keyboard/emoji.bin
 *.kbguard
 *.mlpackage/
 

@@ -86,23 +86,25 @@ def mix64(x):
 
 
 class LangData:
-    """Reader for langdata.bin v2/v3 (open-addressing hash tables; v3 adds a
-    static trie section between the trigram entries and the word blob)."""
+    """Reader for langdata.bin v2/v3/v4 (open-addressing hash tables; v3 adds a static
+    trie section, v4 adds a sentence-starters section, both before the word blob)."""
 
     def __init__(self, path):
         d = self.d = path.read_bytes()
         magic, ver, self.W, self.biBuckets, self.BE, self.triBuckets, self.TE = \
             struct.unpack_from("<7I", d, 0)
-        assert magic == 0x4B424C4D and ver in (2, 3), "langdata.bin must be format v2/v3"
+        assert magic == 0x4B424C4D and ver in (2, 3, 4), "langdata.bin must be format v2/v3/v4"
         self.trieNodes = struct.unpack_from("<I", d, 28)[0] if ver >= 3 else 0
-        self.freqB = 32 if ver >= 3 else 28
+        self.starterCount = struct.unpack_from("<I", d, 32)[0] if ver >= 4 else 0
+        self.freqB = 36 if ver >= 4 else (32 if ver >= 3 else 28)
         self.offsB = self.freqB + 4 * self.W
         self.biHashB = self.offsB + 4 * (self.W + 1)
         self.biEntB = self.biHashB + 16 * self.biBuckets
         self.triHashB = self.biEntB + 8 * self.BE
         self.triEntB = self.triHashB + 20 * self.triBuckets
         self.trieB = self.triEntB + 8 * self.TE
-        self.blobB = self.trieB + 14 * self.trieNodes
+        self.startersB = self.trieB + 14 * self.trieNodes
+        self.blobB = self.startersB + 8 * self.starterCount
         self.words = [self.word(i) for i in range(self.W)]
         self.ids = {w: i for i, w in enumerate(self.words)}
         self.freqs = list(struct.unpack_from(f"<{self.W}I", d, self.freqB))

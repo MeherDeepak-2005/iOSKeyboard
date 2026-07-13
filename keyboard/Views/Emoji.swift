@@ -21,8 +21,6 @@ enum KBEmojiRecents {
 	}
 }
 
-struct EmojiCategory { let name: String; let icon: String; let emojis: [String] }
-
 // MARK: - EmojiStore: zero-copy reader for `emoji.bin`
 //
 // The catalog used to be split from string literals into ~1,300 heap Strings on the
@@ -41,14 +39,13 @@ final class EmojiStore {
 	private let mapCount: Int
 	private let catBase, offsBase, mapBase, blobBase: Int
 
-	/// nil unless `emoji.bin` ships in the current target — EmojiData.categories
-	/// below remains as the fallback.
+	/// nil unless `emoji.bin` ships in the current target.
 	static let bundled: EmojiStore? = {
 		guard let url = Bundle.main.url(forResource: "emoji", withExtension: "bin") else { return nil }
 		return EmojiStore(url: url)
 	}()
 
-	private init?(url: URL) {
+	init?(url: URL) {
 		guard let d = try? Data(contentsOf: url, options: .alwaysMapped), d.count >= 16 else { return nil }
 		func u32(_ off: Int) -> Int {
 			Int(UInt32(littleEndian: d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: off, as: UInt32.self) }))
@@ -100,24 +97,40 @@ final class EmojiStore {
 		return nil
 	}
 
-	/// Emoji whose keyword matches `query`, prefix matches first. Scans the (small,
-	/// ~150-entry) word→emoji map — the same table that powers word→emoji suggestions.
-	/// Coverage is only as wide as that keyword table; a fuller emoji keyword index can
-	/// be added to emoji.bin later without touching this call site.
+	/// Emoji whose keyword matches `query`, ranked by exact, prefix, then contains.
+	/// Scans the generated word->emoji map: the same binary data powers search and
+	/// suggestion-bar emoji candidates.
 	func search(_ query: String) -> [String] {
 		guard mapCount > 0 else { return [] }
-		let q = query.lowercased()
+		let q = normalizedSearchTerm(query)
 		guard !q.isEmpty else { return [] }
-		var prefix: [String] = [], contains: [String] = []
+		var hits: [(rank: Int, order: Int, emoji: String)] = []
 		var seen = Set<String>()
 		for i in 0..<mapCount {
 			let w = string(u32(mapBase + 8 * i))
-			guard w.contains(q) else { continue }
+			let term = normalizedSearchTerm(w)
+			let rank: Int?
+			if term == q {
+				rank = 0
+			} else if term.hasPrefix(q) {
+				rank = 100 + term.count
+			} else if let range = term.range(of: q) {
+				rank = 200 + term.distance(from: term.startIndex, to: range.lowerBound)
+			} else {
+				rank = nil
+			}
+			guard let rank else { continue }
 			let e = string(u32(mapBase + 8 * i + 4))
 			guard seen.insert(e).inserted else { continue }
-			if w.hasPrefix(q) { prefix.append(e) } else { contains.append(e) }
+			hits.append((rank, i, e))
 		}
-		return prefix + contains
+		return hits.sorted {
+			$0.rank == $1.rank ? $0.order < $1.order : $0.rank < $1.rank
+		}.map(\.emoji)
+	}
+
+	private func normalizedSearchTerm(_ text: String) -> String {
+		text.lowercased().filter { $0.isLetter || $0.isNumber }
 	}
 
 	/// Lexicographic byte compare: <0 if `a` sorts before `b`, 0 if equal, >0 after.
@@ -132,39 +145,24 @@ final class EmojiStore {
 	}
 }
 
-// MARK: - Fallback catalog for a missing `emoji.bin`
-//
-// The literals themselves are clean text-segment bytes, but `categories` materializes
-// ~1,300 heap Strings — which is exactly why the mmap'd EmojiStore is preferred. Lazy:
-// untouched when the binary resource is present.
-enum EmojiData {
-	static let categories: [EmojiCategory] = [
-		EmojiCategory(name: "Smileys & People", icon: "face.smiling", emojis:
-			"😀 😃 😄 😁 😆 😅 😂 🤣 🥲 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥳 🤩 😏 😒 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 👋 🤚 ✋ 🖖 👌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 👐 🤲 🙏 💪 🦶 🦵 👀 👁 👅 👄 🧠".split(separator: " ").map(String.init)),
-		EmojiCategory(name: "Animals & Nature", icon: "pawprint", emojis:
-			"🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🐛 🦋 🐌 🐞 🐜 🦗 🕷 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🐘 🦏 🐫 🦒 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🐐 🌵 🎄 🌲 🌳 🌴 🌱 🌿 ☘️ 🍀 🎍 🌾 🌺 🌻 🌹 🌷 🌸 🌼 🌞 🌝 🌚 ⭐️ 🌟 ✨ ⚡️ 🔥 🌈 ☀️ ⛅️ ☁️ 🌧 ⛈ ❄️ ☃️ 💧 🌊".split(separator: " ").map(String.init)),
-		EmojiCategory(name: "Food & Drink", icon: "fork.knife", emojis:
-			"🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶 🌽 🥕 🧄 🧅 🥔 🍠 🥐 🍞 🥖 🥨 🧀 🥚 🍳 🥞 🧇 🥓 🥩 🍗 🍖 🌭 🍔 🍟 🍕 🥪 🌮 🌯 🥗 🍝 🍜 🍲 🍣 🍱 🍛 🍤 🍙 🍚 🍥 🥟 🍦 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 ☕️ 🍵 🥤 🧃 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🧉".split(separator: " ").map(String.init)),
-		EmojiCategory(name: "Activity", icon: "figure.run", emojis:
-			"⚽️ 🏀 🏈 ⚾️ 🥎 🎾 🏐 🏉 🥏 🎱 🏓 🏸 🏒 🏑 🥍 🏏 🥅 ⛳️ 🏹 🎣 🥊 🥋 🎽 ⛸ 🥌 🛷 🎿 ⛷ 🏂 🏋️ 🤼 🤸 ⛹️ 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🚴 🚵 🎪 🎭 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🎷 🎺 🎸 🎻 🎲 🎯 🎳 🎮 🎰 🧩 🏆 🥇 🥈 🥉 🏅".split(separator: " ").map(String.init)),
-		EmojiCategory(name: "Travel & Places", icon: "car", emojis:
-			"🚗 🚕 🚙 🚌 🚎 🏎 🚓 🚑 🚒 🚐 🚚 🚛 🚜 🛴 🚲 🛵 🏍 🚨 🚔 🚍 🚘 🚖 🚡 🚠 🚟 🚃 🚋 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 💺 🚁 🚀 🛸 🚤 ⛵️ 🛶 🚢 ⚓️ 🗺 🗽 🗼 🏰 🏯 🏟 🎡 🎢 🎠 ⛲️ 🏖 🏝 ⛰ 🏔 🗻 🌋 🏕 ⛺️ 🏠 🏡 🏘 🏢 🏬 🏦 🏨 🏪 🏫 🏩 💒 🏛 ⛪️ 🕌 🕍 🛕".split(separator: " ").map(String.init)),
-		EmojiCategory(name: "Objects", icon: "lightbulb", emojis:
-			"⌚️ 📱 💻 ⌨️ 🖥 🖨 🖱 💽 💾 💿 📷 📸 📹 🎥 📞 ☎️ 📟 📺 📻 ⏱ ⏰ 🕰 ⌛️ ⏳ 📡 🔋 🔌 💡 🔦 🕯 🧯 💸 💵 💴 💶 💷 💰 💳 🧾 💎 ⚖️ 🔧 🔨 🛠 🔩 ⚙️ 🧰 🧲 🔫 💣 🔪 🚬 ⚰️ 🏺 🔮 📿 💈 🔭 🔬 🕳 💊 💉 🩸 🌡 🧷 🧵 🧶 👓 🕶 🌂 ☂️ 🧳 🎒 👜 👛 👝 🛍 🎁 🎈 🎏 🎀 🎉 🎊".split(separator: " ").map(String.init)),
-		EmojiCategory(name: "Symbols", icon: "heart", emojis:
-			"❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 ✅ ❌ ❎ ➕ ➖ ➗ ✖️ ♾ 💲 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫️ ⚪️ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◼️ ◻️ ⬛️ ⬜️ 🟥 🟧 🟨 🟩 🟦 🟪 ⭐️ 🌟 ❓ ❗️ ‼️ ⁉️ 💤 🎵 🎶".split(separator: " ").map(String.init)),
-	]
-}
-
 // MARK: - Cells
 
 private final class EmojiCell: UICollectionViewCell {
 	let label = UILabel()
+	private var highlightColor = UIColor.clear
+
+	override var isHighlighted: Bool {
+		didSet { contentView.backgroundColor = isHighlighted ? highlightColor : .clear }
+	}
+
 	override init(frame: CGRect) {
 		super.init(frame: frame)
 		label.textAlignment = .center
-		label.font = .systemFont(ofSize: 30)
+		label.font = .systemFont(ofSize: 28)
 		label.translatesAutoresizingMaskIntoConstraints = false
+		contentView.layer.cornerRadius = 8
+		contentView.layer.cornerCurve = .continuous
+		contentView.clipsToBounds = true
 		contentView.addSubview(label)
 		NSLayoutConstraint.activate([
 			label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
@@ -172,198 +170,238 @@ private final class EmojiCell: UICollectionViewCell {
 		])
 	}
 	required init?(coder: NSCoder) { fatalError() }
+
+	func configure(emoji: String, theme: KeyboardTheme) {
+		label.text = emoji
+		highlightColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0, alpha: 0.08)
+		contentView.backgroundColor = isHighlighted ? highlightColor : .clear
+	}
 }
 
 private final class EmojiHeader: UICollectionReusableView {
 	let label = UILabel()
 	override init(frame: CGRect) {
 		super.init(frame: frame)
-		label.font = .systemFont(ofSize: 12, weight: .semibold)
+		label.font = .systemFont(ofSize: 11, weight: .semibold)
 		label.translatesAutoresizingMaskIntoConstraints = false
 		addSubview(label)
 		NSLayoutConstraint.activate([
 			label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-			label.centerYAnchor.constraint(equalTo: centerYAnchor)
+			label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
 		])
 	}
 	required init?(coder: NSCoder) { fatalError() }
 }
 
-// MARK: - Emoji page
+// MARK: - Emoji page (browse palette)
 //
-// A horizontally-scrolling, category-sectioned grid with a bottom bar (ABC / globe /
-// search / category quick-nav / delete). Shown as an overlay by KeyboardView; the
-// collection view handles its own scrolling and taps, so KeyboardView's key
-// touch-handling never sees it. Tapping search swaps the bottom bar for a compact
-// keypad and filters to a single results section.
-final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+// Gboard-style: a search pill on top, a VERTICALLY scrolling category-sectioned grid
+// in the middle, and a bottom bar (ABC / globe / category tabs / delete). Shown as an
+// overlay by KeyboardView. The grid is a compositional layout with an exact per-row
+// column count, so rows are always full — the old horizontal flow layout dropped
+// items when cell rounding disagreed with the column height.
+//
+// Search itself does NOT live here: tapping the pill hands off to KeyboardView's
+// emoji-search mode, which reuses the REAL keyboard for typing (see EmojiSearchHeader)
+// instead of a cramped in-overlay keypad.
+final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
 	var onPick: ((String) -> Void)?
 	var onDelete: (() -> Void)?
 	var onABC: (() -> Void)?
 	var onNextKeyboard: (() -> Void)?
+	var onSearch: (() -> Void)?
 
 	private let theme: KeyboardTheme
 	private let showsGlobe: Bool
-	private let collection: UICollectionView
+	private var collection: UICollectionView!
+	private let emptyLabel = UILabel()
+	private let searchPill = UIButton(type: .system)
 	private let bottomBar = UIView()
-	private let barHeight: CGFloat = 44
+	private var tabButtons: [UIButton] = []
+	private var activeTab = 0
+	private let searchRowHeight: CGFloat = 42
+	private let barHeight: CGFloat = 42
 
-	/// Recents come from UserDefaults; the catalog comes from the mmap'd EmojiStore
-	/// (per-cell decode, no heap catalog) or, if `emoji.bin` is missing, the legacy
-	/// in-code categories.
+	/// Recents come from UserDefaults; the catalog comes from the mmap'd EmojiStore.
+	/// If the bundled resource is missing, the view fails closed instead of shipping
+	/// a stale in-code emoji catalog.
 	private enum Section {
 		case recents([String])
 		case bundled(EmojiStore, Int)
-		case legacy(EmojiCategory)
 	}
 	private var sections: [Section] = []
-	private let store = EmojiStore.bundled
-
-	// Search mode.
-	private var isSearching = false
-	private var query = ""
-	private var results: [String] = []
-	private let searchBar = UIView()
-	private let searchLabel = UILabel()
-	private let searchKeyboard = UIView()
-	private let searchBarHeight: CGFloat = 40
-	private let kbRowHeight: CGFloat = 42
-	private var searchKeyboardHeight: CGFloat { kbRowHeight * 3 + 10 }
+	private let store: EmojiStore?
 
 	private func name(of s: Int) -> String {
 		switch sections[s] {
 		case .recents:                return "Recently Used"
 		case .bundled(let st, let c): return st.name(c)
-		case .legacy(let cat):        return cat.name
 		}
 	}
 	private func icon(of s: Int) -> String {
 		switch sections[s] {
 		case .recents:                return "clock"
 		case .bundled(let st, let c): return st.icon(c)
-		case .legacy(let cat):        return cat.icon
 		}
 	}
 	private func emojiCount(in s: Int) -> Int {
 		switch sections[s] {
 		case .recents(let list):      return list.count
 		case .bundled(let st, let c): return st.emojiCount(c)
-		case .legacy(let cat):        return cat.emojis.count
 		}
 	}
 	private func emoji(at ip: IndexPath) -> String {
 		switch sections[ip.section] {
 		case .recents(let list):      return list[ip.item]
 		case .bundled(let st, let c): return st.emoji(c, ip.item)
-		case .legacy(let cat):        return cat.emojis[ip.item]
 		}
 	}
 
-	init(theme: KeyboardTheme, showsGlobe: Bool) {
+	/// `store` is injectable for tests (the app target doesn't bundle emoji.bin).
+	init(theme: KeyboardTheme, showsGlobe: Bool, store: EmojiStore? = EmojiStore.bundled) {
 		self.theme = theme
 		self.showsGlobe = showsGlobe
-		let layout = UICollectionViewFlowLayout()
-		layout.scrollDirection = .horizontal            // swipe left/right through categories
-		layout.minimumInteritemSpacing = 0              // between rows within a column
-		layout.minimumLineSpacing = 4                   // between columns
-		layout.sectionInset = UIEdgeInsets(top: 2, left: 6, bottom: 2, right: 6)
-		collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+		self.store = store
 		super.init(frame: .zero)
 
 		let recents = KBEmojiRecents.all()
 		if !recents.isEmpty { sections.append(.recents(recents)) }
 		if let store {
 			sections.append(contentsOf: (0..<store.categoryCount).map { .bundled(store, $0) })
-		} else {
-			sections.append(contentsOf: EmojiData.categories.map(Section.legacy))
 		}
 
+		collection = UICollectionView(frame: .zero, collectionViewLayout: makeLayout())
 		collection.backgroundColor = .clear
 		collection.dataSource = self
 		collection.delegate = self
 		collection.register(EmojiCell.self, forCellWithReuseIdentifier: "e")
-		// Horizontal-only scroll: kill the vertical bounce (the source of the zig-zag
-		// diagonal drift) and lock a drag to one axis so a sideways swipe stays sideways.
-		collection.alwaysBounceVertical = false
-		collection.alwaysBounceHorizontal = true
-		collection.isDirectionalLockEnabled = true
+		collection.register(EmojiHeader.self,
+							forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+							withReuseIdentifier: "h")
 		collection.showsVerticalScrollIndicator = false
-		collection.showsHorizontalScrollIndicator = false
+		emptyLabel.font = .systemFont(ofSize: 15, weight: .medium)
+		emptyLabel.textColor = theme.specialKeyText.withAlphaComponent(0.55)
+		emptyLabel.textAlignment = .center
+		emptyLabel.numberOfLines = 2
+		emptyLabel.text = sections.isEmpty ? "Emoji data unavailable" : nil
+		emptyLabel.isHidden = !sections.isEmpty
+		collection.backgroundView = emptyLabel
 		addSubview(collection)
 
+		buildSearchPill()
 		buildBottomBar()
+		addSubview(searchPill)
 		addSubview(bottomBar)
-		buildSearch()
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
-	override func layoutSubviews() {
-		super.layoutSubviews()
-		if isSearching {
-			searchBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: searchBarHeight)
-			searchKeyboard.frame = CGRect(x: 0, y: bounds.height - searchKeyboardHeight,
-										  width: bounds.width, height: searchKeyboardHeight)
-			collection.frame = CGRect(x: 0, y: searchBarHeight, width: bounds.width,
-									  height: max(0, bounds.height - searchBarHeight - searchKeyboardHeight))
-		} else {
-			bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
-			collection.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height - barHeight)
+	/// Vertical grid: N square cells per row (N from the live width), full rows always.
+	private func makeLayout() -> UICollectionViewLayout {
+		UICollectionViewCompositionalLayout { _, env in
+			let width = max(1, env.container.effectiveContentSize.width - 12)
+			let cols = max(6, Int(width / 46))
+			let side = 1.0 / CGFloat(cols)
+			let item = NSCollectionLayoutItem(layoutSize: .init(
+				widthDimension: .fractionalWidth(side), heightDimension: .fractionalHeight(1)))
+			let row = NSCollectionLayoutGroup.horizontal(layoutSize: .init(
+				widthDimension: .fractionalWidth(1), heightDimension: .absolute(width * side)),
+				subitems: [item])
+			let sec = NSCollectionLayoutSection(group: row)
+			sec.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 6, bottom: 10, trailing: 6)
+			let header = NSCollectionLayoutBoundarySupplementaryItem(
+				layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(24)),
+				elementKind: UICollectionView.elementKindSectionHeader, alignment: .top)
+			sec.boundarySupplementaryItems = [header]
+			return sec
 		}
 	}
 
-	// MARK: Collection data (browse sections, or a single results section while searching)
-
-	func numberOfSections(in cv: UICollectionView) -> Int { isSearching ? 1 : sections.count }
-	func collectionView(_ cv: UICollectionView, numberOfItemsInSection s: Int) -> Int {
-		isSearching ? results.count : emojiCount(in: s)
+	override func layoutSubviews() {
+		super.layoutSubviews()
+		searchPill.frame = CGRect(x: 8, y: 5, width: bounds.width - 16, height: searchRowHeight - 10)
+		bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
+		collection.frame = CGRect(x: 0, y: searchRowHeight, width: bounds.width,
+								  height: max(0, bounds.height - searchRowHeight - barHeight))
 	}
+
+	// MARK: Search pill (tap hands off to KeyboardView's emoji-search mode)
+
+	private func buildSearchPill() {
+		var cfg = UIButton.Configuration.plain()
+		cfg.image = UIImage(systemName: "magnifyingglass",
+							withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+		cfg.imagePadding = 6
+		cfg.attributedTitle = AttributedString("Search emoji", attributes: AttributeContainer([
+			.font: UIFont.systemFont(ofSize: 15),
+			.foregroundColor: theme.keyText.withAlphaComponent(0.45)
+		]))
+		cfg.baseForegroundColor = theme.keyText.withAlphaComponent(0.45)
+		cfg.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
+		searchPill.configuration = cfg
+		searchPill.contentHorizontalAlignment = .leading
+		searchPill.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 1, alpha: 0.55)
+		searchPill.layer.cornerRadius = (searchRowHeight - 10) / 2
+		searchPill.layer.cornerCurve = .continuous
+		searchPill.isEnabled = store != nil          // no catalog → nothing to search
+		searchPill.addAction(UIAction { [weak self] _ in self?.onSearch?() }, for: .touchUpInside)
+	}
+
+	// MARK: Collection data
+
+	func numberOfSections(in cv: UICollectionView) -> Int { sections.count }
+	func collectionView(_ cv: UICollectionView, numberOfItemsInSection s: Int) -> Int { emojiCount(in: s) }
 	func collectionView(_ cv: UICollectionView, cellForItemAt ip: IndexPath) -> UICollectionViewCell {
 		let cell = cv.dequeueReusableCell(withReuseIdentifier: "e", for: ip) as! EmojiCell
-		cell.label.text = isSearching ? results[ip.item] : emoji(at: ip)
+		cell.configure(emoji: emoji(at: ip), theme: theme)
 		return cell
 	}
-	func collectionView(_ cv: UICollectionView, layout: UICollectionViewLayout, sizeForItemAt ip: IndexPath) -> CGSize {
-		// Horizontal scroll: fix the row count to the available height; cells are square,
-		// so emoji fill top-to-bottom in each column and the grid scrolls sideways.
-		let avail = isSearching ? (bounds.height - searchBarHeight - searchKeyboardHeight - 4)
-							     : (bounds.height - barHeight - 4)
-		let usable = max(44, avail)
-		let rows = max(isSearching ? 1 : 3, Int(usable / 44))
-		let side = floor(usable / CGFloat(rows))
-		return CGSize(width: side, height: side)
+	func collectionView(_ cv: UICollectionView, viewForSupplementaryElementOfKind kind: String,
+						at ip: IndexPath) -> UICollectionReusableView {
+		let h = cv.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: "h", for: ip) as! EmojiHeader
+		h.label.text = name(of: ip.section).uppercased()
+		h.label.textColor = theme.specialKeyText.withAlphaComponent(0.55)
+		return h
 	}
 	func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
-		let e = isSearching ? results[ip.item] : emoji(at: ip)
+		let e = emoji(at: ip)
 		onPick?(e)
 		KBEmojiRecents.add(e)
 	}
 
-	// MARK: Bottom bar
+	/// Keep the active category tab tracking the topmost visible section.
+	func scrollViewDidScroll(_ scrollView: UIScrollView) {
+		guard let top = collection.indexPathsForVisibleItems.min()?.section, top != activeTab else { return }
+		setActiveTab(top)
+	}
+
+	// MARK: Bottom bar — ABC | (globe) | category tabs | delete
 
 	private func buildBottomBar() {
 		bottomBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
 		var leading: [UIButton] = [barButton(title: "ABC") { [weak self] in self?.onABC?() }]
 		if showsGlobe { leading.append(barButton(symbol: "globe") { [weak self] in self?.onNextKeyboard?() }) }
-		if store != nil { leading.append(barButton(symbol: "magnifyingglass") { [weak self] in self?.enterSearch() }) }
 
 		let nav = UIStackView()
 		nav.axis = .horizontal
 		nav.distribution = .fillEqually
 		for i in sections.indices {
-			nav.addArrangedSubview(barButton(symbol: icon(of: i)) { [weak self] in
-				self?.collection.scrollToItem(at: IndexPath(item: 0, section: i), at: .left, animated: false)
-			})
+			let b = barButton(symbol: icon(of: i), pointSize: 15) { [weak self] in
+				self?.scrollTo(section: i)
+			}
+			tabButtons.append(b)
+			nav.addArrangedSubview(b)
 		}
+		setActiveTab(0)
 		let del = barButton(symbol: "delete.left") { [weak self] in self?.onDelete?() }
 
 		let stack = UIStackView(arrangedSubviews: leading + [nav, del])
 		stack.axis = .horizontal
 		stack.spacing = 2
 		stack.alignment = .fill
-		nav.setContentHuggingPriority(.defaultLow, for: .horizontal)      // nav takes the slack
+		nav.setContentHuggingPriority(.defaultLow, for: .horizontal)      // tabs take the slack
 		for b in leading + [del] {
 			b.setContentHuggingPriority(.required, for: .horizontal)
-			b.widthAnchor.constraint(equalToConstant: 38).isActive = true
+			b.widthAnchor.constraint(equalToConstant: 40).isActive = true
 		}
 		stack.translatesAutoresizingMaskIntoConstraints = false
 		bottomBar.addSubview(stack)
@@ -375,152 +413,212 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		])
 	}
 
-	private func barButton(title: String? = nil, symbol: String? = nil, action: @escaping () -> Void) -> UIButton {
+	private func scrollTo(section i: Int) {
+		guard i < sections.count, emojiCount(in: i) > 0 else { return }
+		setActiveTab(i)
+		// Land the section HEADER at the top, not the first cell under it.
+		if let attr = collection.layoutAttributesForSupplementaryElement(
+			ofKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: i)) {
+			let maxY = max(0, collection.contentSize.height - collection.bounds.height)
+			collection.setContentOffset(CGPoint(x: 0, y: min(attr.frame.minY, maxY)), animated: false)
+		} else {
+			collection.scrollToItem(at: IndexPath(item: 0, section: i), at: .top, animated: false)
+		}
+	}
+
+	private func setActiveTab(_ i: Int) {
+		guard i < tabButtons.count else { return }
+		tabButtons[activeTab].tintColor = theme.specialKeyText.withAlphaComponent(0.5)
+		tabButtons[activeTab].backgroundColor = .clear
+		activeTab = i
+		let active = tabButtons[i]
+		active.tintColor = theme.keyText
+		active.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.12) : UIColor(white: 0, alpha: 0.08)
+		active.layer.cornerRadius = 8
+		active.layer.cornerCurve = .continuous
+	}
+
+	private func barButton(title: String? = nil, symbol: String? = nil,
+						   pointSize: CGFloat = 16, action: @escaping () -> Void) -> UIButton {
 		let b = UIButton(type: .system)
 		if let title {
 			b.setTitle(title, for: .normal)
 			b.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
 		}
 		if let symbol {
-			b.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)), for: .normal)
+			b.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)), for: .normal)
 		}
-		b.tintColor = theme.specialKeyText
+		b.tintColor = theme.specialKeyText.withAlphaComponent(0.5)
 		b.setTitleColor(theme.specialKeyText, for: .normal)
 		b.addAction(UIAction { _ in action() }, for: .touchUpInside)
 		return b
 	}
+}
 
-	// MARK: Search (field + compact keypad + live results)
+// MARK: - EmojiSearchHeader (Gboard-style: search rides the REAL keyboard)
+//
+// Shown by KeyboardView above the normal letter deck while emoji search is active:
+// a back button, the live query in a pill (with blinking caret + inline clear), and
+// a horizontal strip of results. Typing goes through the real keys — KeyboardView
+// routes inserts/deletes into the query instead of the host document — so there is
+// no cramped mini keyboard, and every typing nicety (popups, multitouch) just works.
+final class EmojiSearchHeader: UIView {
+	static let height: CGFloat = 86     // 38 search row + 48 results row
 
-	private func buildSearch() {
-		searchBar.isHidden = true
-		searchKeyboard.isHidden = true
-		searchBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
+	var onCancel: (() -> Void)?
+	var onClear: (() -> Void)?
+	var onPick: ((String) -> Void)?
 
-		let pill = UIView()
-		pill.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.12) : UIColor(white: 1, alpha: 0.7)
-		pill.layer.cornerRadius = 15
+	private let theme: KeyboardTheme
+	private let pill = UIView()
+	private let queryLabel = UILabel()
+	private let caret = UIView()
+	private let clearButton = UIButton(type: .system)
+	private let resultsScroll = UIScrollView()
+	private let resultsStack = UIStackView()
+	private let statusLabel = UILabel()
+	private let resultCap = 60          // plenty to swipe through; keeps the strip cheap
+
+	init(theme: KeyboardTheme) {
+		self.theme = theme
+		super.init(frame: .zero)
+
+		// Row 1: back chevron + query pill.
+		let back = UIButton(type: .system)
+		back.setImage(UIImage(systemName: "arrow.left",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)), for: .normal)
+		back.tintColor = theme.specialKeyText
+		back.addAction(UIAction { [weak self] _ in self?.onCancel?() }, for: .touchUpInside)
+		back.translatesAutoresizingMaskIntoConstraints = false
+		addSubview(back)
+
+		pill.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 1, alpha: 0.55)
+		pill.layer.cornerRadius = 16
+		pill.layer.cornerCurve = .continuous
 		pill.translatesAutoresizingMaskIntoConstraints = false
-		searchBar.addSubview(pill)
+		addSubview(pill)
 
-		let glass = UIImageView(image: UIImage(systemName: "magnifyingglass"))
-		glass.tintColor = theme.specialKeyText.withAlphaComponent(0.6)
+		let glass = UIImageView(image: UIImage(systemName: "magnifyingglass",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)))
+		glass.tintColor = theme.keyText.withAlphaComponent(0.45)
 		glass.translatesAutoresizingMaskIntoConstraints = false
 		pill.addSubview(glass)
 
-		searchLabel.font = .systemFont(ofSize: 16)
-		searchLabel.textColor = theme.keyText
-		searchLabel.translatesAutoresizingMaskIntoConstraints = false
-		pill.addSubview(searchLabel)
+		queryLabel.font = .systemFont(ofSize: 16)
+		queryLabel.translatesAutoresizingMaskIntoConstraints = false
+		queryLabel.setContentHuggingPriority(.required, for: .horizontal)
+		queryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+		pill.addSubview(queryLabel)
 
-		let cancel = UIButton(type: .system)
-		cancel.setTitle("Cancel", for: .normal)
-		cancel.titleLabel?.font = .systemFont(ofSize: 15)
-		cancel.tintColor = theme.specialKeyText
-		cancel.setTitleColor(theme.specialKeyText, for: .normal)
-		cancel.translatesAutoresizingMaskIntoConstraints = false
-		cancel.addAction(UIAction { [weak self] _ in self?.exitSearch() }, for: .touchUpInside)
-		searchBar.addSubview(cancel)
+		caret.backgroundColor = theme.isDark ? UIColor(hex: 0xECECF0) : theme.keyText
+		caret.layer.cornerRadius = 1
+		caret.translatesAutoresizingMaskIntoConstraints = false
+		pill.addSubview(caret)
+
+		clearButton.setImage(UIImage(systemName: "xmark.circle.fill",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)), for: .normal)
+		clearButton.tintColor = theme.keyText.withAlphaComponent(0.35)
+		clearButton.addAction(UIAction { [weak self] _ in self?.onClear?() }, for: .touchUpInside)
+		clearButton.translatesAutoresizingMaskIntoConstraints = false
+		pill.addSubview(clearButton)
+
+		// Row 2: horizontal results strip (or a status line when there's nothing to show).
+		resultsStack.axis = .horizontal
+		resultsStack.spacing = 2
+		resultsStack.translatesAutoresizingMaskIntoConstraints = false
+		resultsScroll.showsHorizontalScrollIndicator = false
+		resultsScroll.translatesAutoresizingMaskIntoConstraints = false
+		resultsScroll.addSubview(resultsStack)
+		addSubview(resultsScroll)
+
+		statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
+		statusLabel.textColor = theme.specialKeyText.withAlphaComponent(0.5)
+		statusLabel.translatesAutoresizingMaskIntoConstraints = false
+		addSubview(statusLabel)
 
 		NSLayoutConstraint.activate([
-			pill.leadingAnchor.constraint(equalTo: searchBar.leadingAnchor, constant: 8),
-			pill.centerYAnchor.constraint(equalTo: searchBar.centerYAnchor),
-			pill.heightAnchor.constraint(equalToConstant: 30),
-			pill.trailingAnchor.constraint(equalTo: cancel.leadingAnchor, constant: -6),
-			cancel.trailingAnchor.constraint(equalTo: searchBar.trailingAnchor, constant: -8),
-			cancel.centerYAnchor.constraint(equalTo: searchBar.centerYAnchor),
-			glass.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 10),
+			back.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+			back.centerYAnchor.constraint(equalTo: topAnchor, constant: 19),
+			back.widthAnchor.constraint(equalToConstant: 36),
+			back.heightAnchor.constraint(equalToConstant: 36),
+
+			pill.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 2),
+			pill.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+			pill.centerYAnchor.constraint(equalTo: topAnchor, constant: 19),
+			pill.heightAnchor.constraint(equalToConstant: 32),
+
+			glass.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 11),
 			glass.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
-			glass.widthAnchor.constraint(equalToConstant: 16),
-			glass.heightAnchor.constraint(equalToConstant: 16),
-			searchLabel.leadingAnchor.constraint(equalTo: glass.trailingAnchor, constant: 8),
-			searchLabel.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -10),
-			searchLabel.centerYAnchor.constraint(equalTo: pill.centerYAnchor)
+
+			queryLabel.leadingAnchor.constraint(equalTo: glass.trailingAnchor, constant: 7),
+			queryLabel.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+			queryLabel.trailingAnchor.constraint(lessThanOrEqualTo: clearButton.leadingAnchor, constant: -8),
+
+			caret.leadingAnchor.constraint(equalTo: queryLabel.trailingAnchor, constant: 1),
+			caret.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+			caret.widthAnchor.constraint(equalToConstant: 2),
+			caret.heightAnchor.constraint(equalToConstant: 18),
+
+			clearButton.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -6),
+			clearButton.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
+			clearButton.widthAnchor.constraint(equalToConstant: 28),
+			clearButton.heightAnchor.constraint(equalToConstant: 28),
+
+			resultsScroll.topAnchor.constraint(equalTo: topAnchor, constant: 38),
+			resultsScroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+			resultsScroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+			resultsScroll.heightAnchor.constraint(equalToConstant: 48),
+
+			resultsStack.topAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.topAnchor),
+			resultsStack.bottomAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.bottomAnchor),
+			resultsStack.leadingAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.leadingAnchor),
+			resultsStack.trailingAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.trailingAnchor),
+			resultsStack.heightAnchor.constraint(equalTo: resultsScroll.frameLayoutGuide.heightAnchor),
+
+			statusLabel.centerYAnchor.constraint(equalTo: resultsScroll.centerYAnchor),
+			statusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16)
 		])
-		addSubview(searchBar)
-
-		buildSearchKeyboard()
-		addSubview(searchKeyboard)
 	}
+	required init?(coder: NSCoder) { fatalError() }
 
-	private func buildSearchKeyboard() {
-		let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
-		let column = UIStackView()
-		column.axis = .vertical
-		column.distribution = .fillEqually
-		column.spacing = 5
-		column.translatesAutoresizingMaskIntoConstraints = false
-		for (i, row) in rows.enumerated() {
-			let rowStack = UIStackView()
-			rowStack.axis = .horizontal
-			rowStack.distribution = .fillEqually
-			rowStack.spacing = 4
-			for ch in row { rowStack.addArrangedSubview(letterKey(String(ch))) }
-			if i == 2 { rowStack.addArrangedSubview(letterKey("⌫", isBackspace: true)) }
-			column.addArrangedSubview(rowStack)
+	override func didMoveToWindow() {
+		super.didMoveToWindow()
+		guard window != nil else { return }
+		caret.alpha = 1
+		UIView.animate(withDuration: 0.55, delay: 0.3, options: [.repeat, .autoreverse, .allowUserInteraction]) {
+			self.caret.alpha = 0
 		}
-		searchKeyboard.addSubview(column)
-		NSLayoutConstraint.activate([
-			column.leadingAnchor.constraint(equalTo: searchKeyboard.leadingAnchor, constant: 4),
-			column.trailingAnchor.constraint(equalTo: searchKeyboard.trailingAnchor, constant: -4),
-			column.topAnchor.constraint(equalTo: searchKeyboard.topAnchor, constant: 5),
-			column.bottomAnchor.constraint(equalTo: searchKeyboard.bottomAnchor, constant: -5)
-		])
 	}
 
-	private func letterKey(_ label: String, isBackspace: Bool = false) -> UIButton {
-		let b = UIButton(type: .system)
-		b.setTitle(label, for: .normal)
-		b.titleLabel?.font = .systemFont(ofSize: isBackspace ? 18 : 18, weight: .regular)
-		b.setTitleColor(theme.keyText, for: .normal)
-		b.backgroundColor = theme.key
-		b.layer.cornerRadius = 5
-		b.addAction(UIAction { [weak self] _ in
-			if isBackspace { self?.backspaceQuery() } else { self?.appendQuery(label) }
-		}, for: .touchUpInside)
-		return b
-	}
-
-	private func enterSearch() {
-		isSearching = true
-		query = ""
-		results = []
-		searchLabel.text = "Search emoji"
-		searchLabel.textColor = theme.keyText.withAlphaComponent(0.4)
-		searchBar.isHidden = false
-		searchKeyboard.isHidden = false
-		bottomBar.isHidden = true
-		collection.reloadData()
-		setNeedsLayout()
-	}
-	private func exitSearch() {
-		isSearching = false
-		searchBar.isHidden = true
-		searchKeyboard.isHidden = true
-		bottomBar.isHidden = false
-		collection.reloadData()
-		setNeedsLayout()
-	}
-	private func appendQuery(_ ch: String) {
-		query += ch
-		refreshSearch()
-	}
-	private func backspaceQuery() {
-		guard !query.isEmpty else { return }
-		query.removeLast()
-		refreshSearch()
-	}
-	private func refreshSearch() {
+	/// Refresh the query text and results strip. Empty query shows recents (labeled),
+	/// so the strip is never a dead zone.
+	func update(query: String, results: [String], showingRecents: Bool) {
 		if query.isEmpty {
-			searchLabel.text = "Search emoji"
-			searchLabel.textColor = theme.keyText.withAlphaComponent(0.4)
-			results = []
+			queryLabel.text = "Search emoji"
+			queryLabel.textColor = theme.keyText.withAlphaComponent(0.45)
+			clearButton.isHidden = true
 		} else {
-			searchLabel.text = query
-			searchLabel.textColor = theme.keyText
-			results = store?.search(query) ?? []
+			queryLabel.text = query
+			queryLabel.textColor = theme.keyText
+			clearButton.isHidden = false
 		}
-		collection.reloadData()
-		collection.setContentOffset(.zero, animated: false)
+
+		resultsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+		for e in results.prefix(resultCap) {
+			let b = UIButton(type: .system)
+			b.setTitle(e, for: .normal)
+			b.titleLabel?.font = .systemFont(ofSize: 28)
+			b.widthAnchor.constraint(equalToConstant: 44).isActive = true
+			b.addAction(UIAction { [weak self] _ in self?.onPick?(e) }, for: .touchUpInside)
+			resultsStack.addArrangedSubview(b)
+		}
+		resultsScroll.setContentOffset(.zero, animated: false)
+
+		if results.isEmpty {
+			statusLabel.text = showingRecents ? "Type to search emoji" : "No emoji found"
+			statusLabel.isHidden = false
+		} else {
+			statusLabel.isHidden = true
+		}
 	}
 }

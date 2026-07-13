@@ -182,6 +182,7 @@ enum KBSettings {
 		static let font     = "kb.font"
 		static let haptics  = "kb.haptics"
 		static let neural   = "kb.neural"
+		static let glideCap = "kb.glidecapture"
 	}
 
 	static var language: KBLanguage {
@@ -202,13 +203,20 @@ enum KBSettings {
 		get { store.object(forKey: Key.haptics) as? Bool ?? true }
 		set { store.set(newValue, forKey: Key.haptics) }
 	}
-	/// Load the on-device neural rescorer. Default OFF: it adds ~20-30 MB of resident
-	/// working set when active, which on a tight keyboard-extension budget is a real
-	/// jetsam risk — opt in only where the memory headroom and quality win justify it.
-	/// (Gated further at load time by NeuralScorer.minAvailableMBToLoad.)
+	/// Load the on-device neural rescorer. Default ON — it earns its ~20-30 MB working
+	/// set with better ranking, and it already sheds that memory when the OS signals
+	/// pressure (NeuralScorer's pressure source) and only loads with real headroom
+	/// (minAvailableMBToLoad). Active while it helps, dropped when the budget is tight.
 	static var neuralRescorer: Bool {
-		get { store.object(forKey: Key.neural) as? Bool ?? false }
+		get { store.object(forKey: Key.neural) as? Bool ?? true }
 		set { store.set(newValue, forKey: Key.neural) }
+	}
+	/// DEBUG capture: append each glide's grid path + decoded words to a JSONL file in the
+	/// App Group, so tools/glide_eval/calibrate.py can fit the harness noise model to real
+	/// strokes. OFF by default; on-device only; never leaves the device.
+	static var glideCapture: Bool {
+		get { store.object(forKey: Key.glideCap) as? Bool ?? false }
+		set { store.set(newValue, forKey: Key.glideCap) }
 	}
 }
 

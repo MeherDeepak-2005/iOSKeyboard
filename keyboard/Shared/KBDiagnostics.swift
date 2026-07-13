@@ -18,6 +18,11 @@ enum KBDiagnostics {
 		var peakFootprintMB = 0.0   // highest phys_footprint seen (what jetsam watches)
 		var minAvailableMB = 0.0    // lowest headroom seen (0 = never sampled)
 		var limitMB = 0.0           // inferred kill ceiling = footprint + headroom, at the tightest moment
+		// Helpfulness: of the ranking passes the neural prior actually scored, how many
+		// times did blending it in CHANGE the top candidate vs the n-gram alone? The
+		// residency stats above say the model is loaded; this says it earns its memory.
+		var neuralRankPasses = 0
+		var neuralTop1Changed = 0
 	}
 
 	static let key = "kb.diag"
@@ -54,7 +59,7 @@ enum KBDiagnostics {
 
 	struct RankRow {
 		let word: String
-		let cost, logFreq, neural, ngram, prior, score: Double
+		let cost, logFreq, freqTerm, neural, ngram, prior, score: Double
 	}
 
 	/// One candidate table per ranking pass. `rows` already sorted best-first.
@@ -67,7 +72,10 @@ enum KBDiagnostics {
 			let word = r.word.count >= 12 ? String(r.word.prefix(12))
 				: r.word.padding(toLength: 12, withPad: " ", startingAt: 0)
 			let neu = r.neural.isNaN ? "   —  " : f(r.neural)
-			lines.append("  \(i < 3 ? "▶" : " ") \(word) chan \(f(-r.cost))  neu \(neu)  ng \(f(r.ngram))  blend \(f(r.prior))  freq \(String(format: "%.2f", r.logFreq))  = \(f(r.score))")
+			let freq = r.freqTerm == r.logFreq
+				? String(format: "%.2f", r.logFreq)
+				: "\(String(format: "%.2f", r.logFreq))→\(String(format: "%.2f", r.freqTerm))"
+			lines.append("  \(i < 3 ? "▶" : " ") \(word) chan \(f(-r.cost))  neu \(neu)  ng \(f(r.ngram))  blend \(f(r.prior))  freq \(freq)  = \(f(r.score))")
 		}
 		rankLog.info("\(lines.joined(separator: "\n"), privacy: .public)")
 	}
@@ -83,6 +91,44 @@ enum KBDiagnostics {
 		guard verbose else { return }
 		let ctx = context.suffix(4).joined(separator: " ")
 		rankLog.info("[predict] ctx=\"\(ctx, privacy: .public)\" → \(words.joined(separator: ", "), privacy: .public)  (beam \(beam), ngram \(ngram))")
+	}
+
+	/// Glide preprocessing trace: how many points survived resampling, how many pivots,
+	/// and which letters those pivots land on (the decoder's raw signal).
+	static func logGlide(points: Int, pivots: Int, letters: String) {
+		guard verbose else { return }
+		rankLog.info("[glide] \(points) pts, \(pivots) pivots → \(letters, privacy: .public)")
+	}
+
+	/// Per-user glide adaptation (#37): the supervised sample just observed and the σ / gate
+	/// it produced, so the runtime tuning is watchable in the same log stream as ranking.
+	static func logGlideAdapt(kind: String, cost: Double, profile: GlideProfile) {
+		guard verbose else { return }
+		let s = profile.summary
+		rankLog.info("[glide-adapt] \(kind, privacy: .public) cost=\(String(format: "%.3f", cost), privacy: .public) → σ=\(String(format: "%.3f", s.sigma), privacy: .public) gate=\(String(format: "%.3f", s.gate), privacy: .public) (n=\(s.samples, privacy: .public))")
+	}
+
+	/// The App Group file real glide strokes are appended to (for offline calibration).
+	static var glideCaptureURL: URL? {
+		FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: KBSettings.appGroup)?
+			.appendingPathComponent("glide_capture.jsonl")
+	}
+
+	/// Append one glide record — grid path + decoded candidates + committed word — as a
+	/// JSONL line, when KBSettings.glideCapture is on. Fits the harness noise model to real
+	/// strokes offline (tools/glide_eval/calibrate.py). Best-effort; never blocks typing.
+	static func captureGlide(path: [(Double, Double)], candidates: [String], committed: String?) {
+		guard KBSettings.glideCapture, let url = glideCaptureURL else { return }
+		let pts = path.map { "[\(String(format: "%.3f", $0.0)),\(String(format: "%.3f", $0.1))]" }.joined(separator: ",")
+		let cands = candidates.map { "\"\($0)\"" }.joined(separator: ",")
+		let line = "{\"path\":[\(pts)],\"cands\":[\(cands)],\"word\":\(committed.map { "\"\($0)\"" } ?? "null")}\n"
+		guard let data = line.data(using: .utf8) else { return }
+		if let h = try? FileHandle(forWritingTo: url) {
+			defer { try? h.close() }
+			_ = try? h.seekToEnd(); try? h.write(contentsOf: data)
+		} else {
+			try? data.write(to: url, options: .atomic)
+		}
 	}
 
 	// MARK: Measurement primitives (only meaningful INSIDE the memory-limited extension)
@@ -152,6 +198,18 @@ enum KBDiagnostics {
 			KBDiagnostics.log.notice("pressure \(critical ? "critical" : "warning"), dropped \(modelWasActive ? "yes" : "no")")
 		}
 
+		/// One ranking pass where the neural prior scored the candidates. `changedTop1`
+		/// = the blended winner differs from what the n-gram alone would have picked.
+		/// Counter bumps only; piggybacks on the same 1-in-16 persist cadence as sample().
+		func rankPass(changedTop1: Bool) {
+			lock.lock()
+			snap.neuralRankPasses += 1
+			if changedTop1 { snap.neuralTop1Changed += 1 }
+			tick += 1
+			if tick % 16 == 0 { persistLocked() }
+			lock.unlock()
+		}
+
 		/// Cheap footprint/headroom sample. Call from the background suggestion pass.
 		func sample() {
 			lock.lock()
@@ -184,4 +242,3 @@ enum KBDiagnostics {
 		}
 	}
 }
-

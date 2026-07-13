@@ -3,10 +3,55 @@ import Foundation
 // UserModel: on-device personalization — extracted from Keyboardengine.swift.
 
 final class UserModel {
-	private(set) var tri: [String: [String: Int]] = [:], triTot: [String: Int] = [:]
-	private(set) var bi:  [String: [String: Int]] = [:], biTot:  [String: Int] = [:]
-	private(set) var unigrams: [String: Int] = [:]
-	private(set) var unigramTotal = 0
+	private var tri: [String: [String: Int]] = [:], triTot: [String: Int] = [:]
+	private var bi:  [String: [String: Int]] = [:], biTot:  [String: Int] = [:]
+	private var unigrams: [String: Int] = [:]
+	private var unigramTotal = 0
+
+	/// All tables are written on the engine queue (learn/demote/prune) but READ from the
+	/// main thread too: the space key's synchronous fast-autocorrect ranks candidates with
+	/// the n-gram scorer inline, precisely so it never has to wait on the engine queue. So
+	/// every access goes through this lock — held for dictionary lookups (microseconds),
+	/// never across encoding or disk work.
+	private let lock = NSLock()
+
+	// MARK: Locked read API (safe from any thread)
+
+	func uniCount(_ w: String) -> Int {
+		lock.lock(); defer { lock.unlock() }
+		return unigrams[w] ?? 0
+	}
+	/// The unigram-backoff inputs, read atomically: (count, total, distinct).
+	func uniBackoff(_ w: String) -> (count: Int, total: Int, distinct: Int) {
+		lock.lock(); defer { lock.unlock() }
+		return (unigrams[w] ?? 0, unigramTotal, unigrams.count)
+	}
+	func biLookup(_ p: String, _ w: String) -> (count: Int, total: Int) {
+		lock.lock(); defer { lock.unlock() }
+		return (bi[p]?[w] ?? 0, biTot[p] ?? 0)
+	}
+	func triLookup(_ key: String, _ w: String) -> (count: Int, total: Int) {
+		lock.lock(); defer { lock.unlock() }
+		return (tri[key]?[w] ?? 0, triTot[key] ?? 0)
+	}
+	/// Copies are tiny: maxWordsPerContext caps each at 8 entries.
+	func biDist(_ p: String) -> [String: Int] {
+		lock.lock(); defer { lock.unlock() }
+		return bi[p] ?? [:]
+	}
+	func triDist(_ key: String) -> [String: Int] {
+		lock.lock(); defer { lock.unlock() }
+		return tri[key] ?? [:]
+	}
+	func topUnigrams(_ limit: Int) -> [String] {
+		lock.lock(); defer { lock.unlock() }
+		return Array(unigrams.sorted { $0.value > $1.value }.prefix(limit).map(\.key))
+	}
+	/// COW snapshot for iteration off the lock (engine init's applyLearned).
+	func unigramsSnapshot() -> [String: Int] {
+		lock.lock(); defer { lock.unlock() }
+		return unigrams
+	}
 
 	// Growth caps. Without them every committed word adds unigram + bigram + trigram
 	// entries forever, and the whole file is reloaded into dirty heap dictionaries at
@@ -21,6 +66,10 @@ final class UserModel {
 	/// anything was pruned so callers can persist the shrunk model.
 	@discardableResult
 	func pruneIfNeeded() -> Bool {
+		lock.lock(); defer { lock.unlock() }
+		return pruneLocked()
+	}
+	private func pruneLocked() -> Bool {
 		var pruned = false
 		if unigrams.count > Self.maxUnigrams {
 			unigrams = unigrams.compactMapValues { $0 >= 2 ? $0 >> 1 : nil }
@@ -68,6 +117,7 @@ final class UserModel {
 
 	/// `context` and `word` must already be lowercased.
 	func learn(context ctx: [String], word lw: String) {
+		lock.lock(); defer { lock.unlock() }
 		unigrams[lw, default: 0] += 1; unigramTotal += 1
 		if let p = ctx.last {
 			bi[p, default: [:]][lw, default: 0] += 1; biTot[p, default: 0] += 1
@@ -81,6 +131,7 @@ final class UserModel {
 	/// Walk back one learned use of a word the user actively replaced — undoing the
 	/// unigram credit a mistaken commit gave it.
 	func demote(_ lw: String) {
+		lock.lock(); defer { lock.unlock() }
 		guard let c = unigrams[lw] else { return }
 		unigrams[lw] = c > 1 ? c - 1 : nil
 		unigramTotal = max(0, unigramTotal - 1)
@@ -96,19 +147,25 @@ final class UserModel {
 	func load() {
 		guard let data = try? Data(contentsOf: storeURL),
 			  let m = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+		lock.lock()
 		tri = m.tri; bi = m.bi; unigrams = m.uni
 		triTot = tri.mapValues { $0.values.reduce(0, +) }
 		biTot  = bi.mapValues  { $0.values.reduce(0, +) }
 		unigramTotal = unigrams.values.reduce(0, +)
 		// Models persisted before the caps existed shrink here, once, at load — the
 		// launch footprint drops immediately and the pruned file is written back.
-		if pruneIfNeeded() { save() }
+		let pruned = pruneLocked()
+		lock.unlock()
+		if pruned { save() }
 	}
 	func save() {
-		// Encode on the caller (cheap, in-memory) — the disk write is the slow, blocking
-		// part, so only THAT goes to the I/O queue, keeping it off the engine barrier the
-		// space key can stall behind. Serial queue = writes stay ordered, last one wins.
+		// Snapshot under the lock (COW references — O(1)); encode on the caller (cheap,
+		// in-memory, off the lock); only the slow disk write goes to the I/O queue, keeping
+		// it off the engine queue the space key's decisions can depend on. Serial queue =
+		// writes stay ordered, last one wins.
+		lock.lock()
 		let m = Snapshot(tri: tri, bi: bi, uni: unigrams)
+		lock.unlock()
 		guard let data = try? JSONEncoder().encode(m) else { return }
 		let url = storeURL
 		ioQueue.async { try? data.write(to: url) }

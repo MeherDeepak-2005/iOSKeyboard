@@ -15,6 +15,10 @@ final class KeyboardView: UIView {
 	var onReturn:         (() -> Void)?
 	var onNextKeyboard:   (() -> Void)?
 	var onPickSuggestion: ((String) -> Void)?
+	/// Fired whenever `keyboardHeight` changes out from under the controller (entering
+	/// or leaving emoji search, which swaps the 34 pt strip for the 86 pt search header)
+	/// so it can update its height constraint.
+	var onHeightChange:   (() -> Void)?
 
 	/// Set to the tapped key's landing offset for the duration of `key.action()`, so
 	/// the char closures can attach it to `onInsert`. nil outside a live letter tap.
@@ -33,6 +37,11 @@ final class KeyboardView: UIView {
 	private var shift: ShiftState = .on
 	private var rows: [[KeyButton]] = []
 	private var emojiView: EmojiKeyboardView?
+	// Emoji search (Gboard-style): the REAL letter deck types into a query shown in a
+	// header where the suggestion strip normally sits; results insert into the host.
+	private var emojiSearchHeader: EmojiSearchHeader?
+	private var isEmojiSearching = false
+	private var emojiQuery = ""
 	// Live references so a shift change can relabel in place instead of rebuilding every key.
 	private var letterKeys: [(base: String, key: KeyButton)] = []
 	private weak var shiftKey: KeyButton?
@@ -56,12 +65,19 @@ final class KeyboardView: UIView {
 	// inserted, draw a trail, and on lift hand the whole path to the decoder. Decoding
 	// itself is a later phase — `onGlide` is the seam.
 
-	/// Fired when a live touch turns into a glide, so the controller can delete the
-	/// start letter that fire-on-contact already committed.
-	var onGlideBegan: (() -> Void)?
-	/// Fired on lift with the full swipe trajectory (points in this view's coordinates).
-	/// Wired to the decoder in a later phase; today it clears the trail and nothing else.
-	var onGlide: (([CGPoint]) -> Void)?
+	/// Fired on lift with the full swipe trajectory (view coordinates) plus a snapshot of
+	/// the key layout, so the engine can map the path into grid space and decode it. No
+	/// letter is ever committed for a glide (lift-commit) — the decoder just gets the path.
+	var onGlide: (([CGPoint], GlideLayout) -> Void)?
+
+	/// Letter-key centers + pitches for the decoder's view→grid mapping.
+	private func glideLayout() -> GlideLayout {
+		let centers: [(letter: Character, point: CGPoint)] = letterKeys.compactMap {
+			guard let ch = $0.base.first else { return nil }
+			return (ch, CGPoint(x: $0.key.frame.midX, y: $0.key.frame.midY))
+		}
+		return GlideLayout(centers: centers, xPitch: unitPitch, yPitch: rowHeight + rowSpacing)
+	}
 
 	private struct GlideTrack {
 		var startKey: KeyButton?
@@ -87,12 +103,20 @@ final class KeyboardView: UIView {
 
 	/// The predictive-suggestion strip is hidden (and its height reclaimed) in fields where
 	/// stock iOS hides predictions — URL/search/numeric/secure. Toggled by the controller.
-	/// A little top padding stays behind so the collapsed keyboard doesn't look choked.
+	/// When blocked the strip closes FULLY (0) — like stock, no leftover "tab" band above
+	/// the keys; the row's own topPad still gives breathing room.
+	///
+	/// Starts OPEN so ordinary apps show the strip from the very first frame with no
+	/// transition. The controller resolves the field type ONCE (viewDidAppear) and, only
+	/// in a suppressed field (URL / search / secure), disables it a single time — there is
+	/// no per-keystroke re-evaluation, so the strip never flickers open/closed as you type.
 	private(set) var showsSuggestions = true
-	private let collapsedTopPad: CGFloat = 10
+	private let collapsedTopPad: CGFloat = 0
 	private var stripSpace: CGFloat { showsSuggestions ? stripHeight : collapsedTopPad }
 
-	var keyboardHeight: CGFloat { stripSpace + topPad + rowHeight*4 + rowSpacing*3 + botPad }
+	private var headerSpace: CGFloat { isEmojiSearching ? EmojiSearchHeader.height : stripSpace }
+
+	var keyboardHeight: CGFloat { headerSpace + topPad + rowHeight*4 + rowSpacing*3 + botPad }
 
 	init(theme: KeyboardTheme, showsGlobe: Bool = true) {
 		self.theme = theme
@@ -112,6 +136,7 @@ final class KeyboardView: UIView {
 		layer.addSublayer(trailLayer)
 		isMultipleTouchEnabled = true            // <-- fast typists / overlapping fingers
 		addSubview(suggestionBar)
+		suggestionBar.isHidden = !showsSuggestions    // start collapsed until the host is known
 		suggestionBar.onPick = { [weak self] in self?.onPickSuggestion?($0) }
 		reload()
 	}
@@ -133,8 +158,10 @@ final class KeyboardView: UIView {
 
 	/// Auto-capitalization driven by the controller (field start / after ". ").
 	/// Never touches caps lock. Relabels in place — no view rebuild on the type path.
+	/// Ignored during emoji search: the query is case-insensitive and the host
+	/// document context that drives auto-shift is irrelevant to it.
 	func setAutoShift(_ on: Bool) {
-		guard shift != .locked else { return }
+		guard shift != .locked, !isEmojiSearching else { return }
 		applyShiftState(on ? .on : .off)
 	}
 
@@ -160,6 +187,7 @@ final class KeyboardView: UIView {
 	// MARK: Emoji page (overlay collection view, not a key grid)
 
 	private func showEmoji() {
+		if isEmojiSearching { tearDownEmojiSearch() }   // emoji key pressed mid-search
 		guard page != .emoji else { return }
 		page = .emoji
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
@@ -170,8 +198,10 @@ final class KeyboardView: UIView {
 		ev.onDelete = { [weak self] in self?.onDelete?() }
 		ev.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
 		ev.onABC = { [weak self] in self?.hideEmoji() }
+		ev.onSearch = { [weak self] in self?.showEmojiSearch() }
 		addSubview(ev)
 		emojiView = ev
+		onHeightChange?()                             // height snaps back if search was up
 		setNeedsLayout()
 	}
 	private func hideEmoji() {
@@ -180,6 +210,97 @@ final class KeyboardView: UIView {
 		page = .letters
 		shift = .on                                   // sentences resume capitalized
 		suggestionBar.isHidden = !showsSuggestions
+		reload()
+	}
+
+	// MARK: Emoji search — the real deck types into a query (no mini keyboard)
+
+	private func showEmojiSearch() {
+		guard page == .emoji, !isEmojiSearching else { return }
+		emojiView?.removeFromSuperview()
+		emojiView = nil
+		isEmojiSearching = true
+		emojiQuery = ""
+		page = .letters
+		shift = .off                                  // emoji keywords are lowercase
+		suggestionBar.isHidden = true
+		let header = EmojiSearchHeader(theme: theme)
+		header.onCancel = { [weak self] in self?.exitEmojiSearch(backToEmoji: true) }
+		header.onClear = { [weak self] in
+			guard let self else { return }
+			emojiQuery = ""
+			refreshEmojiSearch()
+		}
+		header.onPick = { [weak self] e in
+			// Insert into the HOST document (stays in search, Gboard-style).
+			self?.onInsert?(e, nil)
+			KBEmojiRecents.add(e)
+		}
+		addSubview(header)
+		emojiSearchHeader = header
+		reload()
+		refreshEmojiSearch()
+		onHeightChange?()
+		setNeedsLayout()
+	}
+
+	/// Remove the search chrome without deciding what comes next (caller picks the page).
+	private func tearDownEmojiSearch() {
+		emojiSearchHeader?.removeFromSuperview()
+		emojiSearchHeader = nil
+		isEmojiSearching = false
+		emojiQuery = ""
+	}
+
+	private func exitEmojiSearch(backToEmoji: Bool) {
+		guard isEmojiSearching else { return }
+		tearDownEmojiSearch()
+		if backToEmoji {
+			showEmoji()                               // fires onHeightChange itself
+		} else {
+			suggestionBar.isHidden = !showsSuggestions
+			reload()
+			onHeightChange?()
+			setNeedsLayout()
+		}
+	}
+
+	private func refreshEmojiSearch() {
+		guard let header = emojiSearchHeader else { return }
+		let results = emojiQuery.isEmpty
+			? KBEmojiRecents.all()
+			: (EmojiStore.bundled?.search(emojiQuery) ?? [])
+		header.update(query: emojiQuery, results: results, showingRecents: emojiQuery.isEmpty)
+	}
+
+	// While emoji search is active the deck's keys edit the query; otherwise they
+	// pass straight through to the controller. All key actions route through these.
+	private func routeInsert(_ s: String, _ tap: KeyTap?) {
+		if isEmojiSearching {
+			emojiQuery += s.lowercased()
+			refreshEmojiSearch()
+			return
+		}
+		onInsert?(s, tap)
+	}
+	private func routeDelete() {
+		if isEmojiSearching {
+			// Only edits the query — never reaches into the host document from search.
+			if !emojiQuery.isEmpty { emojiQuery.removeLast(); refreshEmojiSearch() }
+			return
+		}
+		onDelete?()
+	}
+	private func routeReturn() {
+		if isEmojiSearching { exitEmojiSearch(backToEmoji: true); return }
+		onReturn?()
+	}
+
+	/// After a space on the numbers/symbols page, snap back to letters (stock behavior).
+	/// Guarded so it is a no-op — and never rebuilds — during ordinary letter typing.
+	private func returnToLettersFromSymbolPage() {
+		guard page == .numbers || page == .symbols else { return }
+		page = .letters
 		reload()
 	}
 
@@ -194,7 +315,11 @@ final class KeyboardView: UIView {
 			emojiView?.frame = bounds
 			return
 		}
-		suggestionBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: stripSpace)
+		if isEmojiSearching {
+			emojiSearchHeader?.frame = CGRect(x: 0, y: 0, width: bounds.width, height: EmojiSearchHeader.height)
+		} else {
+			suggestionBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: stripSpace)
+		}
 
 		let W = bounds.width - sidePad*2
 		guard W > 0 else { return }
@@ -206,7 +331,7 @@ final class KeyboardView: UIView {
 			switch k { case .unit: return unit; case .wide: return wide; case .ret: return retW; case .flex: return 0 }
 		}
 
-		var y = stripSpace + topPad
+		var y = headerSpace + topPad
 		for row in rows {
 			let flexCount = row.filter { $0.widthKind == .flex }.count
 			let fixedSum = row.reduce(0) { $0 + fixed($1.widthKind) }
@@ -230,83 +355,118 @@ final class KeyboardView: UIView {
 	// Stock-style character balloon above the pressed key. One per active touch so
 	// two-thumb typing shows both; removed on lift, slide-off, or cancel.
 	private var touchPopups: [UITouch: UIView] = [:]
+	private var poppedKeys: [UITouch: KeyButton] = [:]   // key whose glyph is hidden under its balloon
+	private let popupClearDelay: TimeInterval = 0.018
 
-	private func showPopup(for key: KeyButton, touch: UITouch) {
+	var containingKeys: [String] = []
+	private func showPopup(for key: KeyButton, at point: CGPoint, touch: UITouch) {
 		guard let text = key.popupText else { return }
-		let kf = key.frame
+
+		// Prevent duplicates for the same touch.
+		touchPopups[touch]?.removeFromSuperview()
+
+		let keyFrame = key.frame
 		let edge: CGFloat = 3
+		let gap: CGFloat = 4
 
-		// Bubble sits above the key, wider than it; a tapering neck joins the two so the
-		// whole thing reads as one continuous shape rising out of the key — not a
-		// detached box floating above it.
-		let bubbleW = max(kf.width * 1.32, 42)
-		let overlap = kf.height * 0.16                       // dip into the key: no visible seam
-		// Full-size on EVERY row, top included. The top-row balloon is allowed to rise
-		// over the suggestion strip (and a touch past the top edge) instead of being
-		// shrunk, so its preview is the same size as the other rows'.
-		let bubbleH = kf.height + 5
-		let neckH   = kf.height * 0.5
+		// Fixed dimensions: never shrink based on available vertical space.
+		let popupWidth = max(keyFrame.width * 1.32, 42)
+		let popupHeight = keyFrame.height + 5
 
-		// Centre over the key, clamped to the deck edges. When clamped, the bubble slides
-		// while the neck stays over the key → the natural asymmetric edge balloon.
-		let cx = min(max(kf.midX, edge + bubbleW/2), bounds.width - edge - bubbleW/2)
-		let bMinX = cx - bubbleW/2, bMaxX = cx + bubbleW/2
-		let top = kf.minY - neckH - bubbleH                  // may be < 0 for the top row (rises over the strip)
-		let left = min(bMinX, kf.minX), right = max(bMaxX, kf.maxX)
-		let frame = CGRect(x: left, y: top, width: right - left, height: kf.minY + overlap - top)
+		// Taps in expanded edge/gap targets resolve to a key even when they are outside
+		// the visible cap. Anchor those previews at the touch so the popup follows the
+		// same resolved press that will commit on lift.
+		let anchorX = keyFrame.contains(point) ? keyFrame.midX : point.x
+		let desiredX = anchorX - popupWidth / 2
+		let maximumX = max(edge, bounds.width - edge - popupWidth)
+		let popupX = min(max(desiredX, edge), maximumX)
 
-		// Local coords: bubble x-range, key (neck) x-range, and the y where the neck meets the key.
-		let bx0 = bMinX - left, bx1 = bMaxX - left
-		let kx0 = kf.minX - left, kx1 = kf.maxX - left
-		let r: CGFloat = 11
-		let neckY = frame.height - overlap
-		let bottomY = frame.height
+		// Normally place it just above the key.
+		// For top-row keys, stop at the keyboard's top edge instead of
+		// allowing the popup to leave the extension's frame.
+		let desiredY = keyFrame.minY - popupHeight - gap
+		let popupY = max(edge, desiredY)
 
-		let p = UIBezierPath()
-		p.move(to: CGPoint(x: bx0, y: r))
-		p.addQuadCurve(to: CGPoint(x: bx0 + r, y: 0), controlPoint: CGPoint(x: bx0, y: 0))
-		p.addLine(to: CGPoint(x: bx1 - r, y: 0))
-		p.addQuadCurve(to: CGPoint(x: bx1, y: r), controlPoint: CGPoint(x: bx1, y: 0))
-		p.addLine(to: CGPoint(x: bx1, y: bubbleH - r))
-		p.addQuadCurve(to: CGPoint(x: bx1 - r, y: bubbleH), controlPoint: CGPoint(x: bx1, y: bubbleH))
-		p.addCurve(to: CGPoint(x: kx1, y: neckY),                          // concave right waist
-				   controlPoint1: CGPoint(x: bx1 - r, y: bubbleH + neckH * 0.5),
-				   controlPoint2: CGPoint(x: kx1, y: neckY - neckH * 0.5))
-		p.addLine(to: CGPoint(x: kx1, y: bottomY))
-		p.addLine(to: CGPoint(x: kx0, y: bottomY))
-		p.addLine(to: CGPoint(x: kx0, y: neckY))
-		p.addCurve(to: CGPoint(x: bx0 + r, y: bubbleH),                    // concave left waist
-				   controlPoint1: CGPoint(x: kx0, y: neckY - neckH * 0.5),
-				   controlPoint2: CGPoint(x: bx0 + r, y: bubbleH + neckH * 0.5))
-		p.addQuadCurve(to: CGPoint(x: bx0, y: bubbleH - r), controlPoint: CGPoint(x: bx0, y: bubbleH))
-		p.close()
+		let popupFrame = CGRect(
+			x: popupX,
+			y: popupY,
+			width: popupWidth,
+			height: popupHeight
+		)
 
-		let v = UIView(frame: frame)
-		v.isUserInteractionEnabled = false
-		let shape = CAShapeLayer()
-		shape.path = p.cgPath
-		shape.fillColor = (theme.isDark ? UIColor(hex: 0x4A4A50) : .white).cgColor
-		// Shadow bound to the exact path → Core Animation never rasterizes an offscreen
-		// blur on the press path (the old box had shadowRadius but no shadowPath).
-		shape.shadowColor = UIColor.black.cgColor
-		shape.shadowOpacity = theme.isDark ? 0.5 : 0.20
-		shape.shadowRadius = 5
-		shape.shadowOffset = CGSize(width: 0, height: 2)
-		shape.shadowPath = p.cgPath
-		v.layer.addSublayer(shape)
+		let popupView = UIView(frame: popupFrame)
+		popupView.isUserInteractionEnabled = false
+		popupView.backgroundColor = .clear
+		popupView.layer.masksToBounds = false
+		popupView.layer.zPosition = 1000
 
-		let l = UILabel(frame: CGRect(x: bx0, y: 0, width: bubbleW, height: bubbleH))
-		l.text = text
-		l.textAlignment = .center
-		l.font = theme.font.uiFont(ofSize: min(26, bubbleH * 0.6))
-		l.textColor = theme.isDark ? UIColor(hex: 0xECECF0) : UIColor(hex: 0x1B1B1D)
-		v.addSubview(l)
-		addSubview(v)
-		touchPopups[touch] = v
+		// A simple rounded rectangle: no neck or tail.
+		let bubblePath = UIBezierPath(
+			roundedRect: popupView.bounds,
+			cornerRadius: 11
+		)
+
+		let shapeLayer = CAShapeLayer()
+		shapeLayer.frame = popupView.bounds
+		shapeLayer.path = bubblePath.cgPath
+		shapeLayer.fillColor = (
+			theme.isDark
+				? UIColor(hex: 0x4A4A50)
+				: UIColor.white
+		).cgColor
+
+		shapeLayer.shadowColor = UIColor.black.cgColor
+		shapeLayer.shadowOpacity = theme.isDark ? 0.45 : 0.20
+		shapeLayer.shadowRadius = 4
+		shapeLayer.shadowOffset = CGSize(width: 0, height: 2)
+		shapeLayer.shadowPath = bubblePath.cgPath
+
+		popupView.layer.addSublayer(shapeLayer)
+
+		let label = UILabel(frame: popupView.bounds.insetBy(dx: 4, dy: 2))
+		label.text = text
+		label.textAlignment = .center
+		label.font = theme.font.uiFont(
+			ofSize: min(26, popupHeight * 0.6)
+		)
+		label.textColor = theme.isDark
+			? UIColor(hex: 0xECECF0)
+			: UIColor(hex: 0x1B1B1D)
+
+		popupView.addSubview(label)
+		addSubview(popupView)
+		bringSubviewToFront(popupView)
+
+		touchPopups[touch] = popupView
+
+		key.setCovered(true)
+		poppedKeys[touch] = key
 	}
 	private func removePopup(for touch: UITouch) {
 		touchPopups[touch]?.removeFromSuperview()
 		touchPopups[touch] = nil
+		poppedKeys[touch]?.setCovered(false)
+		poppedKeys[touch] = nil
+	}
+	private func clearCommittedPopups(except preservedTouch: UITouch? = nil) {
+		for touch in Array(touchPopups.keys) {
+			if let preservedTouch, touch === preservedTouch { continue }
+			guard !pendingCommit.contains(touch), touch != repeatTouch else { continue }
+			clearRegisteredKey(for: touch)
+		}
+	}
+	private func registerKey(_ key: KeyButton, at point: CGPoint, for touch: UITouch) {
+		clearCommittedPopups(except: touch)
+		touchKeys[touch]?.setHighlighted(false)
+		removePopup(for: touch)
+		touchKeys[touch] = key
+		key.setHighlighted(true)
+		showPopup(for: key, at: point, touch: touch)
+	}
+	private func clearRegisteredKey(for touch: UITouch) {
+		touchKeys[touch]?.setHighlighted(false)
+		touchKeys[touch] = nil
+		removePopup(for: touch)
 	}
 
 	// Press-and-hold auto-repeat (delete): one timer, tied to the finger holding it.
@@ -331,28 +491,66 @@ final class KeyboardView: UIView {
 		repeatTouch = nil; repeatKey = nil
 	}
 
+	// Keys register on LIFT, not on contact (Apple-style): touch-down only previews
+	// (highlight + balloon). A deferred key commits when the finger lifts, OR when a NEW
+	// key is pressed while it's still held — fast "roll onto the next key before releasing
+	// the last" typing, committed in press order. Delete is the exception: it fires on
+	// contact and auto-repeats while held. Because nothing is inserted until lift, a glide
+	// simply never commits its letter — there's no insert to undo.
+	private var pendingCommit: Set<UITouch> = []       // deferred taps awaiting lift/rollover
+
+	/// Fire a deferred key: the one under the finger at `p` (updated as the finger moves,
+	/// so a slide-and-lift commits the key you release on). Idempotent via `pendingCommit`.
+	private func commit(_ touch: UITouch, at p: CGPoint) {
+		guard pendingCommit.remove(touch) != nil, let key = touchKeys[touch] else { return }
+		if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }  // it was a tap
+
+		let shouldHoldPopup = key.popupText != nil
+		if shouldHoldPopup, touchPopups[touch] == nil {
+			showPopup(for: key, at: p, touch: touch)
+		}
+
+		activeTap = keyTap(for: key, at: p)
+		key.action()
+		activeTap = nil
+
+		if shouldHoldPopup {
+			DispatchQueue.main.asyncAfter(deadline: .now() + popupClearDelay) { [weak self, weak key] in
+				guard let self, !self.pendingCommit.contains(touch) else { return }
+				if let key, self.touchKeys[touch] === key {
+					self.clearRegisteredKey(for: touch)
+				} else {
+					self.removePopup(for: touch)
+				}
+			}
+		} else {
+			clearRegisteredKey(for: touch)
+		}
+	}
+
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
-			// A glide owns the deck: once a swipe is in progress, other fingers are ignored.
+			// A classified glide owns the deck: other fingers are ignored.
 			if glide?.isGlide == true { continue }
+			// Rollover: a new key press finalizes any keys still held under other fingers.
+			for held in Array(pendingCommit) where held != touch { commit(held, at: held.location(in: self)) }
+
 			let p = touch.location(in: self)
 			guard let key = key(at: p) else { continue }
-			touchKeys[touch] = key
-			// Feedback FIRST — highlight, balloon, haptic — then the commit. `key.action()`
-			// runs the insertText IPC (and autocorrect), which can take a moment; doing it
-			// last is what makes the tap feel instant instead of lagging the feedback.
-			key.setHighlighted(true)
-			showPopup(for: key, touch: touch)
+			registerKey(key, at: p, for: touch)           // preview follows the registered key
 			if hapticsEnabled { haptic.impactOccurred(intensity: 0.6); haptic.prepare() }
-			if key.repeats { beginRepeat(key, touch: touch) }
-			activeTap = keyTap(for: key, at: p)   // consumed by the char closure in key.action()
-			key.action()
-			activeTap = nil
-			// Begin glide tracking on the first letter-key contact (letters page only).
-			// The letter just committed on contact; if this turns into a glide we reclaim it.
-			if glideTouch == nil, page == .letters, key.letterBase != nil {
-				glideTouch = touch
-				glide = GlideTrack(startKey: key, points: [p], keys: [ObjectIdentifier(key)])
+			if key.repeats {
+				key.action()                              // delete: immediate + auto-repeat
+				beginRepeat(key, touch: touch)
+			} else {
+				pendingCommit.insert(touch)               // everything else registers on lift
+				if glideTouch == nil,
+				   page == .letters,
+				   !isEmojiSearching,               // search queries are tapped, not glided
+				   key.letterBase != nil {
+					glideTouch = touch
+					glide = GlideTrack(startKey: key, points: [p], keys: [ObjectIdentifier(key)])
+				}
 			}
 		}
 	}
@@ -369,69 +567,126 @@ final class KeyboardView: UIView {
 	/// Next-character priors for target resizing, refreshed by the controller after
 	/// each background suggestion pass. Empty = no bias (plain nearest-key).
 	func setKeyPriors(_ priors: [Character: Double]) { charPriors = priors }
-	override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+	override func touchesMoved(
+		_ touches: Set<UITouch>,
+		with event: UIEvent?
+	) {
 		for touch in touches {
-			// The tracked finger runs glide classification; once it's a glide it owns its
-			// own feedback (trail, no key highlight), so skip the normal per-key path.
+			let point = touch.location(in: self)
+
 			if touch == glideTouch, glide != nil {
 				trackGlide(touch)
 				if glide?.isGlide == true { continue }
 			}
-			guard let key = touchKeys[touch] else { continue }
-			let inside = key.frame.contains(touch.location(in: self))
-			key.setHighlighted(inside)
-			if !inside { removePopup(for: touch) }               // slid off the key
-			if touch == repeatTouch && !inside { endRepeat() }   // → stop repeating too
+
+			if touch == repeatTouch {
+				if let key = touchKeys[touch],
+				   !key.frame.contains(point) {
+					endRepeat()
+				}
+
+				continue
+			}
+
+			guard pendingCommit.contains(touch),
+				  let newKey = key(at: point) else {
+				continue
+			}
+
+			if newKey !== touchKeys[touch] {
+				registerKey(newKey, at: point, for: touch)
+			}
 		}
 	}
 	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
-			if touch == glideTouch {
-				let finished = glide
-				glideTouch = nil; glide = nil
-				if finished?.isGlide == true {
-					clearTrail()
-					onGlide?(finished?.points ?? [])
-					continue                       // a glide, not a tap — skip tap cleanup
-				}
-				// Otherwise it was an ordinary tap we happened to track: fall through.
+			if touch == glideTouch, glide?.isGlide == true {   // a glide: decode, commit nothing
+				let pts = glide?.points ?? []
+				let layout = glideLayout()
+				glideTouch = nil; glide = nil; clearTrail()
+				pendingCommit.remove(touch)
+				clearRegisteredKey(for: touch)
+				onGlide?(pts, layout)
+				continue
 			}
-			touchKeys[touch]?.setHighlighted(false)
-			touchKeys[touch] = nil
-			removePopup(for: touch)
-			if touch == repeatTouch { endRepeat() }
+			if touch == repeatTouch {                          // delete: just stop
+				endRepeat()
+				clearRegisteredKey(for: touch)
+				continue
+			}
+			commit(touch, at: touch.location(in: self))        // deferred tap → register on lift
 		}
 	}
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-		// A cancelled glide is discarded (no word delivered); the start letter, if this
-		// had already become a glide, was removed at classification time.
-		if let gt = glideTouch, touches.contains(gt) {
-			glideTouch = nil; glide = nil; clearTrail()
-		}
-		touchesEnded(touches, with: event)
-	}
-
-	/// Feed one movement sample into the tracked stroke; reclassify to a glide when it
-	/// travels past the threshold across ≥2 keys, then suppress the tap feedback and
-	/// reclaim the start letter. Owns the trail while gliding.
-	private func trackGlide(_ touch: UITouch) {
-		guard var g = glide else { return }
-		let p = touch.location(in: self)
-		if let last = g.points.last { g.length += hypot(p.x - last.x, p.y - last.y) }
-		g.points.append(p)
-		if let k = key(at: p) { g.keys.insert(ObjectIdentifier(k)) }
-		if !g.isGlide, g.length >= glideThreshold, g.keys.count >= 2 {
-			g.isGlide = true
-			g.startKey?.setHighlighted(false)
-			removePopup(for: touch)
+		for touch in touches {
+			if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }
+			pendingCommit.remove(touch)                        // cancelled: never commit
 			if touch == repeatTouch { endRepeat() }
-			touchKeys[touch] = nil                 // touchesEnded must not treat this as a tap
-			onGlideBegan?()                        // controller removes the start letter
+			clearRegisteredKey(for: touch)
 		}
-		glide = g
-		if g.isGlide { updateTrail(g.points) }
+	}
+	
+	// So the deadzone touch doesn't register as Glide and pop up isn't deleted
+	private func visualLetterKey(at point: CGPoint) -> KeyButton? {
+		for row in rows {
+			for key in row {
+				guard key.letterBase != nil else { continue }
+
+				let frame = key.frame
+
+				let isInside =
+					point.x >= frame.minX &&
+					point.x <= frame.maxX &&
+					point.y >= frame.minY &&
+					point.y <= frame.maxY
+
+				if isInside {
+					return key
+				}
+			}
+		}
+
+		return nil
 	}
 
+	/// Feed one movement sample into the tracked stroke; reclassify to a glide once it
+	/// travels past the threshold across ≥2 keys, then suppress its tap feedback and drop
+	/// it from `pendingCommit` (nothing was inserted, so the swipe decodes on lift instead).
+	private func trackGlide(_ touch: UITouch) {
+		guard var glide = glide else { return }
+
+		let point = touch.location(in: self)
+
+		if let lastPoint = glide.points.last {
+			glide.length += hypot(
+				point.x - lastPoint.x,
+				point.y - lastPoint.y
+			)
+		}
+
+		glide.points.append(point)
+
+		// Important: glide classification uses actual visible letter frames,
+		// not dynamically expanded tap regions.
+		if let letterKey = visualLetterKey(at: point) {
+			glide.keys.insert(ObjectIdentifier(letterKey))
+		}
+
+		if !glide.isGlide,
+		   glide.length >= glideThreshold,
+		   glide.keys.count >= 2 {
+			glide.isGlide = true
+
+			clearRegisteredKey(for: touch)
+			pendingCommit.remove(touch)
+		}
+
+		self.glide = glide
+
+		if glide.isGlide {
+			updateTrail(glide.points)
+		}
+	}
 	private func updateTrail(_ points: [CGPoint]) {
 		guard points.count > 1 else { return }
 		let path = UIBezierPath()
@@ -500,25 +755,28 @@ final class KeyboardView: UIView {
 		if page == .letters {
 			return KeySpec(label: shifted(c), width: .unit, popup: true, letterBase: c) { [weak self] in
 				guard let self else { return }
-				self.onInsert?(self.shifted(c), self.activeTap)
+				self.routeInsert(self.shifted(c), self.activeTap)
 				if self.shift == .on { self.applyShiftState(.off) }   // in place — no rebuild
 			}
 		}
-		return KeySpec(label: c, width: .unit, popup: true) { [weak self] in self?.onInsert?(c, nil) }
+		return KeySpec(label: c, width: .unit, popup: true) { [weak self] in self?.routeInsert(c, nil) }
 	}
 	private func punct(_ c: String) -> KeySpec {
-		KeySpec(label: c, width: .flex, popup: true) { [weak self] in self?.onInsert?(c, nil) }
+		KeySpec(label: c, width: .flex, popup: true) { [weak self] in self?.routeInsert(c, nil) }
 	}
 
 	private func specs() -> [[KeySpec]] {
-		let del = KeySpec(symbol: "delete.left", role: .accentSoft, width: .wide, repeats: true) { [weak self] in self?.onDelete?() }
+		let del = KeySpec(symbol: "delete.left", role: .accentSoft, width: .wide, repeats: true) { [weak self] in self?.routeDelete() }
 		let ret: KeySpec = {
 			if let t = actionTitle, !t.isEmpty {
-				return KeySpec(label: t, role: .accent, width: .ret, pill: true) { [weak self] in self?.onReturn?() }
+				return KeySpec(label: t, role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
 			}
-			return KeySpec(symbol: "return", role: .accent, width: .ret, pill: true) { [weak self] in self?.onReturn?() }
+			return KeySpec(symbol: "return", role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
 		}()
-		let space = KeySpec(label: "space", width: .flex, pill: true) { [weak self] in self?.onInsert?(" ", nil) }
+		let space = KeySpec(label: "space", width: .flex, pill: true) { [weak self] in
+			self?.routeInsert(" ", nil)
+			self?.returnToLettersFromSymbolPage()   // stock: space snaps back to ABC from 123/#+=
+		}
 		func switchKey(_ l: String, to t: KeyboardPage) -> KeySpec {
 			KeySpec(label: l, role: .special, width: .wide, pill: true) { [weak self] in self?.page = t; self?.reload() }
 		}

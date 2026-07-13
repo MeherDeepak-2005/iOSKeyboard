@@ -6,8 +6,9 @@ final class LangData {
 	private let data: Data
 	let wordCount: Int
 	private let biBuckets, biEntCount, triBuckets, triEntCount: Int
-	private let freqBase, offsBase, biHashBase, biEntBase, triHashBase, triEntBase, trieBase, blobBase: Int
+	private let freqBase, offsBase, biHashBase, biEntBase, triHashBase, triEntBase, trieBase, startersBase, blobBase: Int
 	private let trieNodeCount: Int
+	private let starterCount: Int
 	private static let empty = 0xFFFFFFFF          // empty-bucket sentinel (ids are < wordCount)
 	private static let nodeSize = 14               // trie record: see the trie MARK
 
@@ -18,21 +19,31 @@ final class LangData {
 		}
 		guard u32(0) == 0x4B424C4D else { return nil }                 // magic "KBLM"
 		let version = u32(4)
-		guard version == 2 || version == 3 else { return nil }         // v3 = v2 + static trie
+		guard version >= 2, version <= 4 else { return nil }           // v3 = +trie, v4 = +starters
 		wordCount   = u32(8)
 		biBuckets   = u32(12); biEntCount  = u32(16)
 		triBuckets  = u32(20); triEntCount = u32(24)
 		trieNodeCount = version >= 3 ? u32(28) : 0
-		freqBase    = version >= 3 ? 32 : 28
+		starterCount  = version >= 4 ? u32(32) : 0
+		freqBase    = version >= 4 ? 36 : (version >= 3 ? 32 : 28)
 		offsBase    = freqBase    + 4 * wordCount
 		biHashBase  = offsBase    + 4 * (wordCount + 1)
 		biEntBase   = biHashBase  + 16 * biBuckets       // (ctx, total, entStart, entCount)
 		triHashBase = biEntBase   + 8 * biEntCount
 		triEntBase  = triHashBase + 20 * triBuckets      // (w1, w2, total, entStart, entCount)
 		trieBase    = triEntBase  + 8 * triEntCount
-		blobBase    = trieBase    + Self.nodeSize * trieNodeCount
+		startersBase = trieBase   + Self.nodeSize * trieNodeCount   // (wordId, count) x starterCount
+		blobBase    = startersBase + 8 * starterCount
 		guard blobBase <= d.count else { return nil }
 		data = d
+	}
+
+	/// Sentence-initial word ids, most frequent first (empty on v2/v3). The cold-start
+	/// suggestion bar ranks by these instead of global frequency, so it surfaces openers
+	/// (i, the, i'm, you) rather than mid-sentence function words (and, of, to).
+	func starterIDs(limit: Int) -> [Int] {
+		guard starterCount > 0 else { return [] }
+		return (0..<min(limit, starterCount)).map { u32(startersBase + 8 * $0) }
 	}
 
 	private func u32(_ off: Int) -> Int {
@@ -260,5 +271,32 @@ final class LangData {
 		}
 		return out
 	}
+
+	// MARK: Node-handle trie walk (for glide beam search — O(1) per step, no re-walk)
+
+	var trieRootNode: Int { 0 }
+	/// (label byte, child node index) for a node's children, label-sorted.
+	func trieChildren(ofNode node: Int) -> [(label: UInt8, node: Int)] {
+		guard hasTrie else { return [] }
+		let first = Int(nodeU32(node, 2)), count = nodeByte(node, 1)
+		return (0..<count).map { (UInt8(nodeByte(first + $0, 0)), first + $0) }
+	}
+	/// Allocation-free equivalent of `trieChildren(ofNode:)`, same order. The glide beam
+	/// visits every hypothesis's children at each depth, so returning a fresh array there
+	/// churned the heap on the decode's hot path; this iterates in place instead.
+	@inline(__always)
+	func forEachChild(ofNode node: Int, _ body: (_ label: UInt8, _ node: Int) -> Void) {
+		guard hasTrie else { return }
+		let first = Int(nodeU32(node, 2)), count = nodeByte(node, 1)
+		for i in 0..<count { body(UInt8(nodeByte(first + i, 0)), first + i) }
+	}
+	/// The word ending at this node, or nil if the node is a non-terminal prefix.
+	func trieWord(atNode node: Int) -> String? {
+		let id = nodeU32(node, 6)
+		return id == UInt32(Self.empty) ? nil : word(Int(Int32(bitPattern: id)))
+	}
+	/// Max corpus frequency anywhere in this node's subtree (packed at offset 10) — lets
+	/// glide's beam keep frequent-but-imperfect prefixes alive so context can rescue them.
+	func trieMaxFreq(ofNode node: Int) -> UInt32 { nodeU32(node, 10) }
 }
 
