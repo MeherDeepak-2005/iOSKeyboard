@@ -65,7 +65,8 @@ final class SPTokenizer {
 
 	/// Unigram-LM segmentation: max-sum-of-scores path (Viterbi). SentencePiece's
 	/// whitespace convention: every space becomes the ▁ prefix of the next piece.
-	func encode(_ text: String) -> [Int32] {
+	/// Returns the best token ID sequence and the total path log-probability.
+	private func viterbi(_ text: String) -> (ids: [Int32], score: Float) {
 		let s = Array("\u{2581}" + text.replacingOccurrences(of: " ", with: "\u{2581}"))
 		let n = s.count
 		var best = [Float](repeating: -.infinity, count: n + 1)
@@ -88,7 +89,19 @@ final class SPTokenizer {
 		var out: [Int32] = []
 		var i = n
 		while i > 0 { out.append(back[i].id); i = back[i].start }
-		return out.reversed()
+		return (out.reversed(), best[n])
+	}
+
+	func encode(_ text: String) -> [Int32] { viterbi(text).ids }
+
+	/// Sum of Viterbi piece log-probs — unigram log P(text) under the piece model.
+	/// Real English words sit around -5 to -12; unk-heavy strings score near -20·len.
+	func logProb(_ text: String) -> Float { viterbi(text).score }
+
+	/// Load the tokenizer from the extension bundle without requiring the full model.
+	static func fromBundle() -> SPTokenizer? {
+		guard let t = Bundle.main.url(forResource: "tokenizer", withExtension: "bin") else { return nil }
+		return SPTokenizer(url: t)
 	}
 }
 
@@ -442,5 +455,43 @@ final class BlendedScorer: LanguageScorer {
 		guard let n = neural.scores(candidates, context: context) else { lastSplit = nil; return g }
 		lastSplit = (n, g)
 		return zip(n, g).map { wNeural * $0 + wNgram * $1 }
+	}
+}
+
+// MARK: - UnigramScorer: tokenizer-only prior (Tier 1)
+
+/// Lightweight language prior using only the SentencePiece piece scores — no CoreML,
+/// no model weights resident in memory. Costs ~200 KB (the tokenizer piece table).
+///
+/// Sets `scoresArbitraryWords = true`, enabling the autocorrect margin gate on every
+/// device including iPhone 13: OOV strings receive a meaningful unigram log-probability
+/// from the Viterbi piece sum instead of the n-gram's flat OOV floor, so slang and
+/// names survive correction without needing to be in the lexicon.
+///
+/// Does NOT provide a context signal — `logProbs` is context-independent. Features that
+/// require contextual scoring (prev-word rescue, next-word beam search) must gate on
+/// `neuralLM?.isReady`, not on `scorer.scoresArbitraryWords`.
+final class UnigramScorer: LanguageScorer {
+	private let tokenizer: SPTokenizer
+	private let ngram: NgramScorer
+	private let wUni: Double
+	private let wNgram: Double
+
+	var isReady: Bool { true }
+	var scoresArbitraryWords: Bool { true }
+
+	init(tokenizer: SPTokenizer, ngram: NgramScorer, uniWeight: Double = 0.25, ngramWeight: Double = 0.75) {
+		self.tokenizer = tokenizer
+		self.ngram = ngram
+		self.wUni = uniWeight
+		self.wNgram = ngramWeight
+	}
+
+	func logProbs(_ candidates: [String], context: [String]) -> [Double] {
+		let g = ngram.logProbs(candidates, context: context)
+		return candidates.enumerated().map { i, word in
+			let u = Double(tokenizer.logProb(word.lowercased()))
+			return wUni * u + wNgram * g[i]
+		}
 	}
 }
