@@ -296,6 +296,13 @@ final class KeyboardViewController: UIInputViewController {
 			// Never learn from secure fields — password fragments must not enter the
 			// persisted personal model.
 			if !w.isEmpty, !isSecureField { engine.learn(context: contextWords(ctx, max: 8), word: w) }
+			// Punctuation right after an auto-inserted space: delete the space first
+			// so punctuation lands directly after the word ("word." not "word .").
+			// Only when the space was ours (lastCorrection?.trailing) — never touches
+			// a space the user explicitly typed.
+			if ch != " ", ch != "\n", lastCorrection?.trailing == " " {
+				textDocumentProxy.deleteBackward()
+			}
 			textDocumentProxy.insertText(ch)
 			correction?.trailing = ch
 			lastCorrection = correction
@@ -514,6 +521,11 @@ final class KeyboardViewController: UIInputViewController {
 	/// runner-up shapes on the bar as one-tap swaps. A single Backspace removes the whole
 	/// glided word (`Correction` with empty original). Nothing commits on a rejected swipe.
 	private func handleGlide(_ path: [CGPoint], _ layout: GlideLayout) {
+		// Cancel the debounced suggestion pass the start-letter triggered: without
+		// this, it fires 60 ms into the swipe and queues engine work the glide
+		// decode then has to wait behind. The engine also bumps suggestGen to
+		// invalidate any pass that already reached the engine queue.
+		suggestWork?.cancel()
 		resetEraseTracking()
 		wordTaps.removeAll(keepingCapacity: true)
 		guard !isSecureField else { return }             // no gliding passwords

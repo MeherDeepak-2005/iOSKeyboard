@@ -92,18 +92,28 @@ final class EmojiStore {
 			let cmp = compare(stringBytes(wordIdx), key)
 			if cmp < 0 { lo = mid + 1 }
 			else if cmp > 0 { hi = mid - 1 }
-			else { return string(u32(mapBase + 8 * mid + 4)) }
+			else {
+				var first = mid
+				while first > 0,
+					  compare(stringBytes(u32(mapBase + 8 * (first - 1))), key) == 0 {
+					first -= 1
+				}
+				return string(u32(mapBase + 8 * first + 4))
+			}
 		}
 		return nil
 	}
 
-	/// Emoji whose keyword matches `query`, ranked by exact, prefix, then contains.
+	/// Emoji whose keyword matches `query`, ranked by exact then prefix.
 	/// Scans the generated word->emoji map: the same binary data powers search and
 	/// suggestion-bar emoji candidates.
 	func search(_ query: String) -> [String] {
 		guard mapCount > 0 else { return [] }
 		let q = normalizedSearchTerm(query)
 		guard !q.isEmpty else { return [] }
+		let hasExactMatch = (0..<mapCount).contains {
+			normalizedSearchTerm(string(u32(mapBase + 8 * $0))) == q
+		}
 		var hits: [(rank: Int, order: Int, emoji: String)] = []
 		var seen = Set<String>()
 		for i in 0..<mapCount {
@@ -112,10 +122,8 @@ final class EmojiStore {
 			let rank: Int?
 			if term == q {
 				rank = 0
-			} else if term.hasPrefix(q) {
+			} else if term.hasPrefix(q), !hasExactMatch || term.count <= q.count + 3 {
 				rank = 100 + term.count
-			} else if let range = term.range(of: q) {
-				rank = 200 + term.distance(from: term.startIndex, to: range.lowerBound)
 			} else {
 				rank = nil
 			}

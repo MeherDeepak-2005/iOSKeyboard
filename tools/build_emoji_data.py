@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 """Build keyboard/emoji.bin — the emoji catalog as one mmap-able binary.
 
 The catalog used to live in Keyboard.swift as big string literals that were
@@ -24,6 +26,7 @@ it (mapCount treated as 0).
 """
 
 import struct
+import unicodedata
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parent.parent / "keyboard" / "emoji.bin"
@@ -88,7 +91,64 @@ WORD_EMOJI = {
     "hi": "👋", "hello": "👋", "bye": "👋", "clap": "👏", "hundred": "💯",
     "check": "✅", "done": "✅", "cross": "❌", "question": "❓", "idea": "💡",
     "baby": "👶", "king": "🤴", "queen": "👸", "angel": "😇", "devil": "😈",
+    "umbrella": "☂️", "parasol": "☂️", "closedumbrella": "🌂",
 }
+
+KEYWORD_STOPWORDS = {
+    "a", "an", "and", "button", "capital", "emoji", "keycap", "latin", "letter",
+    "mark", "selector", "sign", "small", "symbol", "variation", "with",
+}
+
+
+def normalized_keyword(s: str) -> str:
+    return "".join(ch for ch in s.lower() if ch.isalnum())
+
+
+def catalog_emojis() -> list[str]:
+    return [emoji for _, _, emojis in CATEGORIES for emoji in emojis.split(" ")]
+
+
+def unicode_keywords(emoji: str) -> list[str]:
+    keywords: list[str] = []
+    for scalar in emoji:
+        codepoint = ord(scalar)
+        if codepoint in (0xFE0E, 0xFE0F, 0x200D):
+            continue
+        name = unicodedata.name(scalar, "").lower().replace("-", " ")
+        tokens = [t for t in name.split() if t not in KEYWORD_STOPWORDS]
+        keywords.extend(tokens)
+        for token in tokens:
+            if len(token) > 3 and token.endswith("s"):
+                keywords.append(token[:-1])
+        if len(tokens) >= 2:
+            keywords.append("".join(tokens))
+    return keywords
+
+
+def keyword_pairs() -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(keyword: str, emoji: str) -> None:
+        key = normalized_keyword(keyword)
+        if not key:
+            return
+        pair = (key, emoji)
+        if pair in seen:
+            return
+        seen.add(pair)
+        pairs.append(pair)
+
+    # Manual aliases come first. When a word maps to several emoji, exact word->emoji
+    # suggestions use the first entry, while search can still show the rest.
+    for word, emoji in WORD_EMOJI.items():
+        add(word, emoji)
+
+    for emoji in catalog_emojis() + list(WORD_EMOJI.values()):
+        for keyword in unicode_keywords(emoji):
+            add(keyword, emoji)
+
+    return sorted(pairs, key=lambda pair: pair[0].encode())
 
 
 def main() -> None:
@@ -113,9 +173,7 @@ def main() -> None:
             i = len(strings); strings.append(s); interned[s] = i
         return i
 
-    map_pairs = []
-    for word in sorted(WORD_EMOJI, key=lambda w: w.encode()):
-        map_pairs.append((intern(word), intern(WORD_EMOJI[word])))
+    map_pairs = [(intern(word), intern(emoji)) for word, emoji in keyword_pairs()]
 
     blob = bytearray()
     offsets = [0]

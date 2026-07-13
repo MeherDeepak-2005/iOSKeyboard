@@ -14,6 +14,26 @@ struct KeyboardTests {
         #expect(store.search("sob").first == cryingEmoji)
     }
 
+    @Test func emojiSearchAvoidsSubstringNoise() throws {
+        let store = try #require(EmojiStore(url: emojiBinaryURL()))
+        let happyResults = store.search("happy")
+        let rainResults = store.search("rain")
+
+        #expect(happyResults.first == "😊")
+        #expect(!happyResults.contains("😢"))
+        #expect(!happyResults.contains("😭"))
+        #expect(!rainResults.contains("🧠"))
+        #expect(!rainResults.contains("🚆"))
+    }
+
+    @Test func emojiSearchUsesGeneratedUnicodeKeywords() throws {
+        let store = try #require(EmojiStore(url: emojiBinaryURL()))
+        let umbrellaResults = store.search("umbrella")
+
+        #expect(umbrellaResults.contains("☂️") || umbrellaResults.contains("🌂"))
+        #expect(store.search("umb").contains("☂️") || store.search("umb").contains("🌂"))
+    }
+
     @Test func emojiBinaryProvidesDisplayCatalog() throws {
         let store = try #require(EmojiStore(url: emojiBinaryURL()))
 

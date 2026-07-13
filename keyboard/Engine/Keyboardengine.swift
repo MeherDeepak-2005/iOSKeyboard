@@ -375,6 +375,11 @@ final class KeyboardEngine {
 	/// (nil, []) when the swipe matched nothing well enough to commit.
 	func glide(path: [CGPoint], layout: GlideLayout, context: [String],
 			   completion: @escaping (String?, [String]) -> Void) {
+		// Invalidate any suggestion pass already dispatched to the engine queue.
+		// A queued pass that hasn't started yet bails at its isLatest() check;
+		// a pass mid-execution still completes, but any further queued ones skip.
+		// The controller also cancels the debounced work item before calling here.
+		genLock.lock(); suggestGen &+= 1; genLock.unlock()
 		// Serial engine queue: one decode at a time, behind at most the passes already in
 		// flight. Nothing on the keystroke path waits for this — the commit arrives via the
 		// main-queue completion; learning happens later on the controller's `learn` call.
@@ -533,6 +538,46 @@ final class KeyboardEngine {
 	/// The exact-match word→emoji table riding in emoji.bin (nil when not bundled).
 	private let emojiStore = EmojiStore.bundled
 
+	/// Targeted spatial alignment between two fixed strings using the same per-character
+	/// cost table as the trie DP, so injected candidates compare directly in ranking.
+	/// O(n·m) where n = typed length, m = target length — fast enough to call per word.
+	private func spatialCost(typed t: String, target g: String, taps: [KeyTap?]? = nil) -> Double {
+		let tb = Array(t.utf8), gb = Array(g.utf8)
+		let n = tb.count, m = gb.count
+		let gap = 1.6   // insertion / deletion — matches the trie DP
+		var prev = (0...m).map { Double($0) * gap }
+		var curr = [Double](repeating: 0, count: m + 1)
+		for i in 1...n {
+			curr[0] = Double(i) * gap
+			let tap: KeyTap?
+			if let ts = taps, i - 1 < ts.count { tap = ts[i - 1] } else { tap = nil }
+			for j in 1...m {
+				let sub = prev[j - 1] + KB.subCost(gb[j - 1], typed: tb[i - 1], tap: tap)
+				curr[j] = min(sub, min(prev[j] + gap, curr[j - 1] + gap))
+			}
+			swap(&prev, &curr)
+		}
+		return prev[m]
+	}
+
+	/// Validates LM-predicted words spatially against the typed string with a relaxed
+	/// budget (1.5× normal). Surfaces candidates the trie DP's fixed radius misses —
+	/// e.g. "coeevitjkn" → "correction" after "auto" (6 substitutions, cost ~4.5).
+	/// Uses only the n-gram predictions: fast, no neural forward pass per keystroke.
+	private func contextInjectedCandidates(typed lw: String, context: [String],
+	                                        taps: [KeyTap?]? = nil) -> [Candidate] {
+		guard lw.count >= 4 else { return [] }
+		let budget = maxCost(for: lw.count) * 1.5
+		var out: [Candidate] = []
+		for word in ngram.nextWords(context: context, limit: 12) {
+			guard !lexicon.isProfane(word) else { continue }
+			let cost = spatialCost(typed: lw, target: word, taps: taps)
+			guard cost <= budget else { continue }
+			out.append(Candidate(word: word, cost: cost, logFreq: lexicon.logFreq(of: word) ?? 0))
+		}
+		return out
+	}
+
 	func suggestions(currentWord: String, context: [String], taps: [KeyTap?]? = nil,
 					 completion: @escaping ([String], [Character: Double]) -> Void) {
 		genLock.lock(); suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
@@ -555,9 +600,19 @@ final class KeyboardEngine {
 				// already typed on, this entry simply never matches.
 				self.setPending(PendingCorrection(word: lw,
 					correction: self.correction(from: corrections, typed: lw, context: context, fast: true)))
+				// Context injection: validate LM-predicted words spatially with a relaxed
+				// budget. Finds candidates the fixed-radius trie DP misses when input is
+				// heavily corrupted (e.g. "coeevitjkn" → "correction" after "auto").
+				let injected = self.contextInjectedCandidates(typed: lw, context: context, taps: taps)
+				let correctionWords = Set(corrections.map(\.word))
+				let newFromContext = injected.filter { !correctionWords.contains($0.word) }
+				let allCorrections = corrections + newFromContext
 				let completions = self.lexicon.completions(prefix: lw, limit: self.completionCandidateLimit)
+				// Injected candidates don't share the typed prefix, so they only appear in
+				// the bar when there are no completions (pure correction mode). The LM
+				// ranking naturally suppresses weak injections that don't fit context.
 				let correctionSuggestions = completions.isEmpty
-					? corrections.filter { $0.cost <= self.suggestionCorrectionMaxCost }
+					? corrections.filter { $0.cost <= self.suggestionCorrectionMaxCost } + newFromContext
 					: corrections.filter { $0.word.hasPrefix(lw) }
 				let ranked = self.rank(completions + correctionSuggestions, context: context, log: "suggest '\(lw)'",
 					frequencyMode: .compressed).prefix(self.nBest)
@@ -567,10 +622,10 @@ final class KeyboardEngine {
 				if let e = self.emojiStore?.emoji(forWord: lw) {
 					if result.count >= 3 { result[2] = e } else { result.append(e) }
 				}
-				// UPGRADE the pending decision with the full ranking (neural margin gate when
-				// the model is resident) — same word key, strictly better quality.
+				// UPGRADE the pending decision with allCorrections (includes injected) so
+				// the neural margin gate considers context-predicted candidates too.
 				self.setPending(PendingCorrection(word: lw,
-					correction: self.correction(from: corrections, typed: lw, context: context)))
+					correction: self.correction(from: allCorrections, typed: lw, context: context)))
 			}
 			// Next-character priors for key-target resizing, straight off the mmap trie
 			// for the CURRENT prefix (root when the word is empty = sentence starts).
