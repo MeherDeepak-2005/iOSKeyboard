@@ -148,13 +148,26 @@ final class KeyboardEngine {
 			self.user.load()
 			self.glideProfile.load()          // #37: restore this user's adapted glide σ / gate
 			self.applyLearned()
-			// Phase C: if the user opted in AND the exported model ships, blend it with
-			// the n-gram prior. Default-OFF — the n-gram engine is the shipping default,
-			// so a fresh install stays at the ~31 MB baseline (no 20-30 MB model working
-			// set). Absent model or opt-out = pure n-gram, no other differences.
-			if KBSettings.neuralRescorer, let neural = NeuralScorer.bundled() {
-				self.neuralLM = neural
-				self.scorer = BlendedScorer(neural: neural, ngram: self.ngram)
+			// Tiered scorer — two levels, each overriding the previous on this serial queue.
+			//
+			// Tier 1 (UnigramScorer, ~200 KB): loads whenever tokenizer.bin is present,
+			//   on every device. Sets scoresArbitraryWords=true so the autocorrect margin
+			//   gate runs on iPhone 13 and older with zero CoreML cost. Piece score sums
+			//   give OOV strings a real log-probability instead of the n-gram's flat floor.
+			//
+			// Tier 3 (BlendedScorer + full transformer, ~20-30 MB): only when there is
+			//   at least minAvailableMBToLoad MB of headroom. Supersedes Tier 1 if it
+			//   loads. Insufficient headroom or missing model → Tier 1 stays active.
+			if KBSettings.neuralRescorer {
+				if let tok = SPTokenizer.fromBundle() {
+					self.scorer = UnigramScorer(tokenizer: tok, ngram: self.ngram)
+				}
+				let availableMB = Double(KBDiagnostics.availableBytes()) / 1_048_576
+				let hasHeadroom = availableMB == 0 || availableMB >= NeuralScorer.minAvailableMBToLoad
+				if hasHeadroom, let neural = NeuralScorer.bundled() {
+					self.neuralLM = neural
+					self.scorer = BlendedScorer(neural: neural, ngram: self.ngram)
+				}
 			}
 		}
 	}
@@ -467,9 +480,11 @@ final class KeyboardEngine {
 		queue.async { [weak self] in
 			func done(_ r: String?) { DispatchQueue.main.async { completion(r) } }
 			guard let self else { return done(nil) }
-			// Neural-only: with just the n-gram there is no "the model says otherwise", and
-			// we deliberately moved this contextual work off the commit path to here.
-			guard self.scorer.scoresArbitraryWords else { return done(nil) }
+			// Transformer-only: prev-word rescue scores logP(current | left+[C]) which
+			// requires a context signal. UnigramScorer.scoresArbitraryWords is true but
+			// has no context — it would fire on frequency differences alone, which is
+			// too aggressive. Gate specifically on the full model being resident.
+			guard self.neuralLM?.isReady == true else { return done(nil) }
 			guard prev.count >= 3, !current.isEmpty, !self.isKept(prev) else { return done(nil) }
 
 			// Single-edit real-word neighbours of the previous word (typo candidates only).
