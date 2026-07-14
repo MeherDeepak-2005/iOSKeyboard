@@ -369,9 +369,11 @@ final class KeyboardView: UIView {
 		let edge: CGFloat = 3
 		let gap: CGFloat = 4
 
-		// Fixed dimensions: never shrink based on available vertical space.
+		// Prefer a key-height balloon, but cap it to the visible keyboard bounds.
 		let popupWidth = max(keyFrame.width * 1.32, 42)
-		let popupHeight = keyFrame.height + 5
+		let preferredPopupHeight = keyFrame.height + 5
+		let maximumPopupHeight = max(1, bounds.height - edge * 2)
+		let popupHeight = min(preferredPopupHeight, maximumPopupHeight)
 
 		// Taps in expanded edge/gap targets resolve to a key even when they are outside
 		// the visible cap. Anchor those previews at the touch so the popup follows the
@@ -381,11 +383,10 @@ final class KeyboardView: UIView {
 		let maximumX = max(edge, bounds.width - edge - popupWidth)
 		let popupX = min(max(desiredX, edge), maximumX)
 
-		// Normally place it just above the key.
-		// For top-row keys, stop at the keyboard's top edge instead of
-		// allowing the popup to leave the extension's frame.
+		// Normally place it just above the key, then clamp within the keyboard frame.
 		let desiredY = keyFrame.minY - popupHeight - gap
-		let popupY = max(edge, desiredY)
+		let maximumY = max(edge, bounds.height - edge - popupHeight)
+		let popupY = min(max(edge, desiredY), maximumY)
 
 		let popupFrame = CGRect(
 			x: popupX,
@@ -427,7 +428,7 @@ final class KeyboardView: UIView {
 		label.text = text
 		label.textAlignment = .center
 		label.font = theme.font.uiFont(
-			ofSize: min(26, popupHeight * 0.6)
+			ofSize: min(34, popupHeight * 0.78)
 		)
 		label.textColor = theme.isDark
 			? UIColor(hex: 0xECECF0)
