@@ -389,6 +389,24 @@ final class KeyboardViewController: UIInputViewController {
 	private func handleDelete() {
 		// A single Backspace right after a correction undoes it back to the typed word.
 		if let c = lastCorrection {
+			// Validate the correction is still present in the document before undoing.
+			// If the user selected-all and then backspaced, the field is empty and the
+			// correction no longer exists; executing the undo path would insert the
+			// original typed word ("coeevitjkn") into the now-cleared field.
+			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
+			let expected = c.corrected + c.trailing
+			guard !expected.isEmpty, ctx.hasSuffix(expected) else {
+				if pendingGlideAccept { pendingGlideAccept = false; engine.glideRejected() }
+				lastCorrection = nil
+				let erased = ctx.last
+				textDocumentProxy.deleteBackward()
+				if let erased, isWordChar(erased), !wordTaps.isEmpty { wordTaps.removeLast() }
+				else { wordTaps.removeAll(keepingCapacity: true) }
+				trackErase(of: erased)
+				updateAutoShift()
+				scheduleSuggestions()
+				return
+			}
 			// #37: a glided word (empty original, not an autocorrect) being backspaced away is
 			// a rejection — the engine drops its pending sample without moving the statistics.
 			if pendingGlideAccept, c.original.isEmpty, !c.fromAutocorrect {

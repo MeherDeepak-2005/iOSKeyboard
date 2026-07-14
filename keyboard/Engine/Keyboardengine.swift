@@ -537,6 +537,10 @@ final class KeyboardEngine {
 
 	/// The exact-match word→emoji table riding in emoji.bin (nil when not bundled).
 	private let emojiStore = EmojiStore.bundled
+	/// Cache for context-injection neural predictions: one beam search per word boundary,
+	/// not per keystroke. Keyed by context array; invalidated automatically when context
+	/// changes (new word committed). Lives on the engine queue — no locking needed.
+	private var injectionCache: (context: [String], words: [String])?
 
 	/// Targeted spatial alignment between two fixed strings using the same per-character
 	/// cost table as the trie DP, so injected candidates compare directly in ranking.
@@ -560,20 +564,61 @@ final class KeyboardEngine {
 		return prev[m]
 	}
 
-	/// Validates LM-predicted words spatially against the typed string with a relaxed
-	/// budget (1.5× normal). Surfaces candidates the trie DP's fixed radius misses —
-	/// e.g. "coeevitjkn" → "correction" after "auto" (6 substitutions, cost ~4.5).
-	/// Uses only the n-gram predictions: fast, no neural forward pass per keystroke.
+	/// Apple-style context injection: the neural LM (beam search over trie-valid subword
+	/// sequences) predicts likely next words from context, then the spatial model validates
+	/// them against the typed string. Surfaces candidates the fixed-radius trie DP misses
+	/// when input is heavily corrupted — e.g. "coeevitjkn" → "correction" after "auto"
+	/// (spatial cost ~9.7, far above the normal trie budget of 3.6).
+	///
+	/// Neural predictions are CACHED by context: one beam search fires the first time a
+	/// context is seen, then every subsequent keystroke of the same word is a free hit.
+	/// N-gram predictions supplement when the neural model isn't resident (Tier 1 devices).
+	///
+	/// Two-tier spatial gate:
+	///  • Strict (budget 2×): cost ≤ budget → use actual spatial cost.
+	///  • Loose (long words only): first OR last character matches + length within 3 →
+	///    include at max-budget cost. The LM margin gate (typed OOV ≈ −18 vs predicted
+	///    word in context ≈ −7) provides the safety filter; no spatial budget needed when
+	///    the LM signal is this decisive.
 	private func contextInjectedCandidates(typed lw: String, context: [String],
 	                                        taps: [KeyTap?]? = nil) -> [Candidate] {
-		guard lw.count >= 4 else { return [] }
-		let budget = maxCost(for: lw.count) * 1.5
+		guard lw.count >= 4, !context.isEmpty else { return [] }
+		let budget = maxCost(for: lw.count) * 2.0
+
+		// --- Prediction: neural (cached) + n-gram supplement ---
+		var neuralWords: [String] = []
+		if let neural = neuralLM, neural.isReady {
+			if let cached = injectionCache, cached.context == context {
+				neuralWords = cached.words
+			} else {
+				let preds = neural.predictWords(
+					context: context, limit: 8,
+					isPrefix: { [lexicon] in lexicon.isPrefix($0) },
+					isWord:   { [lexicon] in lexicon.contains($0) })
+				neuralWords = (preds ?? []).map(\.word).filter { !lexicon.isProfane($0) }
+				injectionCache = (context, neuralWords)
+			}
+		}
+		// N-gram fills remaining slots and is the whole answer while neural loads.
+		let ngramWords = ngram.nextWords(context: context, limit: 20)
+		var seen = Set(neuralWords)
+		var allWords = neuralWords
+		for w in ngramWords where !seen.contains(w) { seen.insert(w); allWords.append(w) }
+
+		// --- Spatial validation ---
 		var out: [Candidate] = []
-		for word in ngram.nextWords(context: context, limit: 12) {
+		for word in allWords {
 			guard !lexicon.isProfane(word) else { continue }
+			guard abs(lw.count - word.count) <= 3 else { continue }
 			let cost = spatialCost(typed: lw, target: word, taps: taps)
-			guard cost <= budget else { continue }
-			out.append(Candidate(word: word, cost: cost, logFreq: lexicon.logFreq(of: word) ?? 0))
+			if cost <= budget {
+				out.append(Candidate(word: word, cost: cost, logFreq: lexicon.logFreq(of: word) ?? 0))
+			} else if lw.count >= 8, lw.first == word.first || lw.last == word.last {
+				// Heavily corrupted long word: spatial cost exceeds any reasonable budget,
+				// but the LM margin (OOV typed vs context-predicted word) is decisive.
+				// Assign max-budget cost so only a strong LM win can fire the correction.
+				out.append(Candidate(word: word, cost: budget, logFreq: lexicon.logFreq(of: word) ?? 0))
+			}
 		}
 		return out
 	}
@@ -587,6 +632,7 @@ final class KeyboardEngine {
 			let lw = currentWord.lowercased()
 			var result: [String]
 			if currentWord.isEmpty {
+				self.injectionCache = nil   // context changed at word boundary; stale predictions freed
 				self.setPending(nil)
 				result = self.nextWords(context: context)
 			} else {
@@ -600,8 +646,12 @@ final class KeyboardEngine {
 				// already typed on, this entry simply never matches.
 				self.setPending(PendingCorrection(word: lw,
 					correction: self.correction(from: corrections, typed: lw, context: context, fast: true)))
-				// Context injection: validate LM-predicted words spatially with a relaxed
-				// budget. Finds candidates the fixed-radius trie DP misses when input is
+				// First early exit: bail before context injection. The neural beam search
+				// inside contextInjectedCandidates takes ~50 ms on first call; if glide
+				// superseded this pass, skip that work entirely so glide gets the queue fast.
+				guard self.isLatest(gen) else { return }
+				// Context injection: neural beam search + n-gram predictions validated
+				// spatially. Finds candidates the fixed-radius trie DP misses when input is
 				// heavily corrupted (e.g. "coeevitjkn" → "correction" after "auto").
 				let injected = self.contextInjectedCandidates(typed: lw, context: context, taps: taps)
 				let correctionWords = Set(corrections.map(\.word))
@@ -614,6 +664,10 @@ final class KeyboardEngine {
 				let correctionSuggestions = completions.isEmpty
 					? corrections.filter { $0.cost <= self.suggestionCorrectionMaxCost } + newFromContext
 					: corrections.filter { $0.word.hasPrefix(lw) }
+				// Second early exit: bail before the neural ranking pass (rank() → CoreML
+				// forward, 15–20 ms). A glide that fired after the injection step gets the
+				// queue as soon as this returns rather than waiting for a full neural forward.
+				guard self.isLatest(gen) else { return }
 				let ranked = self.rank(completions + correctionSuggestions, context: context, log: "suggest '\(lw)'",
 					frequencyMode: .compressed).prefix(self.nBest)
 				result = ranked.prefix(3).map { matchCase(of: currentWord, to: $0.word) }
