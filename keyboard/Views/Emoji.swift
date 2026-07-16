@@ -426,6 +426,9 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	var onABC: (() -> Void)?
 	var onNextKeyboard: (() -> Void)?
 	var onSearch: (() -> Void)?
+	/// GIF button on the bottom bar — opens the KLIPY media panel (GIFs tab;
+	/// stickers are a tab inside the panel).
+	var onGIF: (() -> Void)?
 
 	private let theme: KeyboardTheme
 	private let showsGlobe: Bool
@@ -604,6 +607,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		bottomBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
 		var leading: [UIButton] = [barButton(title: "ABC") { [weak self] in self?.onABC?() }]
 		if showsGlobe { leading.append(barButton(symbol: "globe") { [weak self] in self?.onNextKeyboard?() }) }
+		leading.append(barButton(title: "GIF") { [weak self] in self?.onGIF?() })
 
 		let nav = UIStackView()
 		nav.axis = .horizontal
@@ -629,9 +633,13 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		}
 		stack.translatesAutoresizingMaskIntoConstraints = false
 		bottomBar.addSubview(stack)
+		// Sub-required trailing: bottomBar is frame-laid, so its width is 0 on the first
+		// Auto Layout pass and required 40pt children can't fit — see ClipboardPanel.
+		let trailing = stack.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -4)
+		trailing.priority = .required - 1
 		NSLayoutConstraint.activate([
 			stack.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 4),
-			stack.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -4),
+			trailing,
 			stack.topAnchor.constraint(equalTo: bottomBar.topAnchor),
 			stack.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor)
 		])
@@ -695,6 +703,11 @@ final class EmojiSearchHeader: UIView {
 	var onCancel: (() -> Void)?
 	var onClear: (() -> Void)?
 	var onPick: ((String) -> Void)?
+
+	// Wording knobs so the media (GIF/sticker) search can ride the same header.
+	var placeholder = "Search emoji"
+	var emptyStatus = "Type to search emoji"
+	var noResultsStatus = "No emoji found"
 
 	private let theme: KeyboardTheme
 	private let atlas: EmojiAtlas?
@@ -829,7 +842,7 @@ final class EmojiSearchHeader: UIView {
 	/// so the strip is never a dead zone.
 	func update(query: String, results: [String], showingRecents: Bool) {
 		if query.isEmpty {
-			queryLabel.text = "Search emoji"
+			queryLabel.text = placeholder
 			queryLabel.textColor = theme.keyText.withAlphaComponent(0.45)
 			clearButton.isHidden = true
 			caretAfterText.isActive = false          // deactivate first — never both at once
@@ -860,7 +873,7 @@ final class EmojiSearchHeader: UIView {
 		resultsScroll.setContentOffset(.zero, animated: false)
 
 		if results.isEmpty {
-			statusLabel.text = showingRecents ? "Type to search emoji" : "No emoji found"
+			statusLabel.text = showingRecents ? emptyStatus : noResultsStatus
 			statusLabel.isHidden = false
 		} else {
 			statusLabel.isHidden = true

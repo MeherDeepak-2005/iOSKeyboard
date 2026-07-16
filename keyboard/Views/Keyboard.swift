@@ -15,6 +15,14 @@ final class KeyboardView: UIView {
 	var onReturn:         (() -> Void)?
 	var onNextKeyboard:   (() -> Void)?
 	var onPickSuggestion: ((String) -> Void)?
+	/// Clipboard icon tapped — the controller calls back into `showClipboard(hasFullAccess:)`
+	/// (it owns the full-access fact; the view can't read it).
+	var onOpenClipboard:  (() -> Void)?
+	/// A history row picked in the clipboard panel.
+	var onClipboardPick:  ((String) -> Void)?
+	/// GIF button on the emoji page — the controller calls back into
+	/// `showMedia(kind:query:hasFullAccess:)` (it owns the full-access fact).
+	var onOpenMedia:      ((KlipyKind) -> Void)?
 	/// Fired whenever `keyboardHeight` changes out from under the controller (entering
 	/// or leaving emoji search, which swaps the 34 pt strip for the 86 pt search header)
 	/// so it can update its height constraint.
@@ -37,6 +45,15 @@ final class KeyboardView: UIView {
 	private var shift: ShiftState = .on
 	private var rows: [[KeyButton]] = []
 	private var emojiView: EmojiKeyboardView?
+	private var clipboardView: ClipboardPanelView?
+	private var mediaView: MediaPanelView?
+	// Media (GIF/sticker) search rides the SAME real-deck mechanism as emoji search:
+	// the letter keys edit a query in an EmojiSearchHeader; return submits to KLIPY.
+	private var mediaSearchHeader: EmojiSearchHeader?
+	private var isMediaSearching = false
+	private var mediaQuery = ""
+	private var mediaSearchKind: KlipyKind = .gifs
+	private var mediaHasFullAccess = false
 	// Emoji search (Gboard-style): the REAL letter deck types into a query shown in a
 	// header where the suggestion strip normally sits; results insert into the host.
 	private var emojiSearchHeader: EmojiSearchHeader?
@@ -115,9 +132,19 @@ final class KeyboardView: UIView {
 	private let collapsedTopPad: CGFloat = 0
 	private var stripSpace: CGFloat { showsSuggestions ? stripHeight : collapsedTopPad }
 
-	private var headerSpace: CGFloat { isEmojiSearching ? EmojiSearchHeader.height : stripSpace }
+	private var headerSpace: CGFloat {
+		(isEmojiSearching || isMediaSearching) ? EmojiSearchHeader.height : stripSpace
+	}
 
-	var keyboardHeight: CGFloat { headerSpace + topPad + rowHeight*4 + rowSpacing*3 + botPad }
+	/// Extra height while a BROWSING overlay is up (emoji grid, GIF/sticker panel):
+	/// more content rows without touching the typing deck's metrics. Applied only to
+	/// those pages — the clipboard list and the letter deck stay at normal height —
+	/// and snaps back the moment the overlay closes (every show*/hide* fires
+	/// onHeightChange, and the controller re-reads `keyboardHeight`).
+	private let overlayExpansion: CGFloat = 80
+	private var expansionSpace: CGFloat { (page == .emoji || page == .media) ? overlayExpansion : 0 }
+
+	var keyboardHeight: CGFloat { headerSpace + expansionSpace + topPad + rowHeight*4 + rowSpacing*3 + botPad }
 
 	init(theme: KeyboardTheme, showsGlobe: Bool = true) {
 		self.theme = theme
@@ -139,6 +166,7 @@ final class KeyboardView: UIView {
 		addSubview(suggestionBar)
 		suggestionBar.isHidden = !showsSuggestions    // start collapsed until the host is known
 		suggestionBar.onPick = { [weak self] in self?.onPickSuggestion?($0) }
+		suggestionBar.onOpenClipboard = { [weak self] in self?.onOpenClipboard?() }
 		reload()
 	}
 	required init?(coder: NSCoder) { fatalError() }
@@ -162,7 +190,7 @@ final class KeyboardView: UIView {
 	/// Ignored during emoji search: the query is case-insensitive and the host
 	/// document context that drives auto-shift is irrelevant to it.
 	func setAutoShift(_ on: Bool) {
-		guard shift != .locked, !isEmojiSearching else { return }
+		guard shift != .locked, !isEmojiSearching, !isMediaSearching else { return }
 		applyShiftState(on ? .on : .off)
 	}
 
@@ -200,6 +228,7 @@ final class KeyboardView: UIView {
 		ev.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
 		ev.onABC = { [weak self] in self?.hideEmoji() }
 		ev.onSearch = { [weak self] in self?.showEmojiSearch() }
+		ev.onGIF = { [weak self] in self?.onOpenMedia?(.gifs) }
 		addSubview(ev)
 		emojiView = ev
 		onHeightChange?()                             // height snaps back if search was up
@@ -213,6 +242,128 @@ final class KeyboardView: UIView {
 		shift = .on                                   // sentences resume capitalized
 		suggestionBar.isHidden = !showsSuggestions
 		reload()
+		onHeightChange?()                             // expansion released
+	}
+
+	// MARK: Clipboard panel (overlay, same height — the emoji-page pattern)
+
+	/// `hasFullAccess` comes from the controller (UIInputViewController owns it); the
+	/// panel uses it only to word its empty state.
+	func showClipboard(hasFullAccess: Bool) {
+		if isEmojiSearching { tearDownEmojiSearch() }
+		emojiView?.removeFromSuperview()
+		emojiView = nil
+		guard page != .clipboard else { return }
+		page = .clipboard
+		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
+		rows = []
+		suggestionBar.isHidden = true
+		let panel = ClipboardPanelView(theme: theme, showsGlobe: showsGlobe, hasFullAccess: hasFullAccess)
+		panel.onPick = { [weak self] in self?.onClipboardPick?($0) }
+		panel.onABC = { [weak self] in self?.hideClipboard() }
+		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
+		addSubview(panel)
+		clipboardView = panel
+		onHeightChange?()                             // height snaps back if search was up
+		setNeedsLayout()
+	}
+
+	private func hideClipboard() {
+		clipboardView?.removeFromSuperview()
+		clipboardView = nil
+		page = .letters
+		suggestionBar.isHidden = !showsSuggestions
+		reload()
+	}
+
+	// MARK: Media panel (KLIPY GIFs/stickers — overlay, same height)
+
+	/// Opened from the emoji page's GIF button (controller passes full access) and
+	/// re-entered by the media-search submit below. Always rebuilds: kind and query
+	/// change between entries.
+	func showMedia(kind: KlipyKind, query: String? = nil, hasFullAccess: Bool) {
+		mediaHasFullAccess = hasFullAccess
+		if isEmojiSearching { tearDownEmojiSearch() }
+		if isMediaSearching { tearDownMediaSearch() }
+		emojiView?.removeFromSuperview()
+		emojiView = nil
+		clipboardView?.removeFromSuperview()
+		clipboardView = nil
+		mediaView?.removeFromSuperview()
+		mediaView = nil
+		page = .media
+		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
+		rows = []
+		suggestionBar.isHidden = true
+		let panel = MediaPanelView(theme: theme, showsGlobe: showsGlobe,
+								   hasFullAccess: hasFullAccess, kind: kind, query: query)
+		panel.onABC = { [weak self] in self?.hideMedia() }
+		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
+		panel.onSearch = { [weak self] in self?.showMediaSearch(kind: $0) }
+		addSubview(panel)
+		mediaView = panel
+		onHeightChange?()                             // height snaps back if a search was up
+		setNeedsLayout()
+	}
+
+	private func hideMedia() {
+		mediaView?.removeFromSuperview()
+		mediaView = nil
+		page = .letters
+		suggestionBar.isHidden = !showsSuggestions
+		reload()
+		onHeightChange?()                             // expansion released
+	}
+
+	// MARK: Media search — the real deck types the query; return submits to KLIPY
+
+	private func showMediaSearch(kind: KlipyKind) {
+		guard page == .media, !isMediaSearching else { return }
+		mediaView?.removeFromSuperview()
+		mediaView = nil
+		isMediaSearching = true
+		mediaSearchKind = kind
+		mediaQuery = ""
+		page = .letters
+		shift = .off
+		suggestionBar.isHidden = true
+		let header = EmojiSearchHeader(theme: theme)
+		header.placeholder = "Search \(kind.displayName)"
+		header.emptyStatus = "Type, then press return to search"
+		header.onCancel = { [weak self] in self?.exitMediaSearch(submit: false) }
+		header.onClear = { [weak self] in
+			guard let self else { return }
+			mediaQuery = ""
+			refreshMediaSearch()
+		}
+		addSubview(header)
+		mediaSearchHeader = header
+		reload()
+		refreshMediaSearch()
+		onHeightChange?()
+		setNeedsLayout()
+	}
+
+	private func refreshMediaSearch() {
+		// No live results strip (searches are network round-trips submitted on
+		// return); the header shows the query plus its hint line.
+		mediaSearchHeader?.update(query: mediaQuery, results: [], showingRecents: true)
+	}
+
+	private func tearDownMediaSearch() {
+		mediaSearchHeader?.removeFromSuperview()
+		mediaSearchHeader = nil
+		isMediaSearching = false
+	}
+
+	private func exitMediaSearch(submit: Bool) {
+		guard isMediaSearching else { return }
+		let q = mediaQuery.trimmingCharacters(in: .whitespaces)
+		mediaQuery = ""
+		tearDownMediaSearch()
+		showMedia(kind: mediaSearchKind,
+				  query: submit && !q.isEmpty ? q : nil,
+				  hasFullAccess: mediaHasFullAccess)     // fires onHeightChange itself
 	}
 
 	// MARK: Emoji search — the real deck types into a query (no mini keyboard)
@@ -270,15 +421,26 @@ final class KeyboardView: UIView {
 	}
 
 	/// The user touched the host document directly (tapped the input field, moved the
-	/// cursor): snap the emoji page or emoji search back to the letter deck, stock-style.
-	/// Returns true when something was actually dismissed (the controller refreshes the
-	/// suggestion bar only then).
+	/// cursor): snap any overlay — emoji page, emoji search, clipboard panel — back to
+	/// the letter deck, stock-style. Returns true when something was actually dismissed
+	/// (the controller refreshes the suggestion bar only then).
 	@discardableResult
-	func dismissEmojiIfActive() -> Bool {
+	func dismissOverlaysIfActive() -> Bool {
 		if isEmojiSearching { exitEmojiSearch(backToEmoji: false); return true }
+		if isMediaSearching {
+			tearDownMediaSearch()
+			suggestionBar.isHidden = !showsSuggestions
+			reload()
+			onHeightChange?()
+			setNeedsLayout()
+			return true
+		}
 		if page == .emoji { hideEmoji(); return true }
+		if page == .clipboard { hideClipboard(); return true }
+		if page == .media { hideMedia(); return true }
 		return false
 	}
+
 
 	private func refreshEmojiSearch() {
 		guard let header = emojiSearchHeader else { return }
@@ -296,6 +458,11 @@ final class KeyboardView: UIView {
 			refreshEmojiSearch()
 			return
 		}
+		if isMediaSearching {
+			mediaQuery += s.lowercased()
+			refreshMediaSearch()
+			return
+		}
 		onInsert?(s, tap)
 	}
 	private func routeDelete() {
@@ -305,10 +472,14 @@ final class KeyboardView: UIView {
 			// Empty query: fall through to the host — the emoji just inserted from the
 			// results strip stays erasable without leaving search.
 		}
+		if isMediaSearching {
+			if !mediaQuery.isEmpty { mediaQuery.removeLast(); refreshMediaSearch(); return }
+		}
 		onDelete?()
 	}
 	private func routeReturn() {
 		if isEmojiSearching { exitEmojiSearch(backToEmoji: true); return }
+		if isMediaSearching { exitMediaSearch(submit: true); return }
 		onReturn?()
 	}
 
@@ -331,8 +502,18 @@ final class KeyboardView: UIView {
 			emojiView?.frame = bounds
 			return
 		}
+		if page == .clipboard {
+			clipboardView?.frame = bounds
+			return
+		}
+		if page == .media {
+			mediaView?.frame = bounds
+			return
+		}
 		if isEmojiSearching {
 			emojiSearchHeader?.frame = CGRect(x: 0, y: 0, width: bounds.width, height: EmojiSearchHeader.height)
+		} else if isMediaSearching {
+			mediaSearchHeader?.frame = CGRect(x: 0, y: 0, width: bounds.width, height: EmojiSearchHeader.height)
 		} else {
 			suggestionBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: stripSpace)
 		}
@@ -563,7 +744,7 @@ final class KeyboardView: UIView {
 				pendingCommit.insert(touch)               // everything else registers on lift
 				if glideTouch == nil,
 				   page == .letters,
-				   !isEmojiSearching,               // search queries are tapped, not glided
+				   !isEmojiSearching, !isMediaSearching,   // search queries are tapped, not glided
 				   key.letterBase != nil {
 					glideTouch = touch
 					glide = GlideTrack(startKey: key, points: [p], times: [touch.timestamp],
@@ -835,8 +1016,8 @@ final class KeyboardView: UIView {
 				[switchKey("123", to: .numbers)] + [".",",","?","!","'"].map(punct) + [del],
 				bottom(switchKey("ABC", to: .letters))
 			]
-		case .emoji:
-			return []   // the emoji page is an overlay collection view, not a key grid
+		case .emoji, .clipboard, .media:
+			return []   // overlay pages (emoji grid / clipboard / GIF panel), not key grids
 		}
 	}
 }

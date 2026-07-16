@@ -87,12 +87,41 @@ final class Lexicon {
 	}
 
 	/// The contraction an apostrophe-less OOV string restores to ("dont" → "don't"),
-	/// or nil. Static corpus words only — adopted words can't hijack restoration.
-	/// Microseconds: at most count-1 exact trie walks under the lock.
+	/// or nil. Corpus-validated first (at most count-1 exact trie walks under the
+	/// lock); falls back to SYNTHESIS for contractions the 60k vocab is missing —
+	/// "whens" → "when's" has no trie entry to validate against, so without the
+	/// fallback the OOV correction machinery flattened it to "when".
 	func apostropheRestoration(of lw: String) -> String? {
-		lock.lock(); defer { lock.unlock() }
-		guard staticTrie else { return nil }
-		return langData?.trieApostropheRestoration(of: lw)?.word
+		lock.lock()
+		let hit = staticTrie ? langData?.trieApostropheRestoration(of: lw)?.word : nil
+		lock.unlock()
+		if let hit { return hit }
+		return Self.syntheticContraction(of: lw)
+	}
+
+	/// Bases that take a synthesized 's contraction. CLOSED class — wh-words,
+	/// pronouns, and deictics only. An open rule ("any word + s → word's") would
+	/// turn every OOV plural into a possessive ("lexicons" → "lexicon's").
+	private static let sContractionBases: Set<String> = [
+		"when", "where", "why", "how", "who", "what", "that", "there", "here",
+		"it", "he", "she", "one", "everyone", "everybody", "everything",
+		"someone", "somebody", "something", "anyone", "anybody", "anything",
+		"nobody", "nothing",
+	]
+	/// Auxiliaries whose n't contraction is missing from the vocab (don't/can't/
+	/// isn't and friends are corpus words and restore via the trie).
+	private static let ntContractionBases: Set<String> = [
+		"must", "might", "need", "ought", "dare", "shall",
+	]
+	static func syntheticContraction(of lw: String) -> String? {
+		guard !lw.contains("'") else { return nil }
+		if lw.count >= 3, lw.hasSuffix("s"), sContractionBases.contains(String(lw.dropLast())) {
+			return String(lw.dropLast()) + "'s"
+		}
+		if lw.count >= 4, lw.hasSuffix("nt"), ntContractionBases.contains(String(lw.dropLast(2))) {
+			return String(lw.dropLast(2)) + "n't"
+		}
+		return nil
 	}
 	func insert(_ lw: String, freq: Int) {
 		lock.lock(); defer { lock.unlock() }
