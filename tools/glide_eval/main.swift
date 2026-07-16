@@ -129,12 +129,18 @@ func logFreq(_ w: String) -> Double {
 	return log(Double(max(lang.freq(Int(id)), 1)) + 1)
 }
 
-// Decode all cases with a (band, freqLambda) combo; return per-case candidates.
-func decodeAll(band: Int, freqLambda: Double) -> [(word: String, cands: [(word: String, cost: Double)])] {
+// Decode all cases with a (band, freqLambda, dirWeight) combo; return per-case candidates.
+func decodeAll(band: Int, freqLambda: Double, dirWeight: Double = GlideDecoder.defaultDirWeight,
+			   beamWidth: Int = GlideDecoder.defaultBeamWidth,
+			   seedRadius: CGFloat = GlideDecoder.defaultSeedRadius,
+			   pruneWindow: Int = GlideDecoder.defaultPruneWindow)
+		-> [(word: String, cands: [(word: String, cost: Double)])] {
 	var out: [(String, [(word: String, cost: Double)])] = []
 	for c in testCases {
 		guard let g = GlidePreprocess.run(c.raw, layout: layout, spacing: 0.5) else { continue }
-		out.append((c.word, GlideDecoder.decode(g, lang: lang, limit: 12, band: band, freqLambda: freqLambda)))
+		out.append((c.word, GlideDecoder.decode(g, lang: lang, beamWidth: beamWidth, limit: 12,
+												band: band, freqLambda: freqLambda, dirWeight: dirWeight,
+												seedRadius: seedRadius, pruneWindow: pruneWindow)))
 	}
 	return out
 }
@@ -155,21 +161,116 @@ func score(_ decoded: [(word: String, cands: [(word: String, cost: Double)])],
 
 print("cases: \(testCases.count)  (jitter .22, endpoint .07, overshoot .51, skip 15%)\n")
 
+// ---- PHASE 1: start-anchoring + narrower beam. Compare the OLD wide-beam config against the
+// new anchored one on BOTH accuracy and wall-clock (the whole point is ms/word). A huge
+// seedRadius (99) disables anchoring, reproducing the pre-Phase-1 "seed all 26" behaviour.
+func bench(_ label: String, beamWidth: Int, seedRadius: CGFloat, pruneWindow: Int = 99) {
+	let t0 = Date()
+	let dec = decodeAll(band: GlideDecoder.defaultBand, freqLambda: GlideDecoder.defaultFreqLambda,
+						beamWidth: beamWidth, seedRadius: seedRadius, pruneWindow: pruneWindow)
+	let ms = Date().timeIntervalSince(t0) * 1000 / Double(max(dec.count, 1))
+	let (p1, p3) = score(dec, sigma: 0.12, fw: 0.10)
+	var recall = 0
+	for (w, cands) in dec where cands.contains(where: { $0.word == w }) { recall += 1 }
+	let r = 100 * Double(recall) / Double(max(dec.count, 1))
+	print(String(format: "%-30s top1 %.1f%%  top3 %.1f%%  recall %.1f%%   %.2f ms/word",
+				 (label as NSString).utf8String!, p1, p3, r, ms))
+}
+print("PHASE 1 — anchoring + width (rerank σ0.12 fw0.10, pruneWindow=N):")
+bench("OLD bw192 no-anchor", beamWidth: 192, seedRadius: 99)
+bench("bw96 no-anchor", beamWidth: 96, seedRadius: 99)
+bench("bw96 anchor r1.6", beamWidth: 96, seedRadius: 1.6)
+bench("bw64 anchor r1.6", beamWidth: 64, seedRadius: 1.6)
+print("")
+print("PHASE 4 — bounded prune window (bw96 anchor r1.6):")
+bench("window=full(N)", beamWidth: 96, seedRadius: 1.6, pruneWindow: 99)
+bench("window=18", beamWidth: 96, seedRadius: 1.6, pruneWindow: 18)
+bench("window=16 (PROD)", beamWidth: 96, seedRadius: 1.6, pruneWindow: 16)
+bench("window=12", beamWidth: 96, seedRadius: 1.6, pruneWindow: 12)
+bench("window=10", beamWidth: 96, seedRadius: 1.6, pruneWindow: 10)
+print("")
+print("PHASE 4b — beam width recheck WITH window=16 (does width still matter once pruning is fixed?):")
+bench("bw48 window=16", beamWidth: 48, seedRadius: 1.6, pruneWindow: 16)
+bench("bw64 window=16", beamWidth: 64, seedRadius: 1.6, pruneWindow: 16)
+bench("bw96 window=16", beamWidth: 96, seedRadius: 1.6, pruneWindow: 16)
+bench("bw128 window=16", beamWidth: 128, seedRadius: 1.6, pruneWindow: 16)
+print("")
+
+// ---- PHASE 2: endpoint (first,last)-anchor candidate augmentation. Does fetching words by
+// start/end key and shape-scoring them recover recall the beam (at PROD bw64) drops? ----
+func lettersNear(_ p: CGPoint, radius: Double, maxN: Int) -> [Character] {
+	var ds: [(Character, Double)] = []
+	for ch in "abcdefghijklmnopqrstuvwxyz" where KB.grid(for: ch) != nil {
+		let g = KB.grid(for: ch)!
+		ds.append((ch, hypot(g.0 - Double(p.x), g.1 - Double(p.y))))
+	}
+	ds.sort { $0.1 < $1.1 }
+	let near = ds.filter { $0.1 <= radius }.prefix(maxN).map { $0.0 }
+	return near.isEmpty ? [ds[0].0] : Array(near)     // always at least the nearest
+}
+func phase2(perBucket: Int, radius: Double, maxEnds: Int, augGate: Double) {
+	var beamRecall = 0, augRecall = 0, beamTop1 = 0, augTop1 = 0, added = 0, n = 0
+	let t0 = Date()
+	for c in testCases {
+		guard let g = GlidePreprocess.run(c.raw, layout: layout, spacing: 0.5),
+			  let s = g.points.first, let e = g.points.last else { continue }
+		n += 1
+		var cands = GlideDecoder.decode(g, lang: lang, limit: 12)          // PROD defaults (bw64,win16)
+		if cands.contains(where: { $0.word == c.word }) { beamRecall += 1 }
+		func rank(_ cs: [(word: String, cost: Double)]) -> String? {
+			cs.map { (w: $0.word, s: -$0.cost / 0.12 + 0.10 * logFreq($0.word)) }.max { $0.s < $1.s }?.w
+		}
+		if rank(cands) == c.word { beamTop1 += 1 }
+		let have = Set(cands.map(\.word))
+		let first = lettersNear(s, radius: radius, maxN: maxEnds)
+		let last = lettersNear(e, radius: radius, maxN: maxEnds)
+		for w in lang.glideAnchorWords(first: first, last: last, perBucket: perBucket)
+		where !have.contains(w) && w.count >= 2 {
+			if let sc = GlideDecoder.shapeCost(of: w, g), sc <= augGate { cands.append((w, sc)); added += 1 }
+		}
+		if cands.contains(where: { $0.word == c.word }) { augRecall += 1 }
+		if rank(cands) == c.word { augTop1 += 1 }
+	}
+	let ms = Date().timeIntervalSince(t0) * 1000 / Double(max(n, 1))
+	let nn = Double(max(n, 1))
+	print(String(format: "  perBucket=%d r=%.1f ends=%d gate=%.2f: recall %.1f→%.1f  top1 %.1f→%.1f  (+%.1f cand/word, %.2f ms)",
+				 perBucket, radius, maxEnds, augGate,
+				 100 * Double(beamRecall) / nn, 100 * Double(augRecall) / nn,
+				 100 * Double(beamTop1) / nn, 100 * Double(augTop1) / nn,
+				 Double(added) / nn, ms))
+}
+print("PHASE 2 — endpoint-anchor augmentation on top of PROD beam:")
+phase2(perBucket: 40, radius: 1.3, maxEnds: 3, augGate: 0.45)
+phase2(perBucket: 80, radius: 1.6, maxEnds: 3, augGate: 0.45)
+phase2(perBucket: 120, radius: 1.6, maxEnds: 4, augGate: 0.55)
+print("")
+
 // ---- sweep band x freqLambda at a fixed rerank, find the best decode config ----
+// (dirWeight is swept separately below — keeping it out of this 3-D grid keeps the run fast.)
 print("band  fLambda   top1(fixed rerank σ0.15 fw0.25)  top3")
-var bestDecode = (band: 6, fl: 0.14, t1: -1.0)
+var bestDecode = (band: 6, fl: 0.14, dw: GlideDecoder.defaultDirWeight, t1: -1.0)
 for band in [4, 6, 8] {
 	for fl in [0.0, 0.10, 0.14, 0.20] {
 		let dec = decodeAll(band: band, freqLambda: fl)
 		let (p1, p3) = score(dec, sigma: 0.15, fw: 0.25)
 		print(String(format: "%2d    %.2f      %5.1f%%                        %5.1f%%", band, fl, p1, p3))
-		if p1 > bestDecode.t1 { bestDecode = (band, fl, p1) }
+		if p1 > bestDecode.t1 { bestDecode = (band, fl, GlideDecoder.defaultDirWeight, p1) }
 	}
 }
-print(String(format: "\nBEST DECODE: band=%d freqLambda=%.2f\n", bestDecode.band, bestDecode.fl))
+print(String(format: "\nBEST DECODE: band=%d freqLambda=%.2f dirWeight=%.2f\n", bestDecode.band, bestDecode.fl, bestDecode.dw))
+
+// ---- direction-channel sweep (item #3), at the best (band, fLambda). Default-OFF in prod;
+// this is the evidence for enabling it once real strokes are captured (#36). ----
+print("dirW   top1(fixed rerank σ0.15 fw0.25)  top3")
+for dw in [0.0, 0.30, 0.60] {
+	let dec = decodeAll(band: bestDecode.band, freqLambda: bestDecode.fl, dirWeight: dw)
+	let (p1, p3) = score(dec, sigma: 0.15, fw: 0.25)
+	print(String(format: "%.2f   %5.1f%%                        %5.1f%%", dw, p1, p3))
+}
+print("")
 
 // ---- at the best decode config, grid-search the rerank (sigma, fw) ----
-let decoded = decodeAll(band: bestDecode.band, freqLambda: bestDecode.fl)
+let decoded = decodeAll(band: bestDecode.band, freqLambda: bestDecode.fl, dirWeight: bestDecode.dw)
 let (sp1, sp3) = score(decoded, sigma: 1e9, fw: 0.0)   // sigma huge → shape-only order
 print(String(format: "shape-only:  top1 %.1f%%  top3 %.1f%%", sp1, sp3))
 print("\nsigma  fw     top1    top3")
@@ -199,7 +300,7 @@ for _ in 0..<80 {
 		pts.append(p)
 	}
 	if let g = GlidePreprocess.run(pts, layout: layout, spacing: 0.5),
-	   let c = GlideDecoder.decode(g, lang: lang, limit: 1, band: bestDecode.band, freqLambda: bestDecode.fl).first {
+	   let c = GlideDecoder.decode(g, lang: lang, limit: 1, band: bestDecode.band, freqLambda: bestDecode.fl, dirWeight: bestDecode.dw).first {
 		scribbleBest.append(c.cost)
 	}
 }
@@ -207,3 +308,43 @@ scribbleBest.sort()
 let scribbleP10 = scribbleBest.isEmpty ? 999 : scribbleBest[Int(0.10 * Double(scribbleBest.count - 1))]
 print(String(format: "\ngate: correct p95 = %.3f; scribble best p10 = %.3f -> glideMaxCost ~ %.2f",
 			 p95, scribbleP10, (p95 + scribbleP10) / 2))
+
+// ---- production-config readout (the baked defaults the KEYBOARD actually ships) ----
+// GlideProfile seeds its EWMA and clamps off the correct-cost distribution AT THIS EXACT
+// config; whenever the decoder's cost SCALE moves (e.g. adding the direction channel) these
+// numbers must be re-baked into GlideProfile so a fresh install starts calibrated (#37).
+let prod = decodeAll(band: GlideDecoder.defaultBand,
+					 freqLambda: GlideDecoder.defaultFreqLambda,
+					 dirWeight: GlideDecoder.defaultDirWeight)
+var prodCosts: [Double] = []
+for (w, cands) in prod { if let hit = cands.first(where: { $0.word == w }) { prodCosts.append(hit.cost) } }
+let cMean = prodCosts.reduce(0, +) / Double(max(prodCosts.count, 1))
+let cVar  = prodCosts.reduce(0) { $0 + ($1 - cMean) * ($1 - cMean) } / Double(max(prodCosts.count, 1))
+prodCosts.sort()
+let cP95 = prodCosts.isEmpty ? 0 : prodCosts[Int(0.95 * Double(prodCosts.count - 1))]
+var prodScribble: [Double] = []
+for _ in 0..<80 {
+	var pts: [CGPoint] = []
+	var p = CGPoint(x: rng.uniform() * 9, y: rng.uniform() * 2)
+	for _ in 0..<25 {
+		p.x += CGFloat(rng.gaussian(0.8)); p.y += CGFloat(rng.gaussian(0.8))
+		p.x = max(0, min(9, p.x)); p.y = max(0, min(2, p.y))
+		pts.append(p)
+	}
+	if let g = GlidePreprocess.run(pts, layout: layout, spacing: 0.5),
+	   let c = GlideDecoder.decode(g, lang: lang, limit: 1, band: GlideDecoder.defaultBand,
+								   freqLambda: GlideDecoder.defaultFreqLambda,
+								   dirWeight: GlideDecoder.defaultDirWeight).first { prodScribble.append(c.cost) }
+}
+prodScribble.sort()
+let sP10 = prodScribble.isEmpty ? 999 : prodScribble[Int(0.10 * Double(prodScribble.count - 1))]
+print(String(format: "\nPRODUCTION CONFIG (band=%d fLambda=%.2f dirW=%.2f) — GlideProfile re-bake numbers:",
+			 GlideDecoder.defaultBand, GlideDecoder.defaultFreqLambda, GlideDecoder.defaultDirWeight))
+print(String(format: "  correct cost: mean=%.3f var=%.4f p95=%.3f   scribble p10=%.3f",
+			 cMean, cVar, cP95, sP10))
+print(String(format: "  -> baseGate ~ %.2f (mid p95/scribble),  seed mean=%.2f var=%.3f",
+			 (cP95 + sP10) / 2, cMean, cVar))
+for sg in [0.10, 0.12, 0.15] {
+	let (p1, p3) = score(prod, sigma: sg, fw: GlideDecoder.defaultFreqLambda == 0.20 ? 0.10 : 0.10)
+	print(String(format: "  rerank σ=%.2f fw=0.10 -> top1 %.1f%% top3 %.1f%%", sg, p1, p3))
+}

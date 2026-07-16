@@ -18,9 +18,17 @@ protocol LanguageScorer {
 	/// logProbs call, in the same order. nil when there is no neural term — lets the
 	/// ranking log show both columns without a second forward pass.
 	var lastSplit: (neural: [Double], ngram: [Double])? { get }
+	/// One log-probability of the SAME word under several alternative contexts —
+	/// the n-1 rescue's forward-evidence term logP(current | left + [C]). Declared
+	/// on the seam so a neural scorer can ride all contexts in ONE batched Core ML
+	/// dispatch; the default implementation just loops logProbs (fine for n-grams).
+	func logProbs(of word: String, underContexts contexts: [[String]]) -> [Double]
 }
 
 extension LanguageScorer {
 	var lastSplit: (neural: [Double], ngram: [Double])? { nil }
+	func logProbs(of word: String, underContexts contexts: [[String]]) -> [Double] {
+		contexts.map { logProbs([word], context: $0).first ?? -.infinity }
+	}
 }
 

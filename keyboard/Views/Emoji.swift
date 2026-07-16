@@ -32,7 +32,10 @@ enum KBEmojiRecents {
 // records, u32 × (N+1) byte offsets, M × (wordIdx, emojiIdx) word→emoji pairs
 // sorted by word bytes, utf8 blob. v1 files have no map (M treated as 0, header
 // 4 words instead of 5).
-final class EmojiStore {
+// nonisolated: immutable after init (mmap'd bytes + offsets), and ALREADY read off
+// the main actor — the engine queue's word→emoji candidate lookup. Saying so lets
+// background users (engine, atlas rasterizer) call it without actor hops.
+nonisolated final class EmojiStore {
 	private let data: Data
 	let categoryCount: Int
 	private let stringCount: Int
@@ -153,10 +156,198 @@ final class EmojiStore {
 	}
 }
 
+// MARK: - EmojiAtlas: pre-rasterized emoji tiles served from an mmap'd file
+//
+// Why: drawing emoji as TEXT routes through CoreText's Apple Color Emoji renderer,
+// which caches ~65 KB of DIRTY memory per rasterized glyph and releases it only on a
+// memory warning — scrolling the whole catalog costs ~30 MB against the extension's
+// ~60–70 MB jetsam ceiling (SwiftKey shipped NSCache swizzling to fight the same
+// wall). The fix is the same trick this codebase uses for all its data: rasterize
+// ONCE in the HOST app (multi-GB budget), write raw RGBA tiles to the App Group, and
+// mmap the file in the extension. Cells then show cropped CGImages backed by CLEAN,
+// evictable file pages — no glyph cache, no dirty growth, crisp at native scale.
+//
+// The file is pure pixels; the geometry lives in the NAME
+// (emoji_atlas_v1_t<tilePx>_n<count>_os<iosMajor>.bin) so the reader maps it with
+// CGDataProvider(url:) at offset 0, and a stale file (emoji.bin rebuilt, iOS major
+// upgrade changing the artwork, different display scale) simply never matches — the
+// grid falls back to live text rendering until the app regenerates.
+final class EmojiAtlas {
+	/// Logical tile side in points (matches the grid's glyph box); pixels = pt × scale.
+	nonisolated static let pointSize: CGFloat = 36
+	/// Glyph font inside a tile: 28 pt at display size — identical to the UILabel path
+	/// it replaces, so atlas cells and text-fallback cells look the same.
+	private nonisolated static let glyphFraction: CGFloat = 28.0 / 36.0
+
+	let count: Int
+	private let tilePx: Int
+	private let displayScale: CGFloat
+	private let strip: CGImage
+	/// Store-order lookup so recents and search results (strings, not grid indices)
+	/// can be served from tiles too. ~1,300 short strings, a one-off walk at load.
+	private let indexOf: [String: Int]
+
+	private init?(url: URL, tilePx: Int, count: Int, store: EmojiStore) {
+		guard tilePx > 0, count > 0,
+			  let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+			  fileSize == count * tilePx * tilePx * 4,
+			  let space = CGColorSpace(name: CGColorSpace.sRGB),
+			  let provider = CGDataProvider(url: url as CFURL),
+			  let strip = CGImage(width: tilePx, height: tilePx * count,
+								  bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: tilePx * 4,
+								  space: space,
+								  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+								  provider: provider, decode: nil, shouldInterpolate: true,
+								  intent: .defaultIntent)
+		else { return nil }
+		var map: [String: Int] = [:]
+		map.reserveCapacity(count)
+		var i = 0
+		for c in 0..<store.categoryCount {
+			for item in 0..<store.emojiCount(c) {
+				map[store.emoji(c, item)] = i
+				i += 1
+			}
+		}
+		guard i == count else { return nil }
+		self.tilePx = tilePx
+		self.count = count
+		self.displayScale = CGFloat(tilePx) / Self.pointSize
+		self.strip = strip
+		self.indexOf = map
+	}
+
+	/// The tile for an exact catalog emoji, or nil (caller falls back to text).
+	/// `cropping` shares the file-backed provider — no bytes are read until render.
+	func image(for emoji: String) -> UIImage? {
+		guard let i = indexOf[emoji],
+			  let tile = strip.cropping(to: CGRect(x: 0, y: CGFloat(i * tilePx),
+												   width: CGFloat(tilePx), height: CGFloat(tilePx)))
+		else { return nil }
+		return UIImage(cgImage: tile, scale: displayScale, orientation: .up)
+	}
+
+	// MARK: Locating the file
+
+	private nonisolated static func containerURL() -> URL? {
+		FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: KBSettings.appGroup)
+	}
+	private nonisolated static func fileName(tilePx: Int, count: Int) -> String {
+		let os = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+		return "emoji_atlas_v1_t\(tilePx)_n\(count)_os\(os).bin"
+	}
+	private nonisolated static func totalEmoji(in store: EmojiStore) -> Int {
+		(0..<store.categoryCount).reduce(0) { $0 + store.emojiCount($1) }
+	}
+	private nonisolated static func tilePx(for scale: CGFloat) -> Int {
+		Int((pointSize * max(scale, 1)).rounded())
+	}
+
+	/// Non-caching load, for tests and the shared path below.
+	static func load(store: EmojiStore?, scale: CGFloat, in dir: URL? = nil) -> EmojiAtlas? {
+		guard let store, let dir = dir ?? containerURL() else { return nil }
+		let tile = tilePx(for: scale)
+		let count = totalEmoji(in: store)
+		let url = dir.appendingPathComponent(fileName(tilePx: tile, count: count))
+		return EmojiAtlas(url: url, tilePx: tile, count: count, store: store)
+	}
+
+	/// Process-wide instance (main thread only — UI paths). A failed load is NOT
+	/// cached: the app may generate the file while this extension process is alive,
+	/// so the next emoji-page open retries the map.
+	private static var _shared: EmojiAtlas?
+	static func loadShared(store: EmojiStore?, scale: CGFloat) -> EmojiAtlas? {
+		if let a = _shared { return a }
+		_shared = load(store: store, scale: scale)
+		return _shared
+	}
+
+	// MARK: Generation (HOST APP ONLY)
+	//
+	// Rasterizing walks every glyph through the very CoreText cache this type exists
+	// to keep out of the extension — never call it there. The app's budget shrugs it
+	// off, and the write happens once per (emoji set, tile size, iOS major).
+
+	@discardableResult
+	nonisolated static func generateIfNeeded(store: EmojiStore? = EmojiStore.bundled,
+											 scale: CGFloat, in dir: URL? = nil) -> URL? {
+		guard let store, let dir = dir ?? containerURL() else { return nil }
+		let tile = tilePx(for: scale)
+		let count = totalEmoji(in: store)
+		guard count > 0 else { return nil }
+		let url = dir.appendingPathComponent(fileName(tilePx: tile, count: count))
+		if FileManager.default.fileExists(atPath: url.path) { return url }
+
+		// Sweep stale atlases (old emoji set, previous iOS major, other scales).
+		if let entries = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+			for f in entries where f.lastPathComponent.hasPrefix("emoji_atlas_") {
+				try? FileManager.default.removeItem(at: f)
+			}
+		}
+
+		// Write to a temp name, rename when complete — the extension can never map a
+		// half-written file (the name-encoded size check would reject it anyway).
+		let tmp = dir.appendingPathComponent("emoji_atlas_v1.tmp")
+		FileManager.default.createFile(atPath: tmp.path, contents: nil)
+		guard let handle = try? FileHandle(forWritingTo: tmp) else { return nil }
+		let ok = rasterize(store, tilePx: tile, to: handle)
+		try? handle.close()
+		guard ok, let _ = try? FileManager.default.moveItem(at: tmp, to: url) else {
+			try? FileManager.default.removeItem(at: tmp)
+			return nil
+		}
+		return url
+	}
+
+	/// One reused RGBA buffer + CGContext; each emoji is cleared, drawn centered, and
+	/// appended. Thread-safe off main (UIKit string drawing has been since iOS 4).
+	private nonisolated static func rasterize(_ store: EmojiStore, tilePx tile: Int, to handle: FileHandle) -> Bool {
+		var buf = [UInt8](repeating: 0, count: tile * tile * 4)
+		return buf.withUnsafeMutableBytes { raw -> Bool in
+			guard let base = raw.baseAddress,
+				  let space = CGColorSpace(name: CGColorSpace.sRGB),
+				  let ctx = CGContext(data: base, width: tile, height: tile,
+									  bitsPerComponent: 8, bytesPerRow: tile * 4, space: space,
+									  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+			else { return false }
+			// UIKit string drawing expects a top-left-origin (flipped) context.
+			ctx.translateBy(x: 0, y: CGFloat(tile))
+			ctx.scaleBy(x: 1, y: -1)
+			UIGraphicsPushContext(ctx)
+			defer { UIGraphicsPopContext() }
+
+			let T = CGFloat(tile)
+			var failed = false
+			for c in 0..<store.categoryCount {
+				for item in 0..<store.emojiCount(c) where !failed {
+					autoreleasepool {
+						ctx.clear(CGRect(x: 0, y: 0, width: T, height: T))
+						var font = UIFont.systemFont(ofSize: T * glyphFraction)
+						var str = NSAttributedString(string: store.emoji(c, item), attributes: [.font: font])
+						var sz = str.size()
+						if sz.width > T || sz.height > T {          // wide glyphs (flags, families)
+							font = font.withSize(font.pointSize * min(T / sz.width, T / sz.height))
+							str = NSAttributedString(string: store.emoji(c, item), attributes: [.font: font])
+							sz = str.size()
+						}
+						str.draw(at: CGPoint(x: (T - sz.width) / 2, y: (T - sz.height) / 2))
+						do { try handle.write(contentsOf: Data(bytes: base, count: raw.count)) }
+						catch { failed = true }
+					}
+				}
+			}
+			return !failed
+		}
+	}
+}
+
 // MARK: - Cells
 
 private final class EmojiCell: UICollectionViewCell {
 	let label = UILabel()
+	/// Atlas tiles render here instead of the label — a cropped CGImage from the
+	/// mmap'd strip costs no CoreText glyph cache (see EmojiAtlas).
+	private let imageView = UIImageView()
 	private var highlightColor = UIColor.clear
 
 	override var isHighlighted: Bool {
@@ -168,19 +359,36 @@ private final class EmojiCell: UICollectionViewCell {
 		label.textAlignment = .center
 		label.font = .systemFont(ofSize: 28)
 		label.translatesAutoresizingMaskIntoConstraints = false
+		imageView.contentMode = .scaleAspectFit
+		imageView.translatesAutoresizingMaskIntoConstraints = false
 		contentView.layer.cornerRadius = 8
 		contentView.layer.cornerCurve = .continuous
 		contentView.clipsToBounds = true
 		contentView.addSubview(label)
+		contentView.addSubview(imageView)
 		NSLayoutConstraint.activate([
 			label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-			label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+			label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+			imageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+			imageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+			imageView.widthAnchor.constraint(equalToConstant: EmojiAtlas.pointSize),
+			imageView.heightAnchor.constraint(equalToConstant: EmojiAtlas.pointSize)
 		])
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
-	func configure(emoji: String, theme: KeyboardTheme) {
-		label.text = emoji
+	func configure(emoji: String, image: UIImage?, theme: KeyboardTheme) {
+		if let image {
+			imageView.image = image
+			imageView.isHidden = false
+			label.isHidden = true
+			label.text = nil
+		} else {
+			label.text = emoji
+			label.isHidden = false
+			imageView.isHidden = true
+			imageView.image = nil
+		}
 		highlightColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0, alpha: 0.08)
 		contentView.backgroundColor = isHighlighted ? highlightColor : .clear
 	}
@@ -239,6 +447,11 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	}
 	private var sections: [Section] = []
 	private let store: EmojiStore?
+	private let explicitAtlas: EmojiAtlas?
+	/// Lazy so the first cell resolves it in-window, where displayScale is real
+	/// (it is 0 for a view that was never attached). nil → text-label fallback.
+	private lazy var atlas: EmojiAtlas? =
+		explicitAtlas ?? EmojiAtlas.loadShared(store: store, scale: traitCollection.displayScale)
 
 	private func name(of s: Int) -> String {
 		switch sections[s] {
@@ -265,11 +478,13 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		}
 	}
 
-	/// `store` is injectable for tests (the app target doesn't bundle emoji.bin).
-	init(theme: KeyboardTheme, showsGlobe: Bool, store: EmojiStore? = EmojiStore.bundled) {
+	/// `store` and `atlas` are injectable for tests.
+	init(theme: KeyboardTheme, showsGlobe: Bool,
+		 store: EmojiStore? = EmojiStore.bundled, atlas: EmojiAtlas? = nil) {
 		self.theme = theme
 		self.showsGlobe = showsGlobe
 		self.store = store
+		self.explicitAtlas = atlas
 		super.init(frame: .zero)
 
 		let recents = KBEmojiRecents.all()
@@ -360,7 +575,8 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	func collectionView(_ cv: UICollectionView, numberOfItemsInSection s: Int) -> Int { emojiCount(in: s) }
 	func collectionView(_ cv: UICollectionView, cellForItemAt ip: IndexPath) -> UICollectionViewCell {
 		let cell = cv.dequeueReusableCell(withReuseIdentifier: "e", for: ip) as! EmojiCell
-		cell.configure(emoji: emoji(at: ip), theme: theme)
+		let e = emoji(at: ip)
+		cell.configure(emoji: e, image: atlas?.image(for: e), theme: theme)
 		return cell
 	}
 	func collectionView(_ cv: UICollectionView, viewForSupplementaryElementOfKind kind: String,
@@ -444,6 +660,9 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		active.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.12) : UIColor(white: 0, alpha: 0.08)
 		active.layer.cornerRadius = 8
 		active.layer.cornerCurve = .continuous
+		// Once per category crossed, not per scroll tick: cheap footprint samples so
+		// browsing the grid (glyph raster cache growth) is visible in health telemetry.
+		KBDiagnostics.recorder.sample()
 	}
 
 	private func barButton(title: String? = nil, symbol: String? = nil,
@@ -478,17 +697,23 @@ final class EmojiSearchHeader: UIView {
 	var onPick: ((String) -> Void)?
 
 	private let theme: KeyboardTheme
+	private let atlas: EmojiAtlas?
 	private let pill = UIView()
 	private let queryLabel = UILabel()
 	private let caret = UIView()
+	// The caret rides the text: at the pill's start while the placeholder shows
+	// (nothing typed yet), after the query once there is one. Toggled in update().
+	private var caretAtStart: NSLayoutConstraint!
+	private var caretAfterText: NSLayoutConstraint!
 	private let clearButton = UIButton(type: .system)
 	private let resultsScroll = UIScrollView()
 	private let resultsStack = UIStackView()
 	private let statusLabel = UILabel()
 	private let resultCap = 60          // plenty to swipe through; keeps the strip cheap
 
-	init(theme: KeyboardTheme) {
+	init(theme: KeyboardTheme, atlas: EmojiAtlas? = nil) {
 		self.theme = theme
+		self.atlas = atlas
 		super.init(frame: .zero)
 
 		// Row 1: back chevron + query pill.
@@ -562,7 +787,6 @@ final class EmojiSearchHeader: UIView {
 			queryLabel.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
 			queryLabel.trailingAnchor.constraint(lessThanOrEqualTo: clearButton.leadingAnchor, constant: -8),
 
-			caret.leadingAnchor.constraint(equalTo: queryLabel.trailingAnchor, constant: 1),
 			caret.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
 			caret.widthAnchor.constraint(equalToConstant: 2),
 			caret.heightAnchor.constraint(equalToConstant: 18),
@@ -586,6 +810,9 @@ final class EmojiSearchHeader: UIView {
 			statusLabel.centerYAnchor.constraint(equalTo: resultsScroll.centerYAnchor),
 			statusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16)
 		])
+		caretAtStart = caret.trailingAnchor.constraint(equalTo: queryLabel.leadingAnchor, constant: -1)
+		caretAfterText = caret.leadingAnchor.constraint(equalTo: queryLabel.trailingAnchor, constant: 1)
+		caretAtStart.isActive = true                 // the query starts empty
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
@@ -605,17 +832,27 @@ final class EmojiSearchHeader: UIView {
 			queryLabel.text = "Search emoji"
 			queryLabel.textColor = theme.keyText.withAlphaComponent(0.45)
 			clearButton.isHidden = true
+			caretAfterText.isActive = false          // deactivate first — never both at once
+			caretAtStart.isActive = true             // caret blinks BEFORE the placeholder
 		} else {
 			queryLabel.text = query
 			queryLabel.textColor = theme.keyText
 			clearButton.isHidden = false
+			caretAtStart.isActive = false
+			caretAfterText.isActive = true
 		}
 
 		resultsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 		for e in results.prefix(resultCap) {
 			let b = UIButton(type: .system)
-			b.setTitle(e, for: .normal)
-			b.titleLabel?.font = .systemFont(ofSize: 28)
+			// Atlas tile when available — same clean-memory path as the grid; text
+			// glyphs otherwise (bounded: at most `resultCap` per refresh).
+			if let img = atlas?.image(for: e) {
+				b.setImage(img.withRenderingMode(.alwaysOriginal), for: .normal)
+			} else {
+				b.setTitle(e, for: .normal)
+				b.titleLabel?.font = .systemFont(ofSize: 28)
+			}
 			b.widthAnchor.constraint(equalToConstant: 44).isActive = true
 			b.addAction(UIAction { [weak self] _ in self?.onPick?(e) }, for: .touchUpInside)
 			resultsStack.addArrangedSubview(b)

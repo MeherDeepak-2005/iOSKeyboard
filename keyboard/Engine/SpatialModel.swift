@@ -11,6 +11,14 @@ enum KB {
 	static let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 	static let rowOffset: [Double] = [0.0, 0.25, 0.75]
 	static let sigma = 1.0
+	static let apostrophe = UInt8(ascii: "'")
+	/// Skipping an apostrophe the candidate has but the typed string omitted costs a
+	/// fraction of a real deletion: people drop apostrophes constantly (whats, dont,
+	/// cant) and the letters page has no ' key, so an omission is the EXPECTED channel
+	/// noise for a contraction, not a 1.6-cost edit. Without this, "whats" corrects to
+	/// "what" (freq wins the tie at equal cost) instead of "what's" like stock.
+	/// Mirrored in tools/lm/eval_harness.py (APOS_SKIP).
+	static let apostropheSkipCost = 0.4
 	static let pos: [UInt8: (Double, Double)] = {
 		var m: [UInt8: (Double, Double)] = [:]
 		for (r, row) in rows.enumerated() {

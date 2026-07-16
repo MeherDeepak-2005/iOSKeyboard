@@ -104,12 +104,20 @@ class TinyLM(nn.Module):
             nn.init.normal_(m.weight, std=0.02)
 
     def forward(self, tokens):                        # tokens: [B, maxlen] int
+        return self.head(self.hidden(tokens))          # [B, maxlen, vocab]
+
+    def hidden(self, tokens):
+        """Return normalized transformer states without materializing vocab logits.
+
+        The keyboard export gathers only the positions it needs from these states.
+        Training still calls ``forward`` and therefore remains unchanged.
+        """
         # No reference to tokens.shape — full fixed buffers, so the trace has no
         # dynamic int-from-shape ops for Core ML to choke on.
         x = self.emb(tokens) + self.pos(self.pos_ids)
         for block in self.blocks:
             x = block(x, self.causal)
-        return self.head(self.norm(x))                # [B, maxlen, vocab]
+        return self.norm(x)                           # [B, maxlen, d]
 
     def empty_cache(self, batch=1):
         """Per-layer (K, V) buffers with zero length — the starting cache before any
@@ -134,3 +142,45 @@ class TinyLM(nn.Module):
             x, k, v = block.forward_cached(x, pk, pv)
             new_cache.append((k, v))
         return self.head(self.norm(x)), new_cache
+
+
+class KeyboardInferenceModel(nn.Module):
+    """Memory-bounded Core ML interface used by the keyboard extension.
+
+    The old export returned [B, 32, vocab] even though candidate scoring needs at
+    most a handful of positions and next-word search needs one. This wrapper first
+    gathers the requested hidden states and only then applies the tied LM head.
+
+    A single model/function serves both call sites so the 4.7M weights are not
+    duplicated in the extension bundle:
+
+      candidate_log_probs [B]       exact sum of selected-token log probabilities
+      next_logits          [B, V]    distribution at one requested position
+
+    ``score_mask`` makes unused slots in the fixed K=8 candidate array inert.
+    """
+    score_slots = 8
+
+    def __init__(self, lm: TinyLM):
+        super().__init__()
+        self.lm = lm
+        self.d = lm.emb.embedding_dim
+
+    def _gather_hidden(self, hidden, positions):
+        index = positions.to(torch.int64).unsqueeze(-1).expand(-1, -1, self.d)
+        return torch.gather(hidden, dim=1, index=index)
+
+    def forward(self, tokens, score_positions, target_ids, score_mask, next_positions):
+        hidden = self.lm.hidden(tokens)
+
+        score_hidden = self._gather_hidden(hidden, score_positions)
+        score_logits = self.lm.head(score_hidden)       # [B, K, V], not [B, L, V]
+        score_log_probs = F.log_softmax(score_logits, dim=-1)
+        selected = torch.gather(
+            score_log_probs, dim=2, index=target_ids.to(torch.int64).unsqueeze(-1)
+        ).squeeze(-1)
+        candidate_log_probs = (selected * score_mask).sum(dim=1)
+
+        next_hidden = self._gather_hidden(hidden, next_positions)
+        next_logits = self.lm.head(next_hidden).squeeze(1)  # [B, V]
+        return candidate_log_probs, next_logits

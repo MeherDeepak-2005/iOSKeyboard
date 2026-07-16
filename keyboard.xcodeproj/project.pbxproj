@@ -90,7 +90,6 @@
 		837F01AF2FEE99820033ED99 /* Exceptions for "keyboard" folder in "keyboard" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				emoji.bin,
 				langdata.bin,
 				rescorer.mlpackage,
 				safety.kbguard,
