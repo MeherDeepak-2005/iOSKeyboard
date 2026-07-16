@@ -68,7 +68,7 @@ final class KeyboardView: UIView {
 	/// Fired on lift with the full swipe trajectory (view coordinates) plus a snapshot of
 	/// the key layout, so the engine can map the path into grid space and decode it. No
 	/// letter is ever committed for a glide (lift-commit) — the decoder just gets the path.
-	var onGlide: (([CGPoint], GlideLayout) -> Void)?
+	var onGlide: (([CGPoint], [TimeInterval], GlideLayout) -> Void)?
 
 	/// Letter-key centers + pitches for the decoder's view→grid mapping.
 	private func glideLayout() -> GlideLayout {
@@ -82,6 +82,7 @@ final class KeyboardView: UIView {
 	private struct GlideTrack {
 		var startKey: KeyButton?
 		var points: [CGPoint] = []
+		var times: [TimeInterval] = []          // per-sample touch timestamps (for velocity/dwell)
 		var length: CGFloat = 0                 // cumulative path length
 		var keys = Set<ObjectIdentifier>()      // distinct keys the path has entered
 		var isGlide = false
@@ -203,6 +204,7 @@ final class KeyboardView: UIView {
 		emojiView = ev
 		onHeightChange?()                             // height snaps back if search was up
 		setNeedsLayout()
+		KBDiagnostics.recorder.sample()               // emoji page footprint shows up in health telemetry
 	}
 	private func hideEmoji() {
 		emojiView?.removeFromSuperview()
@@ -224,7 +226,9 @@ final class KeyboardView: UIView {
 		page = .letters
 		shift = .off                                  // emoji keywords are lowercase
 		suggestionBar.isHidden = true
-		let header = EmojiSearchHeader(theme: theme)
+		let header = EmojiSearchHeader(
+			theme: theme,
+			atlas: EmojiAtlas.loadShared(store: EmojiStore.bundled, scale: traitCollection.displayScale))
 		header.onCancel = { [weak self] in self?.exitEmojiSearch(backToEmoji: true) }
 		header.onClear = { [weak self] in
 			guard let self else { return }
@@ -265,6 +269,17 @@ final class KeyboardView: UIView {
 		}
 	}
 
+	/// The user touched the host document directly (tapped the input field, moved the
+	/// cursor): snap the emoji page or emoji search back to the letter deck, stock-style.
+	/// Returns true when something was actually dismissed (the controller refreshes the
+	/// suggestion bar only then).
+	@discardableResult
+	func dismissEmojiIfActive() -> Bool {
+		if isEmojiSearching { exitEmojiSearch(backToEmoji: false); return true }
+		if page == .emoji { hideEmoji(); return true }
+		return false
+	}
+
 	private func refreshEmojiSearch() {
 		guard let header = emojiSearchHeader else { return }
 		let results = emojiQuery.isEmpty
@@ -285,9 +300,10 @@ final class KeyboardView: UIView {
 	}
 	private func routeDelete() {
 		if isEmojiSearching {
-			// Only edits the query — never reaches into the host document from search.
-			if !emojiQuery.isEmpty { emojiQuery.removeLast(); refreshEmojiSearch() }
-			return
+			// A live query: delete edits the query, never the host document.
+			if !emojiQuery.isEmpty { emojiQuery.removeLast(); refreshEmojiSearch(); return }
+			// Empty query: fall through to the host — the emoji just inserted from the
+			// results strip stays erasable without leaving search.
 		}
 		onDelete?()
 	}
@@ -550,7 +566,8 @@ final class KeyboardView: UIView {
 				   !isEmojiSearching,               // search queries are tapped, not glided
 				   key.letterBase != nil {
 					glideTouch = touch
-					glide = GlideTrack(startKey: key, points: [p], keys: [ObjectIdentifier(key)])
+					glide = GlideTrack(startKey: key, points: [p], times: [touch.timestamp],
+									   keys: [ObjectIdentifier(key)])
 				}
 			}
 		}
@@ -603,11 +620,12 @@ final class KeyboardView: UIView {
 		for touch in touches {
 			if touch == glideTouch, glide?.isGlide == true {   // a glide: decode, commit nothing
 				let pts = glide?.points ?? []
+				let times = glide?.times ?? []
 				let layout = glideLayout()
 				glideTouch = nil; glide = nil; clearTrail()
 				pendingCommit.remove(touch)
 				clearRegisteredKey(for: touch)
-				onGlide?(pts, layout)
+				onGlide?(pts, times, layout)
 				continue
 			}
 			if touch == repeatTouch {                          // delete: just stop
@@ -666,6 +684,7 @@ final class KeyboardView: UIView {
 		}
 
 		glide.points.append(point)
+		glide.times.append(touch.timestamp)
 
 		// Important: glide classification uses actual visible letter frames,
 		// not dynamically expanded tap regions.

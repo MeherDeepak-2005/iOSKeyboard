@@ -14,6 +14,14 @@ enum KBLanguage: String, CaseIterable {
 		case .telugu:   return "Telugu script"
 		}
 	}
+	/// User-defined SentencePiece token prepended to every model context.
+	var modelTag: String {
+		switch self {
+		case .english:  return "<en>"
+		case .tenglish: return "<xlit>"
+		case .telugu:   return "<te>"
+		}
+	}
 	/// Only English is wired up today; the others are visible but inert.
 	var isAvailable: Bool { self == .english }
 }
@@ -173,7 +181,7 @@ enum KBPalette {
 }
 
 enum KBSettings {
-	static let appGroup = "group.com.swiftuimasterclass.keyboard"
+	nonisolated static let appGroup = "group.com.swiftuimasterclass.keyboard"
 	private static var store: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
 
 	private enum Key {
@@ -218,5 +226,11 @@ enum KBSettings {
 		get { store.object(forKey: Key.glideCap) as? Bool ?? false }
 		set { store.set(newValue, forKey: Key.glideCap) }
 	}
-}
 
+	/// URL of the on-device personalisation model in the shared App Group container.
+	/// Both the app and the extension resolve to the same file, so the app can delete it directly.
+	static var userModelURL: URL? {
+		FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
+			.appendingPathComponent("kb_model.json")
+	}
+}

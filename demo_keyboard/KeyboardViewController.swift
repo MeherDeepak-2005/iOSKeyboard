@@ -104,7 +104,7 @@ final class KeyboardViewController: UIInputViewController {
 		kb.onReturn         = { [weak self] in self?.handleReturn() }
 		kb.onNextKeyboard   = { [weak self] in self?.advanceToNextInputMode() }
 		kb.onPickSuggestion = { [weak self] in self?.handlePick($0) }
-		kb.onGlide          = { [weak self] path, layout in self?.handleGlide(path, layout) }
+		kb.onGlide          = { [weak self] path, times, layout in self?.handleGlide(path, times, layout) }
 		// Emoji search swaps the suggestion strip for a taller search header; track it.
 		kb.onHeightChange   = { [weak self, weak kb] in
 			guard let self, let kb else { return }
@@ -170,6 +170,20 @@ final class KeyboardViewController: UIInputViewController {
 		// key and shift state track the cursor.
 		updateActionKey()
 		updateAutoShift()              // cursor moved / host cleared the field
+		snapBackFromEmojiIfUserTouched()
+	}
+
+	override func selectionDidChange(_ textInput: UITextInput?) {
+		super.selectionDidChange(textInput)
+		snapBackFromEmojiIfUserTouched()
+	}
+
+	/// Tapping the input field (or otherwise moving the cursor by hand) while the emoji
+	/// page or emoji search is up returns to the letter deck — stock behavior. Guarded by
+	/// the proxy-edit timestamp so our own inserts/deletes never trigger it.
+	private func snapBackFromEmojiIfUserTouched() {
+		guard isUserDocumentTouch, keyboard?.dismissEmojiIfActive() == true else { return }
+		scheduleSuggestions()          // the bar is live again — refill it for the new context
 	}
 
 	// MARK: Field-aware suggestion gating (mirror stock iOS)
@@ -253,7 +267,21 @@ final class KeyboardViewController: UIInputViewController {
 	/// Timestamp of the last plain space, for the double-space → ". " shortcut.
 	private var lastSpaceAt: TimeInterval = 0
 
+	/// Uptime of the last edit WE made through the proxy. textDidChange /
+	/// selectionDidChange arriving without a recent programmatic edit means the user
+	/// touched the document directly (tapped the input field, moved the cursor) —
+	/// the signal that snaps the emoji page / emoji search back to the letter deck.
+	private var lastProxyEditAt: TimeInterval = 0
+	private func noteProxyEdit() { lastProxyEditAt = ProcessInfo.processInfo.systemUptime }
+
+	/// True when a document change arrived that we didn't cause. The 0.5 s window
+	/// absorbs the host's async delivery of our own inserts/deletes.
+	private var isUserDocumentTouch: Bool {
+		ProcessInfo.processInfo.systemUptime - lastProxyEditAt > 0.5
+	}
+
 	private func handleInsert(_ ch: String, tap: KeyTap? = nil) {
+		noteProxyEdit()
 		resolveCorrectionAsAccepted()
 		resolveGlideAccepted()
 		trackReplacementStart()
@@ -316,6 +344,7 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func handleReturn() {
+		noteProxyEdit()
 		resolveCorrectionAsAccepted()
 		resolveGlideAccepted()
 		resolveManualFix(trailingWord(textDocumentProxy.documentContextBeforeInput ?? ""))
@@ -357,6 +386,7 @@ final class KeyboardViewController: UIInputViewController {
 			// Nothing must have moved since we measured: same tail, cursor still at the end.
 			guard (self.textDocumentProxy.documentContextAfterInput ?? "").isEmpty,
 				  (self.textDocumentProxy.documentContextBeforeInput ?? "").hasSuffix(expected) else { return }
+			self.noteProxyEdit()
 			// Preserve the previous word's leading case (e.g. sentence-start capitalization).
 			var repl = replacement
 			if let f = prev.first, f.isUppercase { repl = repl.prefix(1).uppercased() + repl.dropFirst() }
@@ -387,6 +417,7 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func handleDelete() {
+		noteProxyEdit()
 		// A single Backspace right after a correction undoes it back to the typed word.
 		if let c = lastCorrection {
 			// Validate the correction is still present in the document before undoing.
@@ -440,6 +471,7 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func handlePick(_ s: String) {
+		noteProxyEdit()
 		resetEraseTracking()   // picking from the bar is its own flow with its own signals
 		wordTaps.removeAll(keepingCapacity: true)
 
@@ -538,7 +570,7 @@ final class KeyboardViewController: UIInputViewController {
 	/// auto-space after letters and sentence-start capitalization), learn it, and leave the
 	/// runner-up shapes on the bar as one-tap swaps. A single Backspace removes the whole
 	/// glided word (`Correction` with empty original). Nothing commits on a rejected swipe.
-	private func handleGlide(_ path: [CGPoint], _ layout: GlideLayout) {
+	private func handleGlide(_ path: [CGPoint], _ times: [TimeInterval], _ layout: GlideLayout) {
 		// Cancel the debounced suggestion pass the start-letter triggered: without
 		// this, it fires 60 ms into the swipe and queues engine work the glide
 		// decode then has to wait behind. The engine also bumps suggestGen to
@@ -551,9 +583,10 @@ final class KeyboardViewController: UIInputViewController {
 		resolveGlideAccepted()                           // a prior glided word stood — record it
 		let before = textDocumentProxy.documentContextBeforeInput ?? ""
 		let context = contextWords(before, max: 8)
-		engine.glide(path: path, layout: layout, context: context) { [weak self] word, alternatives in
+		engine.glide(path: path, times: times, layout: layout, context: context) { [weak self] word, alternatives in
 			guard let self else { return }
 			guard let word else { self.scheduleSuggestions(); return }
+			self.noteProxyEdit()
 			let ctx = self.textDocumentProxy.documentContextBeforeInput ?? ""
 			var display = word
 			if self.shouldAutoShift(ctx) { display = display.prefix(1).uppercased() + display.dropFirst() }
@@ -676,11 +709,23 @@ final class KeyboardViewController: UIInputViewController {
 
 	// MARK: Word parsing on the text before the cursor
 
-	private func isWordChar(_ c: Character) -> Bool { c.isLetter || c == "'" }
+	/// Hosts with smart punctuation (the iOS default in most text views) transform the
+	/// ASCII apostrophe we insert into U+2019 (') in the stored text. Without accepting
+	/// it here, every contraction fragments at the quote — "what's" parses as "s" —
+	/// so autocorrect judges fragments and learn() adopts them into suggestions.
+	private func isWordChar(_ c: Character) -> Bool {
+		c.isLetter || c == "'" || c == "\u{2019}" || c == "\u{02BC}"
+	}
+	/// Canonical form for the engine: the lexicon, n-grams, and tokenizer all store
+	/// ASCII apostrophes. One-to-one per Character, so parsed word lengths (and the
+	/// deleteBackward counts derived from them) are unchanged.
+	private func canonical(_ c: Character) -> Character {
+		(c == "\u{2019}" || c == "\u{02BC}") ? "'" : c
+	}
 
 	private func trailingWord(_ s: String) -> String {
 		var w = ""
-		for c in s.reversed() { if isWordChar(c) { w.insert(c, at: w.startIndex) } else { break } }
+		for c in s.reversed() { if isWordChar(c) { w.insert(canonical(c), at: w.startIndex) } else { break } }
 		return w
 	}
 
@@ -688,7 +733,7 @@ final class KeyboardViewController: UIInputViewController {
 		var chars = Array(s)
 		while let last = chars.last, !isWordChar(last) { chars.removeLast() }
 		var w = ""
-		while let last = chars.last, isWordChar(last) { w.insert(last, at: w.startIndex); chars.removeLast() }
+		while let last = chars.last, isWordChar(last) { w.insert(canonical(last), at: w.startIndex); chars.removeLast() }
 		return w.isEmpty ? nil : w
 	}
 
@@ -707,7 +752,7 @@ final class KeyboardViewController: UIInputViewController {
 			}
 			if chars.isEmpty { break }
 			var w = ""
-			while let last = chars.last, isWordChar(last) { w.insert(last, at: w.startIndex); chars.removeLast() }
+			while let last = chars.last, isWordChar(last) { w.insert(canonical(last), at: w.startIndex); chars.removeLast() }
 			if w.isEmpty { break }
 			words.insert(w, at: 0)
 		}

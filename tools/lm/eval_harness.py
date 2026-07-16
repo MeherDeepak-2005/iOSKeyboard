@@ -30,6 +30,7 @@ LANGDATA = HERE.parents[1] / "keyboard" / "langdata.bin"
 MAX_COST, LM_W, FREQ_W = 2.8, 1.0, 0.3
 INS = DEL = 1.6
 TRANS = 0.8          # adjacent-letter swap (Damerau) — mirror of Trie.transCost
+APOS_SKIP = 0.4      # omitted apostrophe (whats -> what's) — mirror of KB.apostropheSkipCost
 
 
 def first_letter_penalty(typed_len):
@@ -161,12 +162,13 @@ class Trie:
         first = [i * INS for i in range(len(typed) + 1)]
 
         def rec(node, letter, prev_letter, depth, prev, prev2):
-            cur = [prev[0] + DEL]
+            skip = APOS_SKIP if letter == "'" else DEL   # omitted-apostrophe discount
+            cur = [prev[0] + skip]
             for col in range(1, len(typed) + 1):
                 s = sub_cost(letter, typed[col - 1])
                 if depth == 1 and col == 1 and letter != typed[0]:
                     s += first_letter_penalty(len(typed))
-                v = min(cur[col - 1] + INS, prev[col] + DEL, prev[col - 1] + s)
+                v = min(cur[col - 1] + INS, prev[col] + skip, prev[col - 1] + s)
                 # Transposition: candidate's last two letters are the typed pair swapped.
                 if depth >= 2 and col >= 2 and letter == typed[col - 2] and prev_letter == typed[col - 1]:
                     v = min(v, prev2[col - 2] + TRANS)
@@ -184,8 +186,19 @@ class Trie:
         return out
 
 
+def corpus_total(ld):
+    """Σ corpus freq + V — the unigram-backoff denominator (cached on the reader)."""
+    if not hasattr(ld, "_corpus_total"):
+        ld._corpus_total = float(sum(ld.freqs)) + len(ld.freqs)
+    return ld._corpus_total
+
+
 def logprob(ld, w, ctx):
-    """Stupid backoff, base counts only (fresh-install condition)."""
+    """Stupid backoff, base counts only (fresh-install condition). Mirrors
+    NgramScorer.logProb: trigram → 0.4·bigram → frequency-differentiated corpus
+    unigram (the old flat 0.16/1000 floor scored every unseen word identically;
+    on-device the fresh-install floor was even log(0.16), ABOVE bigram hits,
+    which inverted the prior — fixed together on 2026-07-16)."""
     wid = ld.ids.get(w)
     if len(ctx) >= 2 and wid is not None:
         a, b = ld.ids.get(ctx[-2]), ld.ids.get(ctx[-1])
@@ -201,7 +214,9 @@ def logprob(ld, w, ctx):
             c = next((n for word, n in ents if word == wid), 0)
             if c:
                 return math.log(0.4 * c / tot)
-    return math.log(0.16 / 1000)   # empty user model floor
+    p_corpus = (ld.freqs[wid] + 1) / corpus_total(ld) if wid is not None \
+        else 0.5 / corpus_total(ld)
+    return math.log(0.16 * p_corpus)
 
 
 def context_is_sparse(ld, ctx):
@@ -244,12 +259,13 @@ def pair_cost(typed, intended):
     maxCost budget would buy without re-searching the whole trie."""
     prev = [i * INS for i in range(len(typed) + 1)]
     for d, letter in enumerate(intended, 1):
-        cur = [prev[0] + DEL]
+        skip = APOS_SKIP if letter == "'" else DEL   # mirror of the trie DPs
+        cur = [prev[0] + skip]
         for col in range(1, len(typed) + 1):
             s = sub_cost(letter, typed[col - 1])
             if d == 1 and col == 1 and letter != typed[0]:
                 s += first_letter_penalty(len(typed))
-            cur.append(min(cur[col - 1] + INS, prev[col] + DEL, prev[col - 1] + s))
+            cur.append(min(cur[col - 1] + INS, prev[col] + skip, prev[col - 1] + s))
         prev = cur
     return prev[-1]
 

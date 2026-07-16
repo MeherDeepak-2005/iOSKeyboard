@@ -64,13 +64,21 @@ final class SPTokenizer {
 	}
 
 	/// Unigram-LM segmentation: max-sum-of-scores path (Viterbi). SentencePiece's
-	/// whitespace convention: every space becomes the ▁ prefix of the next piece.
+	/// whitespace convention: normalized whitespace becomes the ▁ prefix of the
+	/// next piece. Unknown Unicode is emitted as its UTF-8 <0xXX> pieces, matching the
+	/// Python tokenizer's `byte_fallback=True` behavior instead of collapsing to <unk>.
 	/// Returns the best token ID sequence and the total path log-probability.
 	private func viterbi(_ text: String) -> (ids: [Int32], score: Float) {
-		let s = Array("\u{2581}" + text.replacingOccurrences(of: " ", with: "\u{2581}"))
+		// SentencePiece's default NMT NFKC normalizer compatibility-composes text,
+		// removes leading/trailing whitespace, and collapses internal whitespace.
+		let normalized = text.precomposedStringWithCompatibilityMapping
+		let words = normalized.split(whereSeparator: { $0.isWhitespace })
+		guard !words.isEmpty else { return ([], 0) }
+		let s = Array("\u{2581}" + words.joined(separator: "\u{2581}"))
 		let n = s.count
 		var best = [Float](repeating: -.infinity, count: n + 1)
-		var back = [(start: Int, id: Int32)](repeating: (0, unkID), count: n + 1)
+		var backStart = [Int](repeating: 0, count: n + 1)
+		var backIDs = [[Int32]](repeating: [unkID], count: n + 1)
 		best[0] = 0
 		for end in 1...n {
 			for start in max(0, end - maxPieceLen)..<end {
@@ -78,17 +86,28 @@ final class SPTokenizer {
 				let sub = String(s[start..<end])
 				if let p = pieces[sub], best[start] + p.score > best[end] {
 					best[end] = best[start] + p.score
-					back[end] = (start, p.id)
+					backStart[end] = start
+					backIDs[end] = [p.id]
 				}
 			}
-			if best[end] == -.infinity {                       // unknown char → unk piece
+			if best[end] == -.infinity {
+				let utf8 = String(s[end - 1]).utf8
+				let byteIDs = utf8.compactMap { byte in
+					pieces[String(format: "<0x%02X>", byte)]?.id
+				}
+				// A byte-fallback tokenizer has all 256 pieces. Retain <unk> support so
+				// malformed/legacy tokenizer files fail safely rather than dropping text.
+				backIDs[end] = byteIDs.count == utf8.count ? byteIDs : [unkID]
 				best[end] = best[end - 1] + unkScore
-				back[end] = (end - 1, unkID)
+				backStart[end] = end - 1
 			}
 		}
 		var out: [Int32] = []
 		var i = n
-		while i > 0 { out.append(back[i].id); i = back[i].start }
+		while i > 0 {
+			out.append(contentsOf: backIDs[i].reversed())
+			i = backStart[i]
+		}
 		return (out.reversed(), best[n])
 	}
 
@@ -108,15 +127,23 @@ final class SPTokenizer {
 // MARK: - NeuralScorer
 
 final class NeuralScorer {
+	private enum LoadError: LocalizedError {
+		case incompatibleInterface(inputs: Set<String>, outputs: Set<String>)
+		var errorDescription: String? {
+			switch self {
+			case .incompatibleInterface(let inputs, let outputs):
+				return "Core ML interface is stale (inputs: \(inputs.sorted()), outputs: \(outputs.sorted())); rerun tools/lm/export_coreml.py"
+			}
+		}
+	}
 	static let contextLen = 32                        // must match export_coreml.py L
 	static let maxBatch = 16                          // must match export_coreml.py RangeDim(1, 16)
-	/// Device-tier gate: the model is only hosted when the process has at least this much
-	/// headroom before jetsam. The extension budget varies widely — older hardware / older
-	/// iOS run ~60–70 MB, newer iOS 17+ devices ~180 MB. Loading a CoreML model (weights +
-	/// fp16 working set + activations, ~20 MB peak) into a 68 MB budget risks a memory kill,
-	/// so tight devices stay on the (excellent) n-gram engine while roomy ones use both.
-	/// One model, no extra app size — the choice is made at runtime from the real budget.
-	static let minAvailableMBToLoad = 90.0
+	static let scoreSlots = 8                         // must match model.py/export_coreml.py K
+	/// Initial safety estimate. Unlike the old 90 MB threshold this represents the
+	/// model's measured incremental working set plus reserve, not the whole extension
+	/// budget. Diagnostics records every gate decision so this can be calibrated on
+	/// the oldest supported physical device.
+	static let minAvailableMBToLoad = 35.0
 
 	private let modelURL: URL
 	private let tokenizer: SPTokenizer
@@ -129,20 +156,28 @@ final class NeuralScorer {
 	/// unloadable model file means one full disk/compile attempt PER KEYSTROKE.
 	private var lastLoadFailure: Date?
 	private static let loadRetryInterval: TimeInterval = 30
+	private var lastMemoryGate: Date?
+	private static let gateRetryInterval: TimeInterval = 5
 	private var pressureSource: DispatchSourceMemoryPressure?
 
 	/// nil unless the exported model + tokenizer are in the bundle.
-	static func bundled() -> NeuralScorer? {
-		guard let m = Bundle.main.url(forResource: "rescorer", withExtension: "mlmodelc"),
-			  let t = Bundle.main.url(forResource: "tokenizer", withExtension: "bin"),
-			  let tok = SPTokenizer(url: t) else { return nil }
-		return NeuralScorer(modelURL: m, tokenizer: tok)
+	static func bundled(language: KBLanguage = .english) -> NeuralScorer? {
+		guard let m = Bundle.main.url(forResource: "rescorer", withExtension: "mlmodelc") else {
+			KBDiagnostics.recorder.modelState("missing-model", error: "rescorer.mlmodelc is not bundled")
+			return nil
+		}
+		guard let t = Bundle.main.url(forResource: "tokenizer", withExtension: "bin"),
+			  let tok = SPTokenizer(url: t) else {
+			KBDiagnostics.recorder.modelState("missing-tokenizer", error: "tokenizer.bin is missing or invalid")
+			return nil
+		}
+		return NeuralScorer(modelURL: m, tokenizer: tok, language: language)
 	}
 
-	private init(modelURL: URL, tokenizer: SPTokenizer) {
+	private init(modelURL: URL, tokenizer: SPTokenizer, language: KBLanguage) {
 		self.modelURL = modelURL
 		self.tokenizer = tokenizer
-		self.modeTag = tokenizer.id(of: "<en>")       // Tenglish mode swaps this later
+		self.modeTag = tokenizer.id(of: language.modelTag)
 		beginLoading()
 		// Extensions die at ~60-70 MB dirty: drop the model under pressure and fall
 		// back to the n-gram prior; reload lazily on the next scoring request.
@@ -168,25 +203,52 @@ final class NeuralScorer {
 		if let f = lastLoadFailure, Date().timeIntervalSince(f) < Self.loadRetryInterval {
 			lock.unlock(); return
 		}
+		if let g = lastMemoryGate, Date().timeIntervalSince(g) < Self.gateRetryInterval {
+			lock.unlock(); return
+		}
 		// Only host the model when there's comfortable headroom (see minAvailableMBToLoad).
 		// availableBytes() == 0 means "couldn't measure" (e.g. simulator) → fail open.
 		let availableMB = Double(KBDiagnostics.availableBytes()) / 1_048_576
-		if availableMB > 0, availableMB < Self.minAvailableMBToLoad { lock.unlock(); return }
+		if availableMB > 0, availableMB < Self.minAvailableMBToLoad {
+			lastMemoryGate = Date()
+			lock.unlock()
+			KBDiagnostics.recorder.modelState("memory-gated", availableMB: availableMB)
+			return
+		}
 		loading = true
 		lock.unlock()
+		KBDiagnostics.recorder.modelState("loading")
 		DispatchQueue.global(qos: .utility).async { [weak self] in
 			guard let self else { return }
 			let cfg = MLModelConfiguration()
 			cfg.computeUnits = .cpuAndNeuralEngine    // benchmark: CPU-only may win at this size
 			let t0 = Date()
-			let m = try? MLModel(contentsOf: self.modelURL, configuration: cfg)
+			let result: Result<MLModel, Error>
+			do {
+				let loaded = try MLModel(contentsOf: self.modelURL, configuration: cfg)
+				let inputs = Set(loaded.modelDescription.inputDescriptionsByName.keys)
+				let outputs = Set(loaded.modelDescription.outputDescriptionsByName.keys)
+				let requiredInputs: Set<String> = ["tokens", "score_positions", "target_ids", "score_mask", "next_positions"]
+				let requiredOutputs: Set<String> = ["candidate_log_probs", "next_logits"]
+				guard requiredInputs.isSubset(of: inputs), requiredOutputs.isSubset(of: outputs) else {
+					throw LoadError.incompatibleInterface(inputs: inputs, outputs: outputs)
+				}
+				result = .success(loaded)
+			}
+			catch { result = .failure(error) }
 			let loadMs = Date().timeIntervalSince(t0) * 1000
+			let m = try? result.get()
 			self.lock.lock()
 			self.model = m
 			self.loading = false
 			self.lastLoadFailure = m == nil ? Date() : nil
 			self.lock.unlock()
-			if m != nil { KBDiagnostics.recorder.modelActivated(loadMs: loadMs) }
+			switch result {
+			case .success:
+				KBDiagnostics.recorder.modelActivated(loadMs: loadMs)
+			case .failure(let error):
+				KBDiagnostics.recorder.modelState("load-failed", error: error.localizedDescription)
+			}
 		}
 	}
 
@@ -208,6 +270,7 @@ final class NeuralScorer {
 		ctx += tokenizer.encode(context.joined(separator: " ").lowercased())
 		let candTokens = candidates.map { tokenizer.encode(" " + $0.lowercased()) }
 		let maxCand = candTokens.map(\.count).max() ?? 1
+		guard maxCand < L else { return nil }
 		if ctx.count + maxCand >= L {
 			ctx = Array(ctx.suffix(max(0, L - maxCand - 1)))
 		}
@@ -218,51 +281,115 @@ final class NeuralScorer {
 		while start < candidates.count {
 			let end = min(start + Self.maxBatch, candidates.count)
 			let B = end - start
-			guard let arr = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32)
+			guard let tokens = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32)
 			else { return nil }
-			let p = arr.dataPointer.bindMemory(to: Int32.self, capacity: B * L)
+			let p = tokens.dataPointer.bindMemory(to: Int32.self, capacity: B * L)
 			for b in 0..<B {
 				let row = ctx + candTokens[start + b]
 				for i in 0..<L { p[b * L + i] = i < row.count ? row[i] : 0 }   // pad: causally inert
 			}
-			guard let input = try? MLDictionaryFeatureProvider(dictionary: ["tokens": arr]),
-				  let out = try? m.prediction(from: input),
-				  let logits = out.featureValue(for: "logits")?.multiArrayValue,
-				  logits.shape.count == 3, logits.shape[0].intValue == B else { return nil }
-
-			// logits [B, L, V]: P(token at t | tokens < t) lives at position t-1.
-			let V = logits.shape[2].intValue
-			guard V > 0 else { return nil }
-			// The element type MUST match logits.dataType: the exported mlprogram declares
-			// FLOAT16 logits (its compute precision), and binding that buffer as Float
-			// reads past its end — EXC_BAD_ACCESS halfway in. Strides likewise are
-			// CoreML's choice (ANE outputs may be padded), so never assume a dense layout.
-			let s0 = logits.strides[0].intValue
-			let s1 = logits.strides[1].intValue
-			let s2 = logits.strides[2].intValue
-			func accumulate<T: BinaryFloatingPoint>(_ lp: UnsafeBufferPointer<T>) {
-				func logProb(batch: Int, pos: Int, token: Int32) -> Double {
-					guard pos >= 0, pos < L, token >= 0, Int(token) < V else { return 0 }  // never index OOB
-					let base = batch * s0 + pos * s1
-					var maxV = -Float.infinity
-					for v in 0..<V { maxV = max(maxV, Float(lp[base + v * s2])) }
-					var sum: Float = 0
-					for v in 0..<V { sum += expf(Float(lp[base + v * s2]) - maxV) }
-					return Double(Float(lp[base + Int(token) * s2]) - maxV - logf(sum))
-				}
+			// Score in groups of K target positions. Unusually fragmented words remain
+			// exact; they cost an extra forward instead of being silently truncated.
+			for slotBase in stride(from: 0, to: maxCand, by: Self.scoreSlots) {
+				guard let positions = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let targets = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let mask = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .float32),
+					  let next = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: 1)], dataType: .int32)
+				else { return nil }
+				let pp = positions.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
+				let tp = targets.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
+				let mp = mask.dataPointer.bindMemory(to: Float.self, capacity: B * Self.scoreSlots)
+				let np = next.dataPointer.bindMemory(to: Int32.self, capacity: B)
 				for b in 0..<B {
-					var total = 0.0
-					for (i, t) in candTokens[start + b].enumerated() {
-						total += logProb(batch: b, pos: ctxCount - 1 + i, token: t)
+					let candidate = candTokens[start + b]
+					np[b] = Int32(ctxCount + candidate.count - 1)
+					for slot in 0..<Self.scoreSlots {
+						let i = slotBase + slot
+						let o = b * Self.scoreSlots + slot
+						pp[o] = i < candidate.count ? Int32(ctxCount - 1 + i) : 0
+						tp[o] = i < candidate.count ? candidate[i] : 0
+						mp[o] = i < candidate.count ? 1 : 0
 					}
-					result[start + b] = total
 				}
+				guard let input = try? MLDictionaryFeatureProvider(dictionary: [
+					"tokens": tokens, "score_positions": positions, "target_ids": targets,
+					"score_mask": mask, "next_positions": next
+				]), let out = try? m.prediction(from: input),
+				   let scores = out.featureValue(for: "candidate_log_probs")?.multiArrayValue,
+				   let values = readVector(scores, count: B) else { return nil }
+				for b in 0..<B { result[start + b] += values[b] }
 			}
-			switch logits.dataType {
-			case .float16: logits.withUnsafeBufferPointer(ofType: Float16.self) { accumulate($0) }
-			case .float32: logits.withUnsafeBufferPointer(ofType: Float.self)   { accumulate($0) }
-			case .double:  logits.withUnsafeBufferPointer(ofType: Double.self)  { accumulate($0) }
-			default: return nil
+			start = end
+		}
+		return result
+	}
+
+	/// Batched log P(word | contexts[i]) — the n-1 rescue's forward-evidence term.
+	/// Same layout discipline as `scores`, but each batch row carries ITS OWN context
+	/// (the alternative previous words), so every alternative rides one Core ML
+	/// dispatch instead of one prediction call per context. Rows are trimmed
+	/// individually so each context + the shared candidate fits in L.
+	/// Returns nil when the model isn't resident (caller falls back to n-gram).
+	func scores(of word: String, underContexts contexts: [[String]]) -> [Double]? {
+		lock.lock()
+		let m = model
+		lock.unlock()
+		guard let m else { beginLoading(); return nil }
+		guard !contexts.isEmpty else { return [] }
+
+		let L = Self.contextLen
+		let candidate = tokenizer.encode(" " + word.lowercased())
+		guard !candidate.isEmpty, candidate.count < L else { return nil }
+		let tag: [Int32] = modeTag.map { [$0] } ?? []
+		let ctxRows: [[Int32]] = contexts.map { ctx in
+			var t = tag + tokenizer.encode(ctx.joined(separator: " ").lowercased())
+			if t.count + candidate.count >= L {
+				t = Array(t.suffix(max(0, L - candidate.count - 1)))
+			}
+			return t
+		}
+		guard ctxRows.allSatisfy({ !$0.isEmpty }) else { return nil }   // position ctxCount-1 must exist
+
+		var result = [Double](repeating: 0, count: contexts.count)
+		var start = 0
+		while start < contexts.count {
+			let end = min(start + Self.maxBatch, contexts.count)
+			let B = end - start
+			guard let tokens = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32)
+			else { return nil }
+			let p = tokens.dataPointer.bindMemory(to: Int32.self, capacity: B * L)
+			for b in 0..<B {
+				let row = ctxRows[start + b] + candidate
+				for i in 0..<L { p[b * L + i] = i < row.count ? row[i] : 0 }   // pad: causally inert
+			}
+			for slotBase in stride(from: 0, to: candidate.count, by: Self.scoreSlots) {
+				guard let positions = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let targets = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let mask = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .float32),
+					  let next = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: 1)], dataType: .int32)
+				else { return nil }
+				let pp = positions.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
+				let tp = targets.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
+				let mp = mask.dataPointer.bindMemory(to: Float.self, capacity: B * Self.scoreSlots)
+				let np = next.dataPointer.bindMemory(to: Int32.self, capacity: B)
+				for b in 0..<B {
+					let ctxCount = ctxRows[start + b].count            // per-row, unlike `scores`
+					np[b] = Int32(ctxCount + candidate.count - 1)
+					for slot in 0..<Self.scoreSlots {
+						let i = slotBase + slot
+						let o = b * Self.scoreSlots + slot
+						pp[o] = i < candidate.count ? Int32(ctxCount - 1 + i) : 0
+						tp[o] = i < candidate.count ? candidate[i] : 0
+						mp[o] = i < candidate.count ? 1 : 0
+					}
+				}
+				guard let input = try? MLDictionaryFeatureProvider(dictionary: [
+					"tokens": tokens, "score_positions": positions, "target_ids": targets,
+					"score_mask": mask, "next_positions": next
+				]), let out = try? m.prediction(from: input),
+				   let scores = out.featureValue(for: "candidate_log_probs")?.multiArrayValue,
+				   let values = readVector(scores, count: B) else { return nil }
+				for b in 0..<B { result[start + b] += values[b] }
 			}
 			start = end
 		}
@@ -346,28 +473,39 @@ final class NeuralScorer {
 		let B = rows.count
 		guard B > 0, B <= Self.maxBatch,
 			  rows.allSatisfy({ !$0.isEmpty && $0.count <= L }) else { return nil }
-		guard let arr = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32)
+		guard let arr = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32),
+			  let positions = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+			  let targets = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+			  let mask = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .float32),
+			  let next = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: 1)], dataType: .int32)
 		else { return nil }
 		let p = arr.dataPointer.bindMemory(to: Int32.self, capacity: B * L)
 		for b in 0..<B {
 			for i in 0..<L { p[b * L + i] = i < rows[b].count ? rows[b][i] : 0 }
 		}
-		guard let input = try? MLDictionaryFeatureProvider(dictionary: ["tokens": arr]),
+		memset(positions.dataPointer, 0, positions.count * MemoryLayout<Int32>.size)
+		memset(targets.dataPointer, 0, targets.count * MemoryLayout<Int32>.size)
+		memset(mask.dataPointer, 0, mask.count * MemoryLayout<Float>.size)
+		let np = next.dataPointer.bindMemory(to: Int32.self, capacity: B)
+		for b in 0..<B { np[b] = Int32(rows[b].count - 1) }
+		guard let input = try? MLDictionaryFeatureProvider(dictionary: [
+				"tokens": arr, "score_positions": positions, "target_ids": targets,
+				"score_mask": mask, "next_positions": next
+			]),
 			  let out = try? m.prediction(from: input),
-			  let logits = out.featureValue(for: "logits")?.multiArrayValue,
-			  logits.shape.count == 3, logits.shape[0].intValue == B else { return nil }
-		let V = logits.shape[2].intValue
+			  let logits = out.featureValue(for: "next_logits")?.multiArrayValue,
+			  logits.shape.count == 2, logits.shape[0].intValue == B else { return nil }
+		let V = logits.shape[1].intValue
 		guard V > 0 else { return nil }
 		let s0 = logits.strides[0].intValue
 		let s1 = logits.strides[1].intValue
-		let s2 = logits.strides[2].intValue
 		var result = [[Float]](repeating: [], count: B)
 		func extract<T: BinaryFloatingPoint>(_ lp: UnsafeBufferPointer<T>) {
 			for b in 0..<B {
-				let base = b * s0 + (rows[b].count - 1) * s1
+				let base = b * s0
 				var row = [Float](repeating: 0, count: V)
 				var maxV = -Float.infinity
-				for v in 0..<V { row[v] = Float(lp[base + v * s2]); maxV = max(maxV, row[v]) }
+				for v in 0..<V { row[v] = Float(lp[base + v * s1]); maxV = max(maxV, row[v]) }
 				var sum: Float = 0
 				for v in 0..<V { sum += expf(row[v] - maxV) }
 				let logZ = maxV + logf(sum)
@@ -383,6 +521,23 @@ final class NeuralScorer {
 		}
 		return result
 	}
+}
+
+/// Read a rank-1 Core ML output without assuming FP16/FP32 or dense element size.
+private func readVector(_ array: MLMultiArray, count: Int) -> [Double]? {
+	guard array.shape.count == 1, array.shape[0].intValue == count else { return nil }
+	let stride = array.strides[0].intValue
+	var result = [Double](repeating: 0, count: count)
+	func copy<T: BinaryFloatingPoint>(_ values: UnsafeBufferPointer<T>) {
+		for i in 0..<count { result[i] = Double(values[i * stride]) }
+	}
+	switch array.dataType {
+	case .float16: array.withUnsafeBufferPointer(ofType: Float16.self) { copy($0) }
+	case .float32: array.withUnsafeBufferPointer(ofType: Float.self) { copy($0) }
+	case .double:  array.withUnsafeBufferPointer(ofType: Double.self) { copy($0) }
+	default: return nil
+	}
+	return result
 }
 
 private func logAddExp(_ a: Float, _ b: Float) -> Float {
@@ -456,21 +611,37 @@ final class BlendedScorer: LanguageScorer {
 		lastSplit = (n, g)
 		return zip(n, g).map { wNeural * $0 + wNgram * $1 }
 	}
+
+	/// The n-1 rescue's forward term, batched: all alternative contexts ride ONE
+	/// Core ML dispatch (vs the default protocol implementation's call-per-context).
+	/// N-gram lookups stay per-context — they're microseconds. Degrades to pure
+	/// n-gram when the model isn't resident, same as `logProbs`. `lastSplit` is
+	/// deliberately untouched: it belongs to the candidate-table logging in rank().
+	func logProbs(of word: String, underContexts contexts: [[String]]) -> [Double] {
+		let g = contexts.map { ngram.logProbs([word], context: $0).first ?? -.infinity }
+		guard let n = neural.scores(of: word, underContexts: contexts) else { return g }
+		return zip(n, g).map { wNeural * $0 + wNgram * $1 }
+	}
 }
 
-// MARK: - UnigramScorer: tokenizer-only prior (Tier 1)
+// MARK: - UnigramScorer: tokenizer + n-gram prior (Tier 1)
 
-/// Lightweight language prior using only the SentencePiece piece scores — no CoreML,
-/// no model weights resident in memory. Costs ~200 KB (the tokenizer piece table).
+/// Lightweight language prior using SentencePiece piece scores blended with the n-gram
+/// — no CoreML, no model weights resident in memory (~200 KB tokenizer piece table).
 ///
 /// Sets `scoresArbitraryWords = true`, enabling the autocorrect margin gate on every
-/// device including iPhone 13: OOV strings receive a meaningful unigram log-probability
+/// device including iPhone 13: OOV strings receive a meaningful log-probability
 /// from the Viterbi piece sum instead of the n-gram's flat OOV floor, so slang and
 /// names survive correction without needing to be in the lexicon.
 ///
-/// Does NOT provide a context signal — `logProbs` is context-independent. Features that
-/// require contextual scoring (prev-word rescue, next-word beam search) must gate on
-/// `neuralLM?.isReady`, not on `scorer.scoresArbitraryWords`.
+/// The n-gram component provides a weak context signal (corpus bigrams/trigrams +
+/// user personal bigrams/trigrams) that improves suggestion ranking on Tier 1 devices.
+/// The feedback-loop fix lives in NgramScorer: its unigram backoff now zeros personal
+/// counts for OOV strings, so frequently-mistyped words outside the corpus lexicon
+/// can no longer accumulate a score that suppresses their own autocorrection.
+///
+/// Features that require STRONG contextual scoring (prev-word rescue, next-word beam
+/// search) must still gate on `neuralLM?.isReady`, not on `scorer.scoresArbitraryWords`.
 final class UnigramScorer: LanguageScorer {
 	private let tokenizer: SPTokenizer
 	private let ngram: NgramScorer

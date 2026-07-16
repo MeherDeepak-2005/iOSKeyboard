@@ -144,9 +144,11 @@ final class KeyboardEngine {
 			guard let self else { return }
 			self.lexicon.loadFromBundle()
 			self.ngram.attach(data: self.lexicon.langData,
-							  resolveID: { [lexicon = self.lexicon] in lexicon.wordID($0) })
+							  resolveID: { [lexicon = self.lexicon] in lexicon.wordID($0) },
+							  lexicon: self.lexicon)
 			self.user.load()
 			self.glideProfile.load()          // #37: restore this user's adapted glide σ / gate
+			self.lexicon.langData?.warmGlideAnchorIndex()   // Phase 2: prebuild the endpoint index off the first-glide path
 			self.applyLearned()
 			// Tiered scorer — two levels, each overriding the previous on this serial queue.
 			//
@@ -155,16 +157,14 @@ final class KeyboardEngine {
 			//   gate runs on iPhone 13 and older with zero CoreML cost. Piece score sums
 			//   give OOV strings a real log-probability instead of the n-gram's flat floor.
 			//
-			// Tier 3 (BlendedScorer + full transformer, ~20-30 MB): only when there is
-			//   at least minAvailableMBToLoad MB of headroom. Supersedes Tier 1 if it
-			//   loads. Insufficient headroom or missing model → Tier 1 stays active.
+			// Tier 3 (BlendedScorer + full transformer): always create the lightweight
+			//   handle when resources exist. NeuralScorer owns the memory gate and can
+			//   retry after transiently low headroom; Tier 1 answers until it is resident.
 			if KBSettings.neuralRescorer {
 				if let tok = SPTokenizer.fromBundle() {
 					self.scorer = UnigramScorer(tokenizer: tok, ngram: self.ngram)
 				}
-				let availableMB = Double(KBDiagnostics.availableBytes()) / 1_048_576
-				let hasHeadroom = availableMB == 0 || availableMB >= NeuralScorer.minAvailableMBToLoad
-				if hasHeadroom, let neural = NeuralScorer.bundled() {
+				if let neural = NeuralScorer.bundled(language: KBSettings.language) {
 					self.neuralLM = neural
 					self.scorer = BlendedScorer(neural: neural, ngram: self.ngram)
 				}
@@ -249,6 +249,29 @@ final class KeyboardEngine {
 			return fire ? best.word : nil
 		}
 
+		// OOV contraction guard: "when's" / "mustn't" are valid English even though the
+		// 60k vocab only carries the frequent contractions. Without this, an OOV
+		// contraction fell through to the correction machinery, whose best candidate
+		// is usually the bare base word — typing "When's" got "corrected" to "When".
+		// A known base + standard clitic is a word the user meant; never rewrite it.
+		if lexicon.isContractionForm(lw) { return nil }
+
+		// Apostrophe restoration — stock's contraction behavior, computed from the
+		// lexicon instead of a hardcoded pair list. An OOV string that becomes a
+		// dictionary word by inserting one apostrophe ("dont" → "don't", "im" → "i'm",
+		// "whats" → "what's") is a contraction typed without the ' (the letters page
+		// has no ' key), not a typo to score: no blend ranking can prefer "what's"
+		// over "what" (frequency + neural gaps exceed the whole channel gap), so this
+		// fires DIRECTLY, before scoring, on both the full and the fast inline path.
+		// Real words ("its", "cant", "well") never reach here — the real-word branch
+		// above already returned, so its strict margin still guards those.
+		if lw.count >= 2, let restored = lexicon.apostropheRestoration(of: lw),
+		   !lexicon.isProfane(restored) {
+			KBDiagnostics.logDecision(typed: lw, best: restored, margin: .infinity,
+									  threshold: 0, corrected: true)
+			return restored
+		}
+
 		guard lw.count >= 3 else { return nil }
 		// Missing-space split ("alot" → "a lot"): rides the same gates as single-word
 		// candidates. The neural batch scores the spaced string natively (subword
@@ -294,6 +317,10 @@ final class KeyboardEngine {
 	/// Channel cost is one skipped space (just under one insertion). Single-letter
 	/// halves are only "a"/"i" — anything else is a typo fragment, not a word.
 	private static let splitCost = 1.1
+	/// Channel cost of a missing apostrophe in the SUGGESTION bar's contraction
+	/// candidate ("its" → "it's"). Well under one edit: the omission is a keyboard
+	/// layout gap, not a slip — ranking, not this cost, decides if it surfaces.
+	private static let apostropheCost = 0.5
 	private func splitCandidate(of lw: String) -> (candidate: Candidate, a: String, b: String)? {
 		guard lw.count >= 4 else { return nil }
 		var best: (Candidate, String, String)?
@@ -362,6 +389,24 @@ final class KeyboardEngine {
 	/// Shape candidates handed to the prior = the neural batch cap (16). Wider funnel so a
 	/// frequent-but-sloppily-swiped word survives shape ranking for the LM/context to rescue.
 	private let glideCandidates = 16
+	/// #4 context-recall augmentation: how many n-gram-predicted next words to fold into the
+	/// rerank pool. Recovers a context-obvious word the beam missed (the recall ceiling is what
+	/// caps glide top-1) — but ONLY when its own shape still fits the swipe (bounded by the gate),
+	/// so context can rescue a dropped word, never override what the finger actually traced.
+	private let glideContextAugment = 16
+	/// Phase 2 endpoint-anchor augmentation. Fetch words whose first/last letter sit within
+	/// `glideAnchorRadius` grid units of the swipe's start/end (up to `glideAnchorEnds` letters
+	/// each end), `glideAnchorPerBucket` most-frequent per (first,last) pair, then shape-score them.
+	/// glide_eval sweet spot: recovers the beam's skip-case misses (recall 89→93, top-1 87→90) for
+	/// ~2 surviving candidates/word; larger values just add candidates the gate then rejects.
+	private let glideAnchorRadius: CGFloat = 1.3
+	private let glideAnchorEnds = 3
+	private let glideAnchorPerBucket = 40
+	/// #5 doubled-letter dwell bonus: a swipe traces no loop for "ll", so "hello"/"helo" tie on
+	/// shape; a sustained dwell on `l` (velocity minimum near the key) is the positive evidence
+	/// that breaks the tie toward the double. Small — it only arbitrates near-ties, and is 0
+	/// whenever the stroke carried no timestamps (dwellKeys empty).
+	private let glideDoubleBonus = 0.35
 	/// σ (rerank temperature) and the SHAPE gate (best candidate's cost must clear it or
 	/// nothing commits — an accidental smear types nothing, not a random word) are NOT fixed
 	/// constants anymore: the baked grid-searched values (σ 0.10, gate 0.43 — the correct-word
@@ -373,7 +418,7 @@ final class KeyboardEngine {
 	/// rerank with the language prior + frequency and gate (P4). Delivers the winner and
 	/// up to 3 alternatives for the suggestion bar (swap targets) on the MAIN queue;
 	/// (nil, []) when the swipe matched nothing well enough to commit.
-	func glide(path: [CGPoint], layout: GlideLayout, context: [String],
+	func glide(path: [CGPoint], times: [TimeInterval] = [], layout: GlideLayout, context: [String],
 			   completion: @escaping (String?, [String]) -> Void) {
 		// Invalidate any suggestion pass already dispatched to the engine queue.
 		// A queued pass that hasn't started yet bails at its isLatest() check;
@@ -386,47 +431,104 @@ final class KeyboardEngine {
 		queue.async { [weak self] in
 			func deliver(_ w: String?, _ alts: [String]) { DispatchQueue.main.async { completion(w, alts) } }
 			guard let self, let ld = self.lexicon.langData,
-				  let g = GlidePreprocess.run(path, layout: layout) else { return deliver(nil, []) }
-			let cands = GlideDecoder.decode(g, lang: ld, limit: self.glideCandidates)
+				  let g = GlidePreprocess.run(path, layout: layout, times: times.isEmpty ? nil : times)
+			else { return deliver(nil, []) }
+			var cands = GlideDecoder.decode(g, lang: ld, limit: self.glideCandidates)
 				.filter { !self.lexicon.isProfane($0.word) }
 			// Gate on the best SHAPE fit (decoder output is shape-sorted): the question is
 			// "did this swipe trace anything?", which the LM must not be able to overrule.
 			// The gate is per-user (#37): a sloppy glider's correct swipes sit higher, so
 			// their gate rises to let those through; a precise glider's gate tightens.
-			guard let bestShape = cands.first?.cost, bestShape <= self.glideProfile.gate else {
+			let gate = self.glideProfile.gate
+			guard let bestShape = cands.first?.cost, bestShape <= gate else {
 				KBDiagnostics.logGlide(points: g.points.count, pivots: g.pivots.count, letters: "rejected")
 				return deliver(nil, [])
+			}
+			// #4 CONTEXT-RECALL AUGMENTATION. The recall ceiling — the true word never entering the
+			// candidate set — is what caps glide top-1 (glide_eval: recall ≈ beam-bound, not rerank).
+			// Fold in the words the CONTEXT predicts that the beam missed, but only when each one's
+			// OWN shape still fits this swipe (cost ≤ gate). So context can rescue a word the finger
+			// clearly traced yet the beam dropped, and can never conjure a word the finger didn't.
+			if !context.isEmpty {
+				let have = Set(cands.map(\.word))
+				for w in self.ngram.nextWords(context: context, limit: self.glideContextAugment)
+				where !have.contains(w) && w.count >= 2 && !self.lexicon.isProfane(w) {
+					if let sc = GlideDecoder.shapeCost(of: w, g), sc <= gate {
+						cands.append((word: w, cost: sc))
+					}
+				}
+			}
+			// PHASE 2 ENDPOINT-ANCHOR AUGMENTATION. The start and end keys are a glide’s two most
+			// reliable points; fetch words whose first/last letter match them and shape-score them
+			// directly. Recovers a word the beam dropped because a MIDDLE letter was skipped (the
+			// greedy prune misaligns and prunes it) without ever traversing that middle. Same gate
+			// bound. glide_eval: recall 89‒93, top-1 87‒90 for ~2 extra candidates/word.
+			if let s = g.points.first, let e = g.points.last {
+				let firsts = GlidePreprocess.lettersNear(s, radius: self.glideAnchorRadius, maxN: self.glideAnchorEnds)
+				let lasts  = GlidePreprocess.lettersNear(e, radius: self.glideAnchorRadius, maxN: self.glideAnchorEnds)
+				let have = Set(cands.map(\.word))
+				for w in ld.glideAnchorWords(first: firsts, last: lasts, perBucket: self.glideAnchorPerBucket)
+				where !have.contains(w) && w.count >= 2 && !self.lexicon.isProfane(w) {
+					if let sc = GlideDecoder.shapeCost(of: w, g), sc <= gate {
+						cands.append((word: w, cost: sc))
+					}
+				}
 			}
 			// N-GRAM prior only — never the neural model. A glide commits the instant the
 			// finger lifts, so it must not block on a synchronous Core ML forward pass; the
 			// n-gram (with personalization) already ranks shape candidates well (glide_eval
-			// top-1 ~83% on shape+freq alone). Neural's contextual value is applied AFTER the
+			// top-1 ~84% on shape+freq alone). Neural's contextual value is applied AFTER the
 			// commit, asynchronously, via the previous-word rescue (see `rescorePreviousWord`).
 			let sigma = self.glideProfile.sigma           // per-user rerank temperature (#37)
+			let dwell = Set(g.dwellKeys)                  // #5: letters the finger lingered on
 			let priors = self.ngram.logProbs(cands.map(\.word), context: context)
 			var scored: [(word: String, s: Double)] = []
 			scored.reserveCapacity(cands.count)
 			for (i, c) in cands.enumerated() {
 				let lf = self.lexicon.logFreq(of: c.word) ?? 0
+				// #5: reward a doubled letter that the hand dwelled on — the positive evidence
+				// a swipe otherwise can't give for "hello" vs "helo". 0 when no timestamps.
+				let db = dwell.isEmpty ? 0 : self.glideDoubleBonus * Double(self.dwelledDoubles(c.word, dwell))
 				scored.append((c.word, -c.cost / sigma
 									   + self.glideLMWeight * priors[i]
-									   + self.glideFreqWeight * lf))
+									   + self.glideFreqWeight * lf
+									   + db))
 			}
 			scored.sort { $0.s > $1.s }
 			let winner = scored[0].word
 			let alts = scored.dropFirst().prefix(3).map(\.word)
+			// #6 COMMIT CONFIDENCE = the reranked top-1/top-2 margin. A tiny margin means the two
+			// best words are near-tied — exactly where auto-commit guesses wrong — so it is logged
+			// and captured; the runner-up is already one tap away on the bar and one backspace wipes
+			// the whole glided word, so a low-confidence commit is cheap to correct.
+			let margin = scored.count >= 2 ? scored[0].s - scored[1].s : Double.greatestFiniteMagnitude
 			// Stash this commit's raw SHAPE costs so the controller's later verdict (accepted
 			// winner / swapped-to alternative / undone) can supervise the per-user adaptation.
 			self.noteGlideCommit(winner: winner, shapeCostByWord: Dictionary(cands.map { ($0.word, $0.cost) },
 																			  uniquingKeysWith: min))
 			KBDiagnostics.logGlide(points: g.points.count, pivots: g.pivots.count,
-								   letters: ([winner] + alts).joined(separator: ","))
-			// Offline calibration capture (debug flag; grid-space path so the fitter can
-			// compare it to the committed word's ideal path).
-			KBDiagnostics.captureGlide(path: g.points.map { (Double($0.x), Double($0.y)) },
-									   candidates: scored.prefix(3).map(\.word), committed: winner)
+								   letters: ([winner] + alts).joined(separator: ","), margin: margin)
+			// Offline calibration capture (debug flag): RAW grid path + timestamps so the fitter
+			// can recover velocity, plus dwell letters and the commit margin.
+			let rawGrid = path.map { p -> (Double, Double) in
+				let gp = GlidePreprocess.toGrid(p, layout: layout); return (Double(gp.x), Double(gp.y))
+			}
+			KBDiagnostics.captureGlide(path: rawGrid, times: times.map { Double($0) }, dwell: g.dwellKeys,
+									   candidates: scored.prefix(3).map(\.word), committed: winner, margin: margin)
 			deliver(winner, Array(alts))
 		}
+	}
+
+	/// #5 helper: how many of a word's DOUBLED letters the finger dwelled on. "hello" with a
+	/// dwell at `l` → 1; "little" with dwells at `t` → 1. Positive evidence for the double.
+	private func dwelledDoubles(_ word: String, _ dwell: Set<Character>) -> Int {
+		let chars = Array(word.lowercased())
+		var count = 0
+		var i = 1
+		while i < chars.count {
+			if chars[i] == chars[i - 1], dwell.contains(chars[i]) { count += 1; i += 2 } else { i += 1 }
+		}
+		return count
 	}
 
 	// MARK: Per-user glide adaptation (#37) — supervision from the user's own verdict
@@ -506,12 +608,15 @@ final class KeyboardEngine {
 			guard !neighbours.isEmpty else { return done(nil) }
 			let cands = [prev] + neighbours.map(\.word)   // ≤4 → at most 4 neural forwards below
 
-			// term1: logP(C | left) — one batched forward. term2: logP(current | left + [C]).
+			// term1: logP(C | left) — one batched forward. term2: logP(current | left + [C]),
+			// ALSO one batched forward: every alternative context is a row in the same
+			// Core ML dispatch (was one prediction call per candidate — up to 4 sequential
+			// dispatches on the hottest neural path).
 			let pC = self.scorer.logProbs(cands, context: leftContext)
+			let fwd = self.scorer.logProbs(of: current, underContexts: cands.map { leftContext + [$0] })
 			var best = prev, bestScore = -Double.infinity, prevScore = -Double.infinity
 			for (i, c) in cands.enumerated() {
-				let fwd = self.scorer.logProbs([current], context: leftContext + [c]).first ?? -.infinity
-				let s = pC[i] + fwd
+				let s = pC[i] + fwd[i]
 				if c == prev { prevScore = s }
 				if s > bestScore { bestScore = s; best = c }
 			}
@@ -557,7 +662,10 @@ final class KeyboardEngine {
 			if let ts = taps, i - 1 < ts.count { tap = ts[i - 1] } else { tap = nil }
 			for j in 1...m {
 				let sub = prev[j - 1] + KB.subCost(gb[j - 1], typed: tb[i - 1], tap: tap)
-				curr[j] = min(sub, min(prev[j] + gap, curr[j - 1] + gap))
+				// Skipping a target apostrophe the user omitted is cheap — same discount
+				// as the trie DPs, so injected candidates compare on the same scale.
+				let skip = gb[j - 1] == KB.apostrophe ? KB.apostropheSkipCost : gap
+				curr[j] = min(sub, min(prev[j] + gap, curr[j - 1] + skip))
 			}
 			swap(&prev, &curr)
 		}
@@ -654,16 +762,39 @@ final class KeyboardEngine {
 				// spatially. Finds candidates the fixed-radius trie DP misses when input is
 				// heavily corrupted (e.g. "coeevitjkn" → "correction" after "auto").
 				let injected = self.contextInjectedCandidates(typed: lw, context: context, taps: taps)
-				let correctionWords = Set(corrections.map(\.word))
+				// Broad-radius fallback: when the normal 3-edit budget found zero candidates,
+				// retry at 2× budget to catch 4-5 edit typos on longer words. Only fires when
+				// corrections is empty (zero added cost on the normal path). Lock-free after a
+				// brief snapshot so the main thread's fast-autocorrect can never block on this.
+				// Only on 5+ char words — short words generate too many false matches at wide budget.
+				let broadCorrections: [Candidate] = corrections.isEmpty && lw.count >= 5
+					? Array(
+						self.lexicon.broadCorrections(for: lw, maxCost: self.maxCost(for: lw.count) * 2.0, taps: taps)
+							.sorted { $0.cost < $1.cost }
+							.prefix(8)
+					  )
+					: []
+				let correctionWords = Set((corrections + broadCorrections).map(\.word))
 				let newFromContext = injected.filter { !correctionWords.contains($0.word) }
-				let allCorrections = corrections + newFromContext
+				let allCorrections = corrections + broadCorrections + newFromContext
 				let completions = self.lexicon.completions(prefix: lw, limit: self.completionCandidateLimit)
-				// Injected candidates don't share the typed prefix, so they only appear in
-				// the bar when there are no completions (pure correction mode). The LM
-				// ranking naturally suppresses weak injections that don't fit context.
-				let correctionSuggestions = completions.isEmpty
-					? corrections.filter { $0.cost <= self.suggestionCorrectionMaxCost } + newFromContext
+				// Injected and broad candidates don't share the typed prefix — they only appear
+				// in the bar when there are no completions (pure correction mode). The LM
+				// ranking naturally suppresses weak candidates that don't fit context.
+				var correctionSuggestions = completions.isEmpty
+					? corrections.filter { $0.cost <= self.suggestionCorrectionMaxCost } + broadCorrections + newFromContext
 					: corrections.filter { $0.word.hasPrefix(lw) }
+				// Contraction sibling — "its" → "it's", "cant" → "can't". A real typed word
+				// never reaches the OOV apostrophe-restoration branch, "it's" is no trie
+				// completion of "its" (the apostrophe branches at "it"), and the hasPrefix
+				// filter above drops it from corrections — so without this the bar can never
+				// offer the contraction. Cheap channel cost: the letters page has no ' key,
+				// so the missing apostrophe is a layout gap, not a typo.
+				if lw.count >= 2, let restored = self.lexicon.apostropheRestoration(of: lw),
+				   !correctionSuggestions.contains(where: { $0.word == restored }) {
+					correctionSuggestions.append(Candidate(word: restored, cost: Self.apostropheCost,
+														   logFreq: self.lexicon.logFreq(of: restored) ?? 0))
+				}
 				// Second early exit: bail before the neural ranking pass (rank() → CoreML
 				// forward, 15–20 ms). A glide that fired after the injection step gets the
 				// queue as soon as this returns rather than waiting for a full neural forward.
@@ -709,7 +840,11 @@ final class KeyboardEngine {
 
 	func learn(context: [String], word: String) {
 		let lw = word.lowercased()
-		guard lw.count >= 1, lw.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
+		// ≥2 chars, or the only real one-letter words. Single letters must never learn
+		// or adopt: contraction fragments ("what's" split at an unrecognized quote used
+		// to commit "s"/"t" as words) would otherwise flood suggestions after 5 uses.
+		guard lw.count >= 2 || lw == "a" || lw == "i",
+			  lw.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
 		if lexicon.isProfane(lw) { return }        // never learn/adopt blocked words
 		let ctx = context.map { $0.lowercased() }
 		queue.async { [weak self] in
@@ -825,7 +960,9 @@ final class KeyboardEngine {
 			context: context, limit: 8,
 			isPrefix: { [lexicon] in lexicon.isPrefix($0) },
 			isWord: { [lexicon] in lexicon.contains($0) }) {
-			out = preds.map(\.word).filter { $0 != last && !lexicon.isProfane($0) }
+			let allPreds = preds.map(\.word).filter { !lexicon.isProfane($0) }
+			injectionCache = (context, allPreds)   // warm the injection cache so the first keystroke is free
+			out = allPreds.filter { $0 != last }
 		}
 		let beamCount = out.count
 		for w in ngram.nextWords(context: context, limit: 8)

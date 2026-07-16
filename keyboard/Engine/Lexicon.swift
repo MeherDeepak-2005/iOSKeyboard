@@ -58,9 +58,41 @@ final class Lexicon {
 		lock.lock(); defer { lock.unlock() }
 		return (staticTrie && langData?.trieContains(lw) == true) || dynamicTrie.contains(lw)
 	}
+	/// True only for words in the immutable corpus (static mmap trie). Used to filter
+	/// user-count boosts in next-word predictions so only dictionary words get personalized
+	/// ranking — OOV strings, adopted typos, and contact names don't flood suggestions.
+	func isStaticWord(_ lw: String) -> Bool {
+		lock.lock(); defer { lock.unlock() }
+		return staticTrie && langData?.trieContains(lw) == true
+	}
 	func isPrefix(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
 		return (staticTrie && langData?.trieHasPrefix(lw) == true) || dynamicTrie.hasPrefix(lw)
+	}
+	/// Standard English clitics. A string that is <lexicon word> + one of these is a
+	/// valid contraction even when the CONTRACTION itself is missing from the corpus
+	/// vocab ("when's", "mustn't" — the 60k list carries only the frequent ones).
+	private static let clitics = ["'s", "'re", "'ll", "'ve", "'d", "'m", "n't"]
+
+	/// True when `lw` parses as a known word + standard clitic. Autocorrect uses this
+	/// to protect OOV contractions from being "corrected" to their base ("when's" →
+	/// "when" was a live bug: OOV + the always-correct fallback flattened the 's).
+	func isContractionForm(_ lw: String) -> Bool {
+		guard lw.contains("'") else { return false }
+		for suffix in Self.clitics where lw.hasSuffix(suffix) {
+			let base = String(lw.dropLast(suffix.count))
+			if base.count >= 1, base.allSatisfy({ $0.isLetter }), contains(base) { return true }
+		}
+		return false
+	}
+
+	/// The contraction an apostrophe-less OOV string restores to ("dont" → "don't"),
+	/// or nil. Static corpus words only — adopted words can't hijack restoration.
+	/// Microseconds: at most count-1 exact trie walks under the lock.
+	func apostropheRestoration(of lw: String) -> String? {
+		lock.lock(); defer { lock.unlock() }
+		guard staticTrie else { return nil }
+		return langData?.trieApostropheRestoration(of: lw)?.word
 	}
 	func insert(_ lw: String, freq: Int) {
 		lock.lock(); defer { lock.unlock() }
@@ -77,6 +109,23 @@ final class Lexicon {
 			out += ld.trieSearch(lw, maxCost: maxCost, taps: taps).map(boosted)
 		}
 		return out
+	}
+
+	/// Wide-radius fallback over the static corpus only, lock-free after a brief snapshot.
+	/// `corrections()` holds the lock for the entire trie walk; at 2× budget that's 3+ ms and
+	/// would block the main thread's fast-autocorrect if it contended. Here we snapshot
+	/// `langData` and `boosts` under a tiny lock, release, then run the expensive DP lock-free
+	/// — the mmap data is immutable so the walk is safe. Dynamic trie is intentionally skipped
+	/// (adopted words are already close to correctly-typed forms and don't need the wide budget).
+	func broadCorrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil) -> [Candidate] {
+		lock.lock()
+		guard staticTrie, let ld = langData else { lock.unlock(); return [] }
+		let snap = boosts   // COW snapshot — O(1) under the lock
+		lock.unlock()
+		return ld.trieSearch(lw, maxCost: maxCost, taps: taps).map { c in
+			guard let b = snap[c.word] else { return c }
+			return Candidate(word: c.word, cost: c.cost, logFreq: log(exp(c.logFreq) + Double(b)))
+		}
 	}
 
 	/// Next-character priors under the current prefix, for key-target resizing:

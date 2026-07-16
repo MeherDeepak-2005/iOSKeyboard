@@ -23,6 +23,10 @@ enum KBDiagnostics {
 		// residency stats above say the model is loaded; this says it earns its memory.
 		var neuralRankPasses = 0
 		var neuralTop1Changed = 0
+		// Optional for backward-compatible decoding of snapshots written by older builds.
+		var modelState: String?
+		var lastModelError: String?
+		var lastGateAvailableMB: Double?
 	}
 
 	static let key = "kb.diag"
@@ -95,9 +99,10 @@ enum KBDiagnostics {
 
 	/// Glide preprocessing trace: how many points survived resampling, how many pivots,
 	/// and which letters those pivots land on (the decoder's raw signal).
-	static func logGlide(points: Int, pivots: Int, letters: String) {
+	static func logGlide(points: Int, pivots: Int, letters: String, margin: Double = -1) {
 		guard verbose else { return }
-		rankLog.info("[glide] \(points) pts, \(pivots) pivots → \(letters, privacy: .public)")
+		let m = margin >= 0 ? String(format: " margin=%.2f", margin) : ""
+		rankLog.info("[glide] \(points) pts, \(pivots) pivots\(m, privacy: .public) → \(letters, privacy: .public)")
 	}
 
 	/// Per-user glide adaptation (#37): the supervised sample just observed and the σ / gate
@@ -114,14 +119,23 @@ enum KBDiagnostics {
 			.appendingPathComponent("glide_capture.jsonl")
 	}
 
-	/// Append one glide record — grid path + decoded candidates + committed word — as a
-	/// JSONL line, when KBSettings.glideCapture is on. Fits the harness noise model to real
-	/// strokes offline (tools/glide_eval/calibrate.py). Best-effort; never blocks typing.
-	static func captureGlide(path: [(Double, Double)], candidates: [String], committed: String?) {
+	/// Append one glide record as a JSONL line, when KBSettings.glideCapture is on. Fits the
+	/// harness noise model to real strokes offline (tools/glide_eval/calibrate.py). Best-effort;
+	/// never blocks typing.
+	///
+	/// `path` is the RAW grid trajectory aligned 1:1 with `times` (seconds), NOT the resampled
+	/// path — resampling to even arc length erases the velocity that dwell/pivot calibration
+	/// needs. `dwell` are the letters the finger lingered on; `margin` is the reranked top-1/top-2
+	/// gap (commit confidence). Extra keys are additive: calibrate.py reads only `word`/`path`.
+	static func captureGlide(path: [(Double, Double)], times: [Double], dwell: [Character],
+							 candidates: [String], committed: String?, margin: Double) {
 		guard KBSettings.glideCapture, let url = glideCaptureURL else { return }
 		let pts = path.map { "[\(String(format: "%.3f", $0.0)),\(String(format: "%.3f", $0.1))]" }.joined(separator: ",")
+		let ts = times.map { String(format: "%.4f", $0) }.joined(separator: ",")
 		let cands = candidates.map { "\"\($0)\"" }.joined(separator: ",")
-		let line = "{\"path\":[\(pts)],\"cands\":[\(cands)],\"word\":\(committed.map { "\"\($0)\"" } ?? "null")}\n"
+		let dwellStr = dwell.map { "\"\($0)\"" }.joined(separator: ",")
+		let line = "{\"path\":[\(pts)],\"times\":[\(ts)],\"dwell\":[\(dwellStr)],\"cands\":[\(cands)]," +
+				   "\"word\":\(committed.map { "\"\($0)\"" } ?? "null"),\"margin\":\(String(format: "%.3f", margin))}\n"
 		guard let data = line.data(using: .utf8) else { return }
 		if let h = try? FileHandle(forWritingTo: url) {
 			defer { try? h.close() }
@@ -177,10 +191,30 @@ enum KBDiagnostics {
 			snap.loadCount += 1
 			snap.lastLoadMs = loadMs
 			snap.modelActive = true
+			snap.modelState = "active"
+			snap.lastModelError = nil
 			activeSince = Date()
 			persistLocked()
 			lock.unlock()
 			KBDiagnostics.log.notice("model active (load \(Int(loadMs)) ms)")
+		}
+
+		/// Explain why the model is not active instead of reducing every failure mode
+		/// to a silent nil. Persisted immediately because load/gate transitions are rare.
+		func modelState(_ state: String, error: String? = nil, availableMB: Double? = nil) {
+			lock.lock()
+			snap.modelState = state
+			snap.lastModelError = error
+			if let availableMB { snap.lastGateAvailableMB = availableMB }
+			persistLocked()
+			lock.unlock()
+			if let error {
+				KBDiagnostics.log.error("model \(state, privacy: .public): \(error, privacy: .public)")
+			} else if let availableMB {
+				KBDiagnostics.log.notice("model \(state, privacy: .public) at \(availableMB, privacy: .public) MB available")
+			} else {
+				KBDiagnostics.log.notice("model \(state, privacy: .public)")
+			}
 		}
 
 		/// Memory pressure fired; the engine dropped the model if it was resident.
@@ -191,6 +225,7 @@ enum KBDiagnostics {
 				snap.dropCount += 1
 				foldActiveLocked()
 				snap.modelActive = false
+				snap.modelState = critical ? "pressure-critical" : "pressure-warning"
 			}
 			sampleLocked()
 			persistLocked()

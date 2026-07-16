@@ -87,9 +87,10 @@ final class Trie {
 		// ONE flat DP buffer for the whole walk, rows indexed by depth — the previous
 		// version allocated a fresh [Double] row per trie node visited (thousands of
 		// transient arrays per keystroke). Depth is bounded: every row past the typed
-		// length adds ≥ delCost to the row minimum, so beyond n + maxCost/delCost no
-		// row can come back under budget and the walk provably never reaches deeper.
-		let maxDepth = n + Int(maxCost / Trie.delCost) + 1
+		// length adds ≥ delCost to the row minimum (an apostrophe level adds only
+		// apostropheSkipCost — the +2 headroom covers the one apostrophe a real word
+		// carries), so beyond this depth no row can come back under budget.
+		let maxDepth = n + Int(maxCost / Trie.delCost) + 2
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
 		for i in 0...n { dp[i] = Double(i) * Trie.insCost }
 		var out: [Candidate] = []
@@ -106,11 +107,14 @@ final class Trie {
 		guard depth <= maxDepth else { return }
 		let n = typed.count
 		let base = depth * (n + 1), prev = base - (n + 1)
-		var rowMin = dp[prev] + delCost
+		// Advancing past a candidate letter the typed string omitted: cheap for an
+		// apostrophe (see KB.apostropheSkipCost), a full deletion otherwise.
+		let skip = letter == KB.apostrophe ? KB.apostropheSkipCost : delCost
+		var rowMin = dp[prev] + skip
 		dp[base] = rowMin
 		for col in 1...n {
 			let ins = dp[base + col - 1] + insCost
-			let del = dp[prev + col] + delCost
+			let del = dp[prev + col] + skip
 			var s = KB.subCost(letter, typed: typed[col - 1], tap: taps?[col - 1] ?? nil)
 			if depth == 1, col == 1, letter != typed[0] { s += firstLetterPenaltyPolicy(typedLength: n, candidateFirst: letter, typedFirst: typed[0]) }  // protect first letter
 			var v = min(ins, del, dp[prev + col - 1] + s)

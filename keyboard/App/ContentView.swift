@@ -57,6 +57,8 @@ func previewFont(_ f: KBFont, size: CGFloat = 19) -> Font {
 struct ContentView: View {
 	@StateObject private var store = SettingsStore()
 	@Environment(\.colorScheme) private var scheme
+	@Environment(\.displayScale) private var displayScale
+	@State private var showResetConfirm = false
 
 	private var isDark: Bool { scheme == .dark }
 
@@ -105,6 +107,14 @@ struct ContentView: View {
 										   value: KBDiagnostics.read().modelActive ? "active" : nil)
 							}
 						}
+
+						Section("Privacy") {
+							Button(role: .destructive) {
+								showResetConfirm = true
+							} label: {
+								iconLabel("trash.fill", tint: .red, title: "Reset learned words")
+							}
+						}
 					}
 					.listStyle(.insetGrouped)
 				}
@@ -114,6 +124,24 @@ struct ContentView: View {
 		}
 		.environmentObject(store)
 		.tint(store.accent.representative(dark: isDark))
+		.task {
+			// Pre-rasterize the emoji atlas for the extension (one-off per emoji set /
+			// display scale / iOS major). The keyboard falls back to live text glyphs —
+			// and their CoreText memory cost — until this has run once.
+			let scale = displayScale
+			Task.detached(priority: .utility) { EmojiAtlas.generateIfNeeded(scale: scale) }
+		}
+		.alert("Reset learned words?", isPresented: $showResetConfirm) {
+			Button("Reset", role: .destructive, action: resetUserData)
+			Button("Cancel", role: .cancel) { }
+		} message: {
+			Text("Clears all words you have typed, autocorrect history, and swipe-style adaptations. The base dictionary and other settings are not affected.")
+		}
+	}
+
+	private func resetUserData() {
+		if let url = KBSettings.userModelURL { try? FileManager.default.removeItem(at: url) }
+		UserDefaults(suiteName: KBSettings.appGroup)?.removeObject(forKey: "kb.glideprofile")
 	}
 
 	// Language is a dropdown (Menu). Only English is wired up today.
@@ -154,7 +182,16 @@ struct DiagnosticsView: View {
 	var body: some View {
 		List {
 			Section {
-				row("Neural model", snap.modelActive ? "active" : "inactive")
+				row("Neural model", snap.modelState ?? (snap.modelActive ? "active" : "inactive"))
+				if let available = snap.lastGateAvailableMB {
+					row("Headroom at last gate", mb(available))
+				}
+				if let error = snap.lastModelError {
+					Text(error)
+						.font(.footnote)
+						.foregroundStyle(.red)
+						.textSelection(.enabled)
+				}
 				row("Times loaded", "\(snap.loadCount)")
 				row("Times dropped", "\(snap.dropCount)")
 				row("Active for", duration(snap.activeSeconds))
@@ -207,7 +244,7 @@ struct DiagnosticsView: View {
 			} header: {
 				Text("Advanced")
 			} footer: {
-				Text("Neural rescorer adds ~20-30 MB of working set for better ranking (dropped under memory pressure). Glide capture records your real swipes to glide_capture.jsonl in the App Group container for offline calibration (tools/glide_eval/calibrate.py) — on-device only, never uploaded. Restart the keyboard after changing these.")
+				Text("The neural rescorer loads only with measured headroom and is dropped under memory pressure. Check the Memory section for its actual device footprint. Glide capture records your real swipes to glide_capture.jsonl in the App Group container for offline calibration (tools/glide_eval/calibrate.py) — on-device only, never uploaded. Restart the keyboard after changing these.")
 					.textSelection(.enabled)
 			}
 

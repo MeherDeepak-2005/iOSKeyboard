@@ -59,6 +59,55 @@ final class LangData {
 		for id in 0..<wordCount { body(word(id), freq(id), Int32(id)) }
 	}
 
+	// MARK: Phase 2 — endpoint (first,last)-letter anchor index for glide candidate generation
+	//
+	// A glide's two most reliable points are its START and END keys. Bucketing every dictionary
+	// word by (firstChar,lastChar) lets the decoder fetch words whose endpoints match the swipe and
+	// shape-score them directly — recovering a word the beam drops when a middle letter is skipped
+	// (the greedy prune misaligns), WITHOUT having to traverse those middle letters. Built lazily on
+	// the first glide over the mmap word blob (IDs only ≈ wordCount·4 B heap), then cached; a
+	// non-gliding session never pays for it.
+	private var anchorIndex: [UInt16: [Int32]]?
+	private static func anchorKey(_ first: UInt8, _ last: UInt8) -> UInt16 { UInt16(first) << 8 | UInt16(last) }
+
+	private func buildAnchorIndex() -> [UInt16: [Int32]] {
+		var tmp: [UInt16: [(id: Int32, f: Int)]] = [:]
+		forEachWord { w, f, id in
+			guard w.count >= 2, let a = w.first?.asciiValue, let b = w.last?.asciiValue else { return }
+			tmp[Self.anchorKey(a, b), default: []].append((id, f))
+		}
+		var out: [UInt16: [Int32]] = [:]
+		out.reserveCapacity(tmp.count)
+		for (k, v) in tmp { out[k] = v.sorted { $0.f > $1.f }.map(\.id) }   // most-frequent first
+		return out
+	}
+
+	/// Build the anchor index now (idempotent) so the FIRST glide of a session doesn't pay for it
+	/// inline. Called on the engine's background init queue — a one-time vocab pass, off any
+	/// interactive path.
+	func warmGlideAnchorIndex() {
+		guard hasTrie, anchorIndex == nil else { return }
+		anchorIndex = buildAnchorIndex()
+	}
+
+	/// Words whose FIRST letter ∈ `first` and LAST letter ∈ `last`, most-frequent first, capped at
+	/// `perBucket` per (first,last) pair (so a common endpoint pair can't flood the pool). The
+	/// endpoint-anchored candidate source (Phase 2); the caller shape-scores what comes back.
+	func glideAnchorWords(first: [Character], last: [Character], perBucket: Int) -> [String] {
+		guard hasTrie else { return [] }
+		if anchorIndex == nil { anchorIndex = buildAnchorIndex() }
+		guard let idx = anchorIndex else { return [] }
+		var ids: [Int32] = []
+		var seen = Set<Int32>()
+		for fc in first { guard let a = fc.asciiValue else { continue }
+			for lc in last { guard let b = lc.asciiValue else { continue }
+				guard let bucket = idx[Self.anchorKey(a, b)] else { continue }
+				for id in bucket.prefix(perBucket) where seen.insert(id).inserted { ids.append(id) }
+			}
+		}
+		return ids.map { word(Int($0)) }
+	}
+
 	/// splitmix64 finalizer — must match build_language_data.mix64.
 	private static func mix64(_ x: UInt64) -> UInt64 {
 		var v = x
@@ -144,6 +193,30 @@ final class LangData {
 		guard let n = trieNode(for: Array(lw.utf8)) else { return false }
 		return nodeU32(n, 6) != UInt32(Self.empty)
 	}
+
+	/// The most frequent dictionary word formed by inserting ONE apostrophe into an
+	/// apostrophe-less string: "dont" → "don't", "im" → "i'm", "whats" → "what's".
+	/// nil when no insertion position yields a vocab word. The letters page has no
+	/// ' key, so an omitted apostrophe is an unrepresentable keystroke, not a typo —
+	/// the engine corrects these directly (stock's contraction pairs, computed from
+	/// the lexicon instead of hardcoded).
+	func trieApostropheRestoration(of lw: String) -> (word: String, freq: Int)? {
+		guard hasTrie, lw.count >= 2, !lw.contains("'") else { return nil }
+		let bytes = Array(lw.utf8)
+		var best: (word: String, freq: Int)?
+		for i in 1..<bytes.count {
+			var cand = bytes
+			cand.insert(UInt8(ascii: "'"), at: i)
+			guard let n = trieNode(for: cand) else { continue }
+			let id = nodeU32(n, 6)
+			guard id != UInt32(Self.empty) else { continue }
+			let f = freq(Int(Int32(bitPattern: id)))
+			if best == nil || f > best!.freq {
+				best = (String(decoding: cand, as: UTF8.self), f)
+			}
+		}
+		return best
+	}
 	func trieHasPrefix(_ lw: String) -> Bool { trieNode(for: Array(lw.utf8)) != nil }
 	func trieWordID(_ lw: String) -> Int32? {
 		guard let n = trieNode(for: Array(lw.utf8)) else { return nil }
@@ -160,7 +233,8 @@ final class LangData {
 		guard hasTrie, !chars.isEmpty else { return [] }
 		let n = chars.count
 		let tapRow: [KeyTap?]? = taps?.count == n ? taps : nil
-		let maxDepth = n + Int(maxCost / Trie.delCost) + 1
+		// +2 headroom: an apostrophe level adds only apostropheSkipCost (see Trie.search).
+		let maxDepth = n + Int(maxCost / Trie.delCost) + 2
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
 		for i in 0...n { dp[i] = Double(i) * Trie.insCost }
 		var hits: [(id: Int32, cost: Double)] = []
@@ -175,11 +249,13 @@ final class LangData {
 			func recurse(_ node: Int, _ letter: UInt8, _ prevLetter: UInt8, _ depth: Int) {
 				guard depth <= maxDepth else { return }
 				let base = depth * (n + 1), prev = base - (n + 1)
-				var rowMin = dp[prev] + Trie.delCost
+				// Omitted-apostrophe discount — must stay byte-identical to Trie.recurse.
+				let skip = letter == KB.apostrophe ? KB.apostropheSkipCost : Trie.delCost
+				var rowMin = dp[prev] + skip
 				dp[base] = rowMin
 				for col in 1...n {
 					let ins = dp[base + col - 1] + Trie.insCost
-					let del = dp[prev + col] + Trie.delCost
+					let del = dp[prev + col] + skip
 					var s = KB.subCost(letter, typed: chars[col - 1], tap: tapRow?[col - 1] ?? nil)
 					if depth == 1, col == 1, letter != chars[0] {
 						s += Trie.firstLetterPenaltyPolicy(typedLength: n, candidateFirst: letter, typedFirst: chars[0])
