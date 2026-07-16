@@ -9,7 +9,7 @@ final class KeyboardViewController: UIInputViewController {
 
 	private var keyboard: KeyboardView!
 	private var heightConstraint: NSLayoutConstraint?
-	private let engine = KeyboardEngine()
+	private let engine = KeyboardEngine.shared   // process-wide: see KeyboardEngine.shared
 
 	private enum Mode { case predict, complete(String), revert(String), glided(String) }
 	private var mode: Mode = .predict
@@ -105,9 +105,26 @@ final class KeyboardViewController: UIInputViewController {
 		kb.onNextKeyboard   = { [weak self] in self?.advanceToNextInputMode() }
 		kb.onPickSuggestion = { [weak self] in self?.handlePick($0) }
 		kb.onGlide          = { [weak self] path, times, layout in self?.handleGlide(path, times, layout) }
-		// Emoji search swaps the suggestion strip for a taller search header; track it.
-		kb.onHeightChange   = { [weak self, weak kb] in
+		kb.onClipboardPick  = { [weak self] in self?.handleClipboardPick($0) }
+		kb.onOpenClipboard  = { [weak self, weak kb] in
 			guard let self, let kb else { return }
+			// Capture BEFORE building the panel so a just-copied clip is already in
+			// the list the panel loads — this is the only place we read the pasteboard.
+			self.captureClipboardIfNeeded()
+			kb.showClipboard(hasFullAccess: self.hasFullAccess)
+		}
+		kb.onOpenMedia      = { [weak self, weak kb] kind in
+			guard let self, let kb else { return }
+			kb.showMedia(kind: kind, hasFullAccess: self.hasFullAccess)
+		}
+		// Emoji/media search swaps the strip for a taller header, and the browsing
+		// overlays expand the deck; track both. The `keyboard === kb` guard matters:
+		// buildKeyboard() (theme/globe change) replaces the view AND the constraint, so
+		// a stale view firing this would size the CURRENT constraint from a DEAD view's
+		// page — e.g. an expanded emoji height under a letters deck, which reads as a
+		// tall keyboard with dead space beneath the keys.
+		kb.onHeightChange   = { [weak self, weak kb] in
+			guard let self, let kb, self.keyboard === kb else { return }
 			self.heightConstraint?.constant = kb.keyboardHeight
 		}
 
@@ -170,20 +187,52 @@ final class KeyboardViewController: UIInputViewController {
 		// key and shift state track the cursor.
 		updateActionKey()
 		updateAutoShift()              // cursor moved / host cleared the field
-		snapBackFromEmojiIfUserTouched()
+		snapBackFromOverlaysIfUserTouched()
 	}
 
 	override func selectionDidChange(_ textInput: UITextInput?) {
 		super.selectionDidChange(textInput)
-		snapBackFromEmojiIfUserTouched()
+		snapBackFromOverlaysIfUserTouched()
 	}
 
 	/// Tapping the input field (or otherwise moving the cursor by hand) while the emoji
-	/// page or emoji search is up returns to the letter deck — stock behavior. Guarded by
-	/// the proxy-edit timestamp so our own inserts/deletes never trigger it.
-	private func snapBackFromEmojiIfUserTouched() {
-		guard isUserDocumentTouch, keyboard?.dismissEmojiIfActive() == true else { return }
+	/// page, emoji search, or clipboard panel is up returns to the letter deck — stock
+	/// behavior. Guarded by the proxy-edit timestamp so our own inserts/deletes never
+	/// trigger it.
+	private func snapBackFromOverlaysIfUserTouched() {
+		guard isUserDocumentTouch, keyboard?.dismissOverlaysIfActive() == true else { return }
 		scheduleSuggestions()          // the bar is live again — refill it for the new context
+	}
+
+	// MARK: Clipboard — capture on panel open, insert from saved history
+
+	/// Capture the current system pasteboard into history. Called ONLY when the user
+	/// opens the clipboard panel — a deliberate action, so iOS's one "pasted from"
+	/// notice reads as expected (there is no banner-free way to read arbitrary text;
+	/// `changeCount` dedupe means at most one read per distinct copy). We never read
+	/// on the type path, so copying elsewhere raises no banner and never stalls layout.
+	private func captureClipboardIfNeeded() {
+		guard hasFullAccess else { return }
+		let pb = UIPasteboard.general
+		let count = pb.changeCount
+		guard count != KBClipboard.consumedChangeCount else { return }
+		KBClipboard.consumedChangeCount = count
+		guard pb.hasStrings, let text = pb.string,
+			  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+		KBClipboard.add(text)
+	}
+
+	/// A history row from the clipboard panel. Inserts and stays on the panel
+	/// (multi-paste, Gboard-style). Never learned — clips aren't typing.
+	private func handleClipboardPick(_ text: String) {
+		noteProxyEdit()
+		resolveCorrectionAsAccepted()
+		resolveGlideAccepted()
+		resetEraseTracking()
+		wordTaps.removeAll(keepingCapacity: true)
+		textDocumentProxy.insertText(text)
+		lastCorrection = nil
+		updateAutoShift()
 	}
 
 	// MARK: Field-aware suggestion gating (mirror stock iOS)

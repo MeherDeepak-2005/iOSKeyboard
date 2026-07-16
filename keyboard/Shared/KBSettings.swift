@@ -202,6 +202,24 @@ enum KBSettings {
 		set { store.set(newValue, forKey: Key.accent) }
 	}
 	static var accent: KBAccent { KBPalette.accent(id: accentID) }
+	/// KLIPY API key (klipy.com/developers). App Group first (host app can set it);
+	/// falls back to an optional "KlipyAPIKey" Info.plist entry. Empty = GIF/sticker
+	/// panel shows its "add key" hint and makes no network calls.
+	static var klipyAPIKey: String {
+		get {
+			if let k = store.string(forKey: "kb.klipy.key"), !k.isEmpty { return k }
+			return (Bundle.main.object(forInfoDictionaryKey: "KlipyAPIKey") as? String) ?? ""
+		}
+		set { store.set(newValue, forKey: "kb.klipy.key") }
+	}
+	/// Stable ANONYMOUS id KLIPY scopes per-user recents/ads to. Random UUID minted
+	/// once — never derived from anything personal.
+	static var klipyCustomerID: String {
+		if let id = store.string(forKey: "kb.klipy.customer") { return id }
+		let id = UUID().uuidString
+		store.set(id, forKey: "kb.klipy.customer")
+		return id
+	}
 	static var font: KBFont {
 		get { KBFont(rawValue: store.string(forKey: Key.font) ?? "") ?? .system }
 		set { store.set(newValue.rawValue, forKey: Key.font) }

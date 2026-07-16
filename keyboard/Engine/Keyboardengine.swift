@@ -136,6 +136,14 @@ final class KeyboardEngine {
 		}
 	}
 
+	/// Process-wide engine. iOS instantiates the keyboard's view controller more than
+	/// once per session (a throwaway warmup instance, then the live one), so a
+	/// per-controller engine loaded the neural model — and registered a memory-pressure
+	/// source — once PER instance (the "model active ×4" symptom, and up to 4 resident
+	/// models against the ~60 MB jetsam ceiling). One shared engine loads once, holds
+	/// one model, and lets learning persist across the controller churn.
+	static let shared = KeyboardEngine()
+
 	init() {
 		let ng = NgramScorer(user: user)
 		ngram = ng

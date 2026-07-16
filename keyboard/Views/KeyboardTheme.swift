@@ -50,7 +50,7 @@ struct KeyboardTheme {
 
 // MARK: - Model
 
-enum KeyboardPage { case letters, numbers, symbols, emoji }
+enum KeyboardPage { case letters, numbers, symbols, emoji, clipboard, media }
 enum ShiftState   { case off, on, locked }
 enum KeyRole      { case normal, special, accent, accentSoft }   // accentSoft = lighter tint of the accent (shift/delete)
 enum KeyWidth     { case unit, wide, ret, flex }

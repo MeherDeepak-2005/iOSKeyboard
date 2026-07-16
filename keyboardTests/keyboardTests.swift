@@ -134,6 +134,116 @@ struct KeyboardTests {
         #expect(!lex.isContractionForm("whens"))      // no apostrophe → restoration's job
     }
 
+    // Contractions MISSING from the 60k vocab can't be restored by trie lookup
+    // ("whens" → "when's" has no entry to validate against — it autocorrected to
+    // "when"). Synthesis covers the closed-class bases; open-class stays off so
+    // plurals never become possessives.
+    @Test func syntheticContractionRestoration() {
+        #expect(Lexicon.syntheticContraction(of: "whens") == "when's")
+        #expect(Lexicon.syntheticContraction(of: "theres") == "there's")
+        #expect(Lexicon.syntheticContraction(of: "mustnt") == "mustn't")
+        #expect(Lexicon.syntheticContraction(of: "cars") == nil)        // plural, not possessive
+        #expect(Lexicon.syntheticContraction(of: "lexicons") == nil)    // OOV plural stays put
+        #expect(Lexicon.syntheticContraction(of: "when's") == nil)      // already has its '
+        #expect(Lexicon.syntheticContraction(of: "wasnt") == nil)       // corpus word → trie's job
+    }
+
+    @Test func clipboardStoreRoundTrip() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("clip-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        KBClipboard.add("hello", at: url)
+        KBClipboard.add("world", at: url)
+        KBClipboard.add("hello", at: url)              // dedupe → resurfaces to front
+        #expect(KBClipboard.all(at: url).map(\.text) == ["hello", "world"])
+        KBClipboard.togglePin("world", at: url)
+        KBClipboard.clearUnpinned(at: url)             // pins survive the broom
+        let items = KBClipboard.all(at: url)
+        #expect(items.map(\.text) == ["world"] && items[0].pinned)
+        KBClipboard.remove("world", at: url)
+        #expect(KBClipboard.all(at: url).isEmpty)
+        KBClipboard.add("  \n ", at: url)              // whitespace-only never saves
+        #expect(KBClipboard.all(at: url).isEmpty)
+    }
+
+    @MainActor @Test func renderClipboardPanel() throws {
+        let items = [
+            KBClipboardItem(text: "hello@example.com", pinned: true, date: Date()),
+            KBClipboardItem(text: "The quick brown fox jumps over the lazy dog — a longer clip that should truncate at two lines in the panel row.", pinned: false, date: Date()),
+            KBClipboardItem(text: "4021 7789", pinned: false, date: Date()),
+        ]
+        let v = ClipboardPanelView(theme: .system(dark: false), showsGlobe: true,
+                                   hasFullAccess: true, items: items)
+        v.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
+        v.backgroundColor = UIColor(hex: 0xE8E6EC)
+        v.layoutIfNeeded()
+        try writePNG(of: v, name: "clipboard_panel")
+
+        let empty = ClipboardPanelView(theme: .system(dark: false), showsGlobe: true,
+                                       hasFullAccess: false, items: [])
+        empty.frame = v.frame
+        empty.backgroundColor = v.backgroundColor
+        empty.layoutIfNeeded()
+        try writePNG(of: empty, name: "clipboard_panel_empty")
+    }
+
+    // KLIPY response parsing: preview picks the smallest animated variant (webp
+    // before gif), send picks the biggest gif — the two ends of the memory ledger.
+    @Test func klipyParsePicksLeanPreviewAndFullSend() throws {
+        let json: [String: Any] = ["result": true, "data": ["has_next": true, "data": [[
+            "id": 42, "slug": "hello-wave", "title": "Hello",
+            "file": [
+                "hd": ["gif": ["url": "https://x.test/hd.gif", "width": 480, "height": 360, "size": 2_400_000]],
+                "sm": ["gif": ["url": "https://x.test/sm.gif", "width": 200, "height": 150, "size": 300_000]],
+                "xs": ["webp": ["url": "https://x.test/xs.webp", "width": 120, "height": 90, "size": 60_000],
+                       "gif":  ["url": "https://x.test/xs.gif",  "width": 120, "height": 90, "size": 150_000]],
+            ],
+        ]]]]
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let (items, hasNext) = KlipyClient.parse(data)
+        #expect(hasNext)
+        let item = try #require(items.first)
+        #expect(item.id == "42")
+        #expect(item.previewURL.absoluteString == "https://x.test/xs.webp")   // smallest, webp first
+        #expect(item.sendURL.absoluteString == "https://x.test/hd.gif")       // biggest gif
+        // Garbage in → empty out, never a crash.
+        #expect(KlipyClient.parse(Data("nonsense".utf8)).0.isEmpty)
+    }
+
+    @MainActor @Test func renderMediaPanelHintState() throws {
+        // No injected items + no API key → the panel must show its key hint and
+        // make zero network calls (deterministic offline render).
+        let v = MediaPanelView(theme: .system(dark: false), showsGlobe: true,
+                               hasFullAccess: true, kind: .gifs)
+        v.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
+        v.backgroundColor = UIColor(hex: 0xE8E6EC)
+        v.layoutIfNeeded()
+        try writePNG(of: v, name: "media_panel_hint")
+    }
+
+    // The strip is ONLY suggestions + the clipboard icon: no paste chip ever takes a
+    // suggestion slot (clipboard content lives in the panel).
+    @MainActor @Test func renderSuggestionBar() throws {
+        let bar = SuggestionBar(theme: .system(dark: false))
+        bar.frame = CGRect(x: 0, y: 0, width: 390, height: 34)
+        bar.backgroundColor = UIColor(hex: 0xE8E6EC)
+        bar.setSuggestions(["hello", "help", "hell"], typedPrefix: "hel")
+        bar.layoutIfNeeded()
+        try writePNG(of: bar, name: "suggestion_bar_plain")
+    }
+
+    // The browsing overlays (emoji grid, GIF/sticker panel) get extra height; the
+    // typing deck and the clipboard list must stay at the normal height — an
+    // expansion leaking into .letters is what puts empty space under the keys.
+    @MainActor @Test func onlyBrowsingOverlaysExpandHeight() throws {
+        let kb = KeyboardView(theme: .system(dark: false), showsGlobe: true)
+        let base = kb.keyboardHeight
+        #expect(base > 200 && base < 300)          // sane letters-deck height
+        kb.showClipboard(hasFullAccess: true)
+        #expect(kb.keyboardHeight == base)         // list panel: no expansion
+        kb.dismissOverlaysIfActive()
+        #expect(kb.keyboardHeight == base)         // and it returns cleanly
+    }
+
     // MARK: Visual render checks — write PNGs of the emoji UI for eyeballing.
     // (The app target doesn't bundle emoji.bin, so the store is injected from the
     // repo file. PNGs land in keyboardTests/renders/, which is disposable.)
