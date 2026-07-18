@@ -80,6 +80,7 @@
 				Shared/KBMediaCache.swift,
 				Shared/KBSafetyLexicon.swift,
 				Shared/KBSettings.swift,
+				Shared/KBStats.swift,
 				"Shared/UIColor+Hex.swift",
 				tokenizer.bin,
 				Views/ClipboardPanel.swift,
