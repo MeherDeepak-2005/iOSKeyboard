@@ -244,6 +244,53 @@ struct KeyboardTests {
         #expect(kb.keyboardHeight == base)         // and it returns cleanly
     }
 
+    // Gamification math: streaks, leagues, trophies, pruning — pure KBStats.apply.
+    @Test func statsStreaksLeaguesAndTrophies() throws {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        var comps = DateComponents(year: 2026, month: 7, day: 10, hour: 12)
+        comps.timeZone = cal.timeZone
+        let day1 = cal.date(from: comps)!
+        let day2 = cal.date(byAdding: .day, value: 1, to: day1)!
+        let day4 = cal.date(byAdding: .day, value: 3, to: day1)!   // gap breaks the streak
+
+        var s = KBStatsData()
+        KBStats.apply(words: 60, glided: false, on: &s, date: day1, calendar: cal)
+        KBStats.apply(words: 40, glided: true, on: &s, date: day1, calendar: cal)
+        #expect(s.total == 100 && s.totalGlided == 40 && s.bestDay == 100)
+        #expect(s.currentStreak == 1)
+
+        KBStats.apply(words: 10, glided: false, on: &s, date: day2, calendar: cal)
+        #expect(s.currentStreak == 2 && s.bestStreak == 2)         // consecutive day
+
+        KBStats.apply(words: 10, glided: false, on: &s, date: day4, calendar: cal)
+        #expect(s.currentStreak == 1 && s.bestStreak == 2)         // gap → reset, best kept
+
+        // Leagues: floors and progress.
+        #expect(KBLeague.league(for: 0) == .bronze)
+        #expect(KBLeague.league(for: 5_000) == .silver)
+        #expect(KBLeague.league(for: 99_999) == .gold)
+        #expect(KBLeague.league(for: 100_000) == .diamond)
+        #expect(KBLeague.progress(for: 100_000) == 1)
+
+        // Trophies: 120 total words earns First Steps; glide + streak ones track.
+        let earned = Set(KBStats.trophies.filter { $0.isEarned(s) }.map(\.id))
+        #expect(earned.contains("first-steps"))
+        #expect(earned.contains("lift-off"))                       // 40 glided ≥ 10
+        #expect(!earned.contains("chatterbox"))                    // 120 < 1,000
+        #expect(!earned.contains("warming-up"))                    // best streak 2 < 3
+
+        // Day map prunes to keepDays without touching lifetime totals.
+        var big = KBStatsData()
+        for i in 0..<(KBStats.keepDays + 20) {
+            let d = cal.date(byAdding: .day, value: i, to: day1)!
+            KBStats.apply(words: 1, glided: false, on: &big, date: d, calendar: cal)
+        }
+        #expect(big.days.count == KBStats.keepDays)
+        #expect(big.total == KBStats.keepDays + 20)
+        #expect(big.currentStreak == KBStats.keepDays + 20)
+    }
+
     // MARK: Visual render checks — write PNGs of the emoji UI for eyeballing.
     // (The app target doesn't bundle emoji.bin, so the store is injected from the
     // repo file. PNGs land in keyboardTests/renders/, which is disposable.)

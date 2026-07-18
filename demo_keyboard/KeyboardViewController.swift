@@ -180,6 +180,11 @@ final class KeyboardViewController: UIInputViewController {
 		if needsGlobe != showsGlobe { showsGlobe = needsGlobe; buildKeyboard() }
 	}
 
+	override func viewWillDisappear(_ animated: Bool) {
+		super.viewWillDisappear(animated)
+		KBStats.flush()                // keyboard dismissing — bank the buffered word counts
+	}
+
 	override func textDidChange(_ textInput: UITextInput?) {
 		super.textDidChange(textInput)
 		// Deliberately NOT re-evaluating the strip here: it is resolved once (viewDidAppear)
@@ -371,8 +376,12 @@ final class KeyboardViewController: UIInputViewController {
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 			let w = trailingWord(ctx)
 			// Never learn from secure fields — password fragments must not enter the
-			// persisted personal model.
-			if !w.isEmpty, !isSecureField { engine.learn(context: contextWords(ctx, max: 8), word: w) }
+			// persisted personal model. (Stats ride the same gate: password words
+			// shouldn't count toward streaks either.)
+			if !w.isEmpty, !isSecureField {
+				engine.learn(context: contextWords(ctx, max: 8), word: w)
+				KBStats.note(glided: false)
+			}
 			// Punctuation right after an auto-inserted space: delete the space first
 			// so punctuation lands directly after the word ("word." not "word .").
 			// Only when the space was ours (lastCorrection?.trailing) — never touches
@@ -400,7 +409,10 @@ final class KeyboardViewController: UIInputViewController {
 		var correction = applyAutocorrectIfNeeded()
 		let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 		let w = trailingWord(ctx)
-		if !w.isEmpty, !isSecureField { engine.learn(context: contextWords(ctx, max: 8), word: w) }
+		if !w.isEmpty, !isSecureField {
+			engine.learn(context: contextWords(ctx, max: 8), word: w)
+			KBStats.note(glided: false)
+		}
 		textDocumentProxy.insertText("\n")
 		correction?.trailing = "\n"
 		lastCorrection = correction
@@ -548,6 +560,7 @@ final class KeyboardViewController: UIInputViewController {
 			for _ in 0..<partial.count { textDocumentProxy.deleteBackward() }
 			textDocumentProxy.insertText(s + " ")
 			engine.learn(context: ctx, word: s)
+			KBStats.note(glided: false)
 			// Swapping the typed word for a different suggestion is strong evidence the
 			// typed word was a mistake — lift its keep protection and walk back a use.
 			// This is the "typed mjght, then picked might" healing path.
@@ -557,6 +570,7 @@ final class KeyboardViewController: UIInputViewController {
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
 			textDocumentProxy.insertText(s + " ")
 			engine.learn(context: ctx, word: s)
+			KBStats.note(glided: false)
 			lastCorrection = nil        // nothing the user "typed" to revert to
 		case .revert(let original):
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
@@ -643,6 +657,7 @@ final class KeyboardViewController: UIInputViewController {
 			if let last = ctx.last, self.isWordChar(last) { text = " " + text }   // auto-space after letters
 			self.textDocumentProxy.insertText(text)
 			self.engine.learn(context: context, word: word)
+			KBStats.note(glided: true)
 			self.lastCorrection = Correction(original: "", corrected: display, trailing: " ", fromAutocorrect: false)
 			self.mode = .glided(display)
 			self.pendingGlideAccept = true               // #37: awaiting the user's verdict on this word

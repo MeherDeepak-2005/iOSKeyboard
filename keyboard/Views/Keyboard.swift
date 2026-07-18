@@ -40,6 +40,7 @@ final class KeyboardView: UIView {
 
 	private let theme: KeyboardTheme
 	private let deckLayer = CAGradientLayer()
+	private let photoLayer = CALayer()       // Theme Studio background photo (optional)
 	private let showsGlobe: Bool
 	private var page: KeyboardPage = .letters
 	private var shift: ShiftState = .on
@@ -156,6 +157,15 @@ final class KeyboardView: UIView {
 		deckLayer.startPoint = CGPoint(x: 0.5, y: 0)
 		deckLayer.endPoint = CGPoint(x: 0.5, y: 1)
 		layer.insertSublayer(deckLayer, at: 0)
+		// Theme Studio photo background: the APP pre-downscales to keyboard size at
+		// save time, so this decodes ~1-2 MB once — never a full camera image.
+		if KBSettings.customThemeEnabled, KBSettings.customTheme?.usesPhoto == true,
+		   let url = KBSettings.themePhotoURL, let img = UIImage(contentsOfFile: url.path) {
+			photoLayer.contents = img.cgImage
+			photoLayer.contentsGravity = .resizeAspectFill
+			photoLayer.masksToBounds = true
+			layer.insertSublayer(photoLayer, above: deckLayer)
+		}
 		trailLayer.fillColor = nil
 		trailLayer.lineWidth = 9
 		trailLayer.lineCap = .round
@@ -497,6 +507,7 @@ final class KeyboardView: UIView {
 		super.layoutSubviews()
 		CATransaction.begin(); CATransaction.setDisableActions(true)
 		deckLayer.frame = bounds
+		photoLayer.frame = bounds
 		CATransaction.commit()
 		if page == .emoji {
 			emojiView?.frame = bounds

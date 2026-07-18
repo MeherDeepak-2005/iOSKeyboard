@@ -66,8 +66,8 @@ struct ContentView: View {
 		NavigationStack {
 			GeometryReader { geo in
 				VStack(spacing: 0) {
-					AdCarousel(colors: store.accent.colors(dark: isDark))
-						.frame(height: geo.size.height * 0.20)   // ~20% reserved for ads
+					AchievementBanner()
+						.frame(height: geo.size.height * 0.20)   // ex-ad slot → league banner
 
 					List {
 						Section("Customize") {
@@ -80,6 +80,14 @@ struct ContentView: View {
 										   title: "Themes",
 										   value: store.accent.name,
 										   trailingGradient: store.accent.linearGradient(dark: isDark))
+							}
+							NavigationLink {
+								ThemeStudioView()
+							} label: {
+								SettingRow(icon: "paintbrush.pointed.fill",
+										   tint: store.accent.representative(dark: isDark),
+										   title: "Theme Studio",
+										   value: KBSettings.customThemeEnabled ? "custom" : nil)
 							}
 							NavigationLink {
 								FontsView()
@@ -287,38 +295,6 @@ struct DiagnosticsView: View {
 	private func duration(_ s: Double) -> String {
 		if s <= 0 { return "—" }
 		return s < 60 ? "\(Int(s)) s" : String(format: "%.1f min", s / 60)
-	}
-}
-
-// MARK: - Ad carousel (placeholder for future monetization)
-
-struct AdCarousel: View {
-	let colors: [Color]
-	@State private var page = 0
-	private let slides = ["Your ad here", "Promote your app", "Sponsored space"]
-	private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
-
-	var body: some View {
-		TabView(selection: $page) {
-			ForEach(slides.indices, id: \.self) { i in
-				RoundedRectangle(cornerRadius: 22, style: .continuous)
-					.fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-					.overlay(
-						VStack(spacing: 4) {
-							Image(systemName: "megaphone.fill").font(.title2)
-							Text(slides[i]).font(.headline)
-							Text("Ad space · tap to learn more").font(.caption2).opacity(0.85)
-						}
-						.foregroundStyle(.white)
-					)
-					.padding(.horizontal)
-					.tag(i)
-			}
-		}
-		.tabViewStyle(.page(indexDisplayMode: .automatic))
-		.onReceive(timer) { _ in
-			withAnimation { page = (page + 1) % slides.count }
-		}
 	}
 }
 

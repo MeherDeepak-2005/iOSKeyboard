@@ -180,6 +180,23 @@ enum KBPalette {
 	static func accent(id: String) -> KBAccent { all.first { $0.id == id } ?? `default` }
 }
 
+/// Theme Studio custom theme — ROLE-based colors (letters / special keys / action
+/// key / text / background), not per-individual-key: that maps 1:1 onto KeyRole,
+/// reads coherently, and keeps the blob a few dozen bytes. Background is a vertical
+/// gradient (set start == end for a solid) or a photo (downscaled by the APP at
+/// save time — the extension only ever decodes a keyboard-sized image).
+struct KBCustomTheme: Codable, Equatable {
+	var keys: UInt32        = 0xFFFFFF   // letter-key fill
+	var special: UInt32     = 0xDDE1EA   // shift / delete / 123 / globe fill
+	var accentStart: UInt32 = 0x37C26B   // action-key gradient
+	var accentEnd: UInt32   = 0x1E9E5A
+	var text: UInt32        = 0x1B1B1D   // key glyphs + suggestions
+	var bgStart: UInt32     = 0xF2F0F4   // background gradient (top → bottom)
+	var bgEnd: UInt32       = 0xE4E1E9
+	var dark = false                     // dark-surface treatment (popups, highlights)
+	var usesPhoto = false                // kb_theme_bg.jpg in the App Group backs the deck
+}
+
 enum KBSettings {
 	nonisolated static let appGroup = "group.com.swiftuimasterclass.keyboard"
 	private static var store: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
@@ -250,5 +267,32 @@ enum KBSettings {
 	static var userModelURL: URL? {
 		FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
 			.appendingPathComponent("kb_model.json")
+	}
+
+	// MARK: Theme Studio
+
+	/// The saved custom theme (nil = never designed one). Enabling is a SEPARATE
+	/// flag so switching back to a stock accent keeps the design for later.
+	static var customTheme: KBCustomTheme? {
+		get {
+			guard let data = store.data(forKey: "kb.customtheme") else { return nil }
+			return try? JSONDecoder().decode(KBCustomTheme.self, from: data)
+		}
+		set {
+			if let newValue, let data = try? JSONEncoder().encode(newValue) {
+				store.set(data, forKey: "kb.customtheme")
+			} else {
+				store.removeObject(forKey: "kb.customtheme")
+			}
+		}
+	}
+	static var customThemeEnabled: Bool {
+		get { store.bool(forKey: "kb.customtheme.on") }
+		set { store.set(newValue, forKey: "kb.customtheme.on") }
+	}
+	/// The custom background photo, pre-downscaled by the app (see ThemeStudioView).
+	static var themePhotoURL: URL? {
+		FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
+			.appendingPathComponent("kb_theme_bg.jpg")
 	}
 }

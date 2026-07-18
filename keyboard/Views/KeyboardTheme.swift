@@ -16,7 +16,11 @@ struct KeyboardTheme {
 
 	/// Modern Material-style keyboard. The action key uses the full accent gradient;
 	/// shift/delete use a lighter tint of that same accent. Special keys stay neutral.
+	/// A Theme Studio design, when enabled, overrides the stock look entirely.
 	static func system(dark: Bool) -> KeyboardTheme {
+		if KBSettings.customThemeEnabled, let c = KBSettings.customTheme {
+			return custom(c)
+		}
 		let accent = KBSettings.accent
 		let g = accent.gradient(dark: dark)
 		// Transparent "glass" styling: the deck background is fully clear so the system
@@ -45,6 +49,37 @@ struct KeyboardTheme {
 				shadowColor: UIColor(white: 0, alpha: 1), shadowOpacity: 0, cornerRadius: 8, isDark: false,
 				font: KBSettings.font)
 		}
+	}
+
+	/// Build the deck look from a Theme Studio design. Keys go SOLID (translucency is
+	/// the stock glass look; over a chosen gradient/photo, solid role colors read as
+	/// intended). With a photo the gradient goes clear so the image layer shows.
+	static func custom(_ c: KBCustomTheme) -> KeyboardTheme {
+		let text = UIColor(hex: c.text)
+		let keyFill = UIColor(hex: c.keys)
+		let specialFill = UIColor(hex: c.special)
+		// Glyph on the action key: follow the accent's own brightness, not the theme's
+		// dark flag — a pale mint action key needs dark text even in a dark theme.
+		let accentGlyph: UIColor = luminance(c.accentEnd) > 0.6 ? UIColor(hex: 0x1B1B1D) : .white
+		return KeyboardTheme(name: "Custom",
+			backgroundTop: c.usesPhoto ? .clear : UIColor(hex: c.bgStart),
+			backgroundBottom: c.usesPhoto ? .clear : UIColor(hex: c.bgEnd),
+			key: keyFill, keyText: text,
+			specialKey: specialFill, specialKeyText: text,
+			accentKeyText: accentGlyph,
+			accentStart: UIColor(hex: c.accentStart), accentEnd: UIColor(hex: c.accentEnd),
+			accentSoft: specialFill, accentSoftText: text,
+			shadowColor: c.dark ? .white : UIColor(white: 0, alpha: 1),
+			shadowOpacity: 0, cornerRadius: 8, isDark: c.dark,
+			font: KBSettings.font)
+	}
+
+	/// Relative luminance of a hex RGB (0…1) — picks glyph color on accent fills.
+	static func luminance(_ hex: UInt32) -> Double {
+		let r = Double((hex >> 16) & 0xFF) / 255
+		let g = Double((hex >> 8) & 0xFF) / 255
+		let b = Double(hex & 0xFF) / 255
+		return 0.2126 * r + 0.7152 * g + 0.0722 * b
 	}
 }
 
