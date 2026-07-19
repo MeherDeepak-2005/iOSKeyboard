@@ -119,37 +119,73 @@ final class LangData {
 
 	/// Continuations of a one-word context, best first. `total` is the true
 	/// (pre-truncation) context count, so ratios remain honest probabilities.
-	func bigrams(after ctx: Int32) -> (total: Int, entries: [(word: Int32, count: Int)])? {
+	func bigrams(after ctx: Int32, limit: Int? = nil) -> (total: Int, entries: [(word: Int32, count: Int)])? {
+		guard let range = bigramRange(after: ctx) else { return nil }
+		let count = min(range.count, limit ?? range.count)
+		return (range.total, entries(biEntBase, range.start, range.start + count))
+	}
+	func trigrams(after w1: Int32, _ w2: Int32, limit: Int? = nil) -> (total: Int, entries: [(word: Int32, count: Int)])? {
+		guard let range = trigramRange(after: w1, w2) else { return nil }
+		let count = min(range.count, limit ?? range.count)
+		return (range.total, entries(triEntBase, range.start, range.start + count))
+	}
+
+	/// Batch lookup for scorer candidates. The mmap range is scanned once and only
+	/// matching IDs are retained, avoiding one full array allocation per candidate.
+	func bigramCounts(after ctx: Int32, words: [Int32])
+		-> (total: Int, types: Int, counts: [Int32: Int])? {
+		guard let range = bigramRange(after: ctx) else { return nil }
+		return selectedCounts(base: biEntBase, range: range, words: words)
+	}
+
+	func trigramCounts(after w1: Int32, _ w2: Int32, words: [Int32])
+		-> (total: Int, types: Int, counts: [Int32: Int])? {
+		guard let range = trigramRange(after: w1, w2) else { return nil }
+		return selectedCounts(base: triEntBase, range: range, words: words)
+	}
+
+	private func bigramRange(after ctx: Int32) -> (total: Int, start: Int, count: Int)? {
 		guard biBuckets > 0 else { return nil }
 		let mask = biBuckets - 1
 		let key = Int(ctx)
-		var b = Int(Self.mix64(UInt64(UInt32(bitPattern: ctx))) & UInt64(mask))
+		var bucket = Int(Self.mix64(UInt64(UInt32(bitPattern: ctx))) & UInt64(mask))
 		while true {
-			let base = biHashBase + 16 * b
+			let base = biHashBase + 16 * bucket
 			let slot = u32(base)
 			if slot == Self.empty { return nil }
-			if slot == key {
-				let start = u32(base + 8), count = u32(base + 12)
-				return (u32(base + 4), entries(biEntBase, start, start + count))
-			}
-			b = (b + 1) & mask
+			if slot == key { return (u32(base + 4), u32(base + 8), u32(base + 12)) }
+			bucket = (bucket + 1) & mask
 		}
 	}
-	func trigrams(after w1: Int32, _ w2: Int32) -> (total: Int, entries: [(word: Int32, count: Int)])? {
+
+	private func trigramRange(after w1: Int32, _ w2: Int32)
+		-> (total: Int, start: Int, count: Int)? {
 		guard triBuckets > 0 else { return nil }
 		let mask = triBuckets - 1
 		let key = (UInt64(UInt32(bitPattern: w1)) << 32) | UInt64(UInt32(bitPattern: w2))
-		var b = Int(Self.mix64(key) & UInt64(mask))
+		var bucket = Int(Self.mix64(key) & UInt64(mask))
 		while true {
-			let base = triHashBase + 20 * b
+			let base = triHashBase + 20 * bucket
 			let slot = u32(base)
 			if slot == Self.empty { return nil }
 			if slot == Int(w1), u32(base + 4) == Int(w2) {
-				let start = u32(base + 12), count = u32(base + 16)
-				return (u32(base + 8), entries(triEntBase, start, start + count))
+				return (u32(base + 8), u32(base + 12), u32(base + 16))
 			}
-			b = (b + 1) & mask
+			bucket = (bucket + 1) & mask
 		}
+	}
+
+	private func selectedCounts(base: Int, range: (total: Int, start: Int, count: Int),
+								words: [Int32]) -> (total: Int, types: Int, counts: [Int32: Int]) {
+		let wanted = Set(words)
+		var found: [Int32: Int] = [:]
+		found.reserveCapacity(min(wanted.count, range.count))
+		guard !wanted.isEmpty else { return (range.total, range.count, found) }
+		for index in range.start..<(range.start + range.count) {
+			let word = Int32(u32(base + 8 * index))
+			if wanted.contains(word) { found[word] = u32(base + 8 * index + 4) }
+		}
+		return (range.total, range.count, found)
 	}
 
 	private func entries(_ base: Int, _ start: Int, _ end: Int) -> [(word: Int32, count: Int)] {
@@ -228,7 +264,8 @@ final class LangData {
 	/// first-letter policy — run in place over the mapped node records. One flat DP
 	/// buffer for the whole walk; one `withUnsafeBytes` for the whole walk so the hot
 	/// loop does raw unaligned loads, not per-node closures.
-	func trieSearch(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil) -> [Candidate] {
+	func trieSearch(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil,
+					shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
 		let chars = Array(typed.utf8)
 		guard hasTrie, !chars.isEmpty else { return [] }
 		let n = chars.count
@@ -238,6 +275,8 @@ final class LangData {
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
 		for i in 0...n { dp[i] = Double(i) * Trie.insCost }
 		var hits: [(id: Int32, cost: Double)] = []
+		var visits = 0
+		var cancelled = false
 		let nodeBase = trieBase
 		data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
 			func byte(_ node: Int, _ off: Int) -> UInt8 {
@@ -247,7 +286,12 @@ final class LangData {
 				UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: nodeBase + Self.nodeSize * node + off, as: UInt32.self))
 			}
 			func recurse(_ node: Int, _ letter: UInt8, _ prevLetter: UInt8, _ depth: Int) {
-				guard depth <= maxDepth else { return }
+				guard !cancelled, depth <= maxDepth else { return }
+				visits &+= 1
+				if visits & 127 == 0, shouldCancel?() == true {
+					cancelled = true
+					return
+				}
 				let base = depth * (n + 1), prev = base - (n + 1)
 				// Omitted-apostrophe discount — must stay byte-identical to Trie.recurse.
 				let skip = letter == KB.apostrophe ? KB.apostropheSkipCost : Trie.delCost
@@ -279,6 +323,7 @@ final class LangData {
 			let first = Int(u32le(0, 2)), count = Int(byte(0, 1))
 			for c in 0..<count { recurse(first + c, byte(first + c, 0), 0, 1) }
 		}
+		guard !cancelled else { return [] }
 		return hits.map { Candidate(word: word(Int($0.id)), cost: $0.cost,
 									logFreq: log(Double(max(freq(Int($0.id)), 1)) + 1)) }
 	}
@@ -375,4 +420,3 @@ final class LangData {
 	/// glide's beam keep frequent-but-imperfect prefixes alive so context can rescue them.
 	func trieMaxFreq(ofNode node: Int) -> UInt32 { nodeU32(node, 10) }
 }
-

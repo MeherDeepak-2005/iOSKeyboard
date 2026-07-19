@@ -1027,3 +1027,43 @@ and oldest-device pass; accessibility acceptance; zero secret or personal text t
 measured accuracy improvement over the company baseline; stable p99 latency and memory;
 and a rollback-tested staged rollout. Until all gates pass, a claim of production safety
 or Gboard-level quality is unsupported.
+
+---
+
+## Implementation Status and Solution Architecture (2026-07-19)
+
+The findings above describe the pre-remediation snapshot and intentionally remain as an
+audit record; some referenced files have since been removed. The following architecture
+is now implemented in the working tree.
+
+| Problem class | Implemented solution | Why this is materially different |
+|---|---|---|
+| Timing-dependent suggestions and corrections | A versioned, immutable `DecodeRequest`/`DecodeSnapshot` contract carries field, document, word-session, generation, and layout revisions. The controller accepts only an exact match, and a boundary consumes that same published decision. | Suggestions and autocorrect can no longer be answers to different text snapshots or a delayed pass from an earlier word. Missing work preserves typed text instead of blocking input. |
+| Keystroke and Glide latency | Host insertion happens before bookkeeping; tap decode, Glide preview, and Glide final use isolated queues with cooperative cancellation. Trie reads operate outside mutable-model locks, and Glide uses parent-linked hypotheses, bounded selection, and reusable buffers. | The input path has no model wait or synchronous fuzzy search. Stale speculative work loses authority and exits instead of creating a queue backlog. |
+| Preview/final Glide disagreement | Preview and final use one candidate/ranking tier, an exact final-path cache can become commit authority, and every outcome has an opaque ID. | Releasing on the path already shown inserts the shown word; there is no delayed second semantic model that silently changes the winner. |
+| Self-reinforcing personalization | Personal boosts require evidence; novel adoption requires confirmation or context diversity; learning has a bounded recent-event ledger; replacement and undo reverse the exact contextual event. Automatic Glide winners are never labels. | A repeated typo or unverified automatic choice cannot become durable truth merely because the user continued typing. Adaptation is evidence-gated and reversible. |
+| Weak language data | `langdata.bin` now ships a deterministic, memory-mapped 60,449-word vocabulary with 233,748 bigrams, 376,779 trigrams, 138,138 trie nodes, contractions, current conversational vocabulary, and OOV-safe boundary counting. Scoring uses continuous Witten-Bell interpolation. | The context prior exists on first launch, does not materialize large Swift dictionaries, and backs off continuously instead of dropping abruptly to a frequency heuristic. |
+| Unqualified neural model | The Core ML runtime, tokenizer, model package, stale export manifest, and setting were removed from both targets. Offline scripts are explicitly research-only and have promotion gates for rights, blind task gain, oracle recall, graph shapes, physical-device performance, and archive inspection. | Model size and perplexity are no longer treated as evidence of autocorrect quality. The shipping decoder has one stable semantic tier and no hidden memory-dependent personality change. |
+| Layout drift and field mismatch | Renderer, hit testing, spatial taps, popups, and Glide share layout profiles. Compact, standard, landscape, and pad geometry plus email, URL, numeric, and decimal key surfaces are explicit. Long-press accents and spacebar cursor control are included. | Visual key centers and decoder geometry stay aligned, while host field semantics change the key surface rather than forcing one QWERTY layout everywhere. |
+| Inconsistent themes and accessibility | Themes compile semantic HSL roles for keys, special controls, soft actions, and primary action in paired light/dark variants. Contrast is repaired against linearized sRGB luminance; Increase Contrast, Reduce Transparency, Reduce Motion, VoiceOver labels, 44-point controls, and haptic settings are handled. | Accent colors no longer recolor the app shell or directly become unreadable key fills. Accessibility state changes produce deterministic surfaces rather than accidental blur behavior. |
+| Oversized and unsafe product surface | Fonts, unfinished languages, achievements, clipboard, GIF/media, and design-lab surfaces were removed. The host app focuses on setup, health, privacy/reset, haptics, and transactional paired-theme editing. | Every visible row now corresponds to an operable feature; dormant privacy, moderation, network, secret, and memory risks are absent from the release bundle. |
+| Silent operational failure | Reset is epoch-based across app and extension, reports fixed non-content failure codes, validates persistence snapshots, quarantines corruption, and never falls back to an unshared personal-data path. Aggregate histograms record host insert, tap decode, Glide preview/final, and lift-to-insert latency alongside footprint and storage health. | Reset ownership is explicit and stale extension writes cannot resurrect prior data. Health data can diagnose latency and storage without recording words, paths, or identifiers. |
+| Unprovable quality claims | `tools/evaluation/replay_report.py` validates paired JSONL events, rejects duplicate cases and cross-split users, reports correction/suggestion/oracle metrics and tail latency, computes user-cluster bootstrap intervals, exact paired McNemar significance, and category slices. | A prolific test user cannot inflate confidence, and the company baseline is compared on the exact same events. Synthetic regression tests remain useful but cannot masquerade as a production benchmark. |
+| Artifact and privacy drift | `ARTIFACTS.json`, third-party notices, target-specific privacy manifests, deterministic hashes, release-only logging guards, and archive-content checks define the shipped data boundary. | Build output can be checked against reviewed provenance instead of trusting source-folder intent or Xcode target membership by inspection. |
+
+### Remaining Release Gates
+
+These are deliberately not marked complete by implementation work:
+
+1. Collect a consented, privacy-reviewed, user-separated blind test set and replay the
+   company production keyboard on the same events.
+2. Establish accuracy, false-correction, suggestion, Glide, and latency budgets; require
+   confidence intervals that beat the baseline rather than accepting point estimates.
+3. Run p50/p95/p99, energy, thermal, sustained footprint, memory-warning, and jetsam tests
+   on the oldest supported physical devices using the exact signed Release archive.
+4. Complete VoiceOver, Switch Control, Voice Control, Dynamic Type, handedness, device,
+   orientation, and host-app compatibility acceptance with real users.
+5. Replace placeholder bundle/App Group identifiers and support/privacy metadata, then
+   complete signing, App Review, privacy, corpus-license, and legal approval.
+6. Stage rollout with a previous-build comparison and tested rollback. Do not market the
+   keyboard as safer than production or comparable to Gboard until these gates pass.

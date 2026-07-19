@@ -27,13 +27,13 @@ final class Trie {
 	/// Adjacent-letter swap ("teh" → "the") — the single most common typo class.
 	/// One cheap operation (OSA / restricted Damerau) instead of two full edits.
 	static let transCost = 0.8
-	static var firstLetterPenalty = 2.5
+	static let firstLetterPenalty = 2.5
 	static func firstLetterPenaltyPolicy(
 		typedLength: Int,
 		candidateFirst: UInt8,
 		typedFirst: UInt8
 	) -> Double {
-		guard candidateFirst != typedFirst else {return 0}
+		guard candidateFirst != typedFirst else { return 0 }
 		
 		switch typedLength {
 		case 0, 1, 2:
@@ -146,4 +146,3 @@ final class Trie {
 		for (_, child) in node.children { collect(child, &out, cap: cap) }
 	}
 }
-

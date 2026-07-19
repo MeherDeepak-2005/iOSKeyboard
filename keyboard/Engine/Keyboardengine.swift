@@ -7,19 +7,15 @@ struct GlidePrediction {
 	let margin: Double
 }
 
-// Noisy-channel engine, v3 — restructured for the neural rescorer (Phase A).
+// Noisy-channel engine with one versioned, asynchronously published decode contract.
 //
 // Pipeline:   Lexicon (trie = channel model) generates an N-best candidate list
-//           → a LanguageScorer supplies the context prior in ONE batched call
-//             (today: bundled n-grams; later: tiny neural LM behind the same seam)
+//           → the memory-mapped n-gram model supplies one batched context prior
 //           → UserModel layers on-device personalization on top.
 //
-// Autocorrect decisions are precomputed by the debounced background pass while the
-// word is still being typed, so the space key normally does an O(1) cache read; when
-// the user out-types the debounce it computes an n-gram-only decision INLINE on the
-// main thread (~1 ms, lock-safe, no queue hop) — a neural scorer (5–20 ms) must never
-// run synchronously on the keystroke path, and the keystroke must never wait on the
-// serial engine queue.
+// Autocorrect decisions are precomputed by background decoding while the word is
+// being typed. A boundary consumes only a matching immutable snapshot; if none is
+// ready, the typed word is preserved. Trie/model work never runs on the input path.
 //
 // Data ships as ONE binary, `langdata.bin` (built by tools/build_language_data.py),
 // which is MEMORY-MAPPED at launch: the bi/tri-gram tables AND (format v3) the
@@ -33,11 +29,12 @@ final class KeyboardEngine {
 
 	/// SERIAL, deliberately. One background pass at a time: a superseded suggestion pass
 	/// bails at entry in microseconds (gen ticket), so work coalesces instead of piling up —
-	/// with a concurrent queue every fast keystroke's pass ran its full trie DP + neural
-	/// forward SIMULTANEOUSLY, exploding CPU/threads inside the jetsam-limited extension.
-	/// Nothing on the KEYSTROKE path ever waits on this queue (see `autocorrection`).
+	/// with a concurrent queue every fast keystroke's pass ran its full trie DP
+	/// simultaneously, wasting CPU inside the jetsam-limited extension.
+	/// Nothing on the keystroke path waits on this queue; boundary commits consume an
+	/// already-published DecodeSnapshot or leave the typed word unchanged.
 	private let queue = DispatchQueue(label: "keyboard.engine")
-	/// Glide must not wait behind a 15-50 ms neural suggestion pass. Final decodes and
+	/// Glide must not wait behind a suggestion pass. Final decodes and
 	/// live previews use separate queues; the final queue has interactive priority and
 	/// stale preview work cooperatively exits when the finger lifts.
 	private let glideQueue = DispatchQueue(label: "keyboard.engine.glide", qos: .userInteractive)
@@ -54,16 +51,9 @@ final class KeyboardEngine {
 	private var glidePreviewCache: GlidePreviewCache?
 	private let lexicon = Lexicon()
 	private let user = UserModel()
-	/// Eager `let`, NOT lazy: the main thread's fast-autocorrect path touches it, and a
-	/// lazy var's first initialization racing the engine queue's init task is undefined.
+	/// Eager and immutable. Every decode in a word session uses this same model tier;
+	/// memory pressure cannot silently change ranking semantics mid-word.
 	private let ngram: NgramScorer
-	/// The active prior. When the neural rescorer lands it replaces (or blends with)
-	/// `ngram` here — nothing else in the engine changes. Written once on the engine
-	/// queue's init task; read only from the queue (the fast path uses `ngram` directly).
-	private var scorer: LanguageScorer
-	/// Direct handle for capabilities beyond the scorer seam (trie-constrained
-	/// beam-search prediction). nil when the model files aren't bundled.
-	private var neuralLM: NeuralScorer?
 
 	// Tunables.
 	/// Dynamic edit-distance budget by typed length. Short words get ~1 edit (tight —
@@ -92,18 +82,14 @@ final class KeyboardEngine {
 	/// suggestable + immune to autocorrect). 5, not 3: a word you were only testing
 	/// or typo'd repeatedly shouldn't graduate into the dictionary.
 	private let adoptAfter = 8
-	/// Candidates that survive to rescoring. Deliberately wider than the 3 shown:
-	/// a neural rescorer's value is promoting words the crude score ranked 4th–12th.
-	private let nBest = 12
-	/// Max candidates handed to the prior in one call. Must be ≤ the neural model's
-	/// exported Core ML batch limit (RangeDim(1, 16) in tools/lm/export_coreml.py) — over
-	/// that, Core ML rejects the input. 16 comfortably covers the 12 kept.
-	private let scoreCap = 16
+	/// Keep a wide oracle funnel. The mmap n-gram scorer scans each context once for
+	/// the requested IDs, so 32 rows cost little and avoid the old rank-16 ceiling.
+	private let nBest = 24
+	private let scoreCap = 32
 	/// Autocorrect confidence gate: the best candidate must beat the TYPED string's
 	/// blended score by this margin (natural-log units; 3 ≈ 20× more likely) before
 	/// a correction fires. Genuine typos clear it by 8–15; slang/names that fit the
 	/// context sit near 0 and survive uncorrected — no lexicon entry needed. Active
-	/// only while the neural model is resident (`scorer.scoresArbitraryWords`).
 	private let correctionMargin = 3.0
 	/// Real-word correction (the "hoe → how", "js → is" case): a word that IS in the
 	/// dictionary is only replaced when a near-neighbour real word dominates it in
@@ -116,31 +102,18 @@ final class KeyboardEngine {
 	/// …and the winning neighbour must be within this channel cost of the typed word
 	/// (≈ one edit), so only genuine slips — not distant words — can win.
 	private let realWordMaxCost = 1.6
-	/// Previous-word (n-1) rescue certainty (the "poler game → poker game" case). AFTER a
-	/// word commits, the just-typed word becomes right-context evidence for the word before
-	/// it; a single-edit neighbour must beat the standing word by this much — WITH that
-	/// forward evidence — before we silently rewrite already-committed text. As strict as
-	/// `realWordMargin` because this edits behind the cursor. Neural-only.
-	private let prevWordMargin = 5.0
+	private struct RankedCandidate {
+		let word: String
+		let score: Double
+		let spatialCost: Double
+		let logFrequency: Double
+		let logLanguageProbability: Double
+	}
 
-	/// The precomputed autocorrect decision for the word currently being typed, plus the
-	/// session's correction rejections. BOTH are read on the SPACE-KEY path (main thread),
-	/// so they live behind a tiny `stateLock` rather than the engine `queue`: a `queue.sync`
-	/// here would block the keystroke behind whatever neural pass (suggestions, glide decode,
-	/// n-1 rescue) is draining, which is exactly the "heavy keyboard" stall. The lock is held
-	/// only for the microseconds it takes to read/copy this small state — never during a
-	/// Core ML forward. All heavy work stays on `queue`; only these two fields are shared.
-	private let stateLock = NSLock()
-	private struct PendingCorrection { let word: String; let correction: String? }
-	private var pending: PendingCorrection?          // guard with stateLock
-	private var sessionKept = Set<String>()          // guard with stateLock
-
-	private func readPending() -> PendingCorrection? { stateLock.lock(); defer { stateLock.unlock() }; return pending }
-	private func setPending(_ p: PendingCorrection?) { stateLock.lock(); pending = p; stateLock.unlock() }
-	private func clearPending(ifWord lw: String) { stateLock.lock(); if pending?.word == lw { pending = nil }; stateLock.unlock() }
-	private func isKept(_ w: String) -> Bool { stateLock.lock(); defer { stateLock.unlock() }; return sessionKept.contains(w) }
-	private func keepInsert(_ w: String) { stateLock.lock(); sessionKept.insert(w); stateLock.unlock() }
-	private func keepRemove(_ w: String) { stateLock.lock(); sessionKept.remove(w); stateLock.unlock() }
+	/// Session-only autocorrect rejections. Every access is serialized on `queue`;
+	/// the controller never reads this set on the input path.
+	private var sessionKept = Set<String>()
+	private func isKept(_ word: String) -> Bool { sessionKept.contains(word) }
 
 	/// Learning fires on every committed word, and `user.save()` re-encodes the WHOLE
 	/// personal model to JSON — O(model) work and a matching transient allocation on
@@ -158,18 +131,13 @@ final class KeyboardEngine {
 		}
 	}
 
-	/// Process-wide engine. iOS instantiates the keyboard's view controller more than
-	/// once per session (a throwaway warmup instance, then the live one), so a
-	/// per-controller engine loaded the neural model — and registered a memory-pressure
-	/// source — once PER instance (the "model active ×4" symptom, and up to 4 resident
-	/// models against the ~60 MB jetsam ceiling). One shared engine loads once, holds
-	/// one model, and lets learning persist across the controller churn.
+	/// Process-wide engine: iOS may prewarm more than one controller, while language
+	/// data and personalization should be loaded exactly once per extension process.
 	static let shared = KeyboardEngine()
 
-	init(languageDataURL: URL? = nil, loadsNeuralModel: Bool = true) {
+	init(languageDataURL: URL? = nil) {
 		let ng = NgramScorer(user: user)
 		ngram = ng
-		scorer = ng
 		initializationGroup.enter()
 		let ready = initializationGroup
 		queue.async { [weak self] in
@@ -185,25 +153,7 @@ final class KeyboardEngine {
 			self.glideProfile.load()          // #37: restore this user's adapted glide σ / gate
 			languageData?.warmGlideAnchorIndex()   // Phase 2: prebuild the endpoint index off the first-glide path
 			self.applyLearned()
-			// Tiered scorer — two levels, each overriding the previous on this serial queue.
-			//
-			// Tier 1 (UnigramScorer, ~200 KB): loads whenever tokenizer.bin is present,
-			//   on every device. Sets scoresArbitraryWords=true so the autocorrect margin
-			//   gate runs on iPhone 13 and older with zero CoreML cost. Piece score sums
-			//   give OOV strings a real log-probability instead of the n-gram's flat floor.
-			//
-			// Tier 3 (BlendedScorer + full transformer): always create the lightweight
-			//   handle when resources exist. NeuralScorer owns the memory gate and can
-			//   retry after transiently low headroom; Tier 1 answers until it is resident.
-			if loadsNeuralModel && KBSettings.neuralRescorer {
-				if let tok = SPTokenizer.fromBundle() {
-					self.scorer = UnigramScorer(tokenizer: tok, ngram: self.ngram)
-				}
-				if let neural = NeuralScorer.bundled(language: KBSettings.language) {
-					self.neuralLM = neural
-					self.scorer = BlendedScorer(neural: neural, ngram: self.ngram)
-				}
-			}
+			KBPersonalData.acknowledgeReset(epoch: KBPersonalData.currentEpoch)
 		}
 	}
 	private func applyLearned() {
@@ -211,58 +161,76 @@ final class KeyboardEngine {
 		// correcting this", not "suggest this". They still adopt organically below
 		// once typed adoptAfter times. Snapshot (COW) so no lock is held across the loop.
 		for (w, c) in user.unigramsSnapshot() {
-			lexicon.noteUse(of: w, timesUsed: min(c, 50), adoptAfter: adoptAfter)
+			let count = min(c, 50)
+			lexicon.noteUse(of: w, timesUsed: count, adoptAfter: adoptAfter,
+				allowAdoption: allowsPersonalAdoption(of: w, count: count))
 		}
 	}
 
-	// MARK: Autocorrect (O(1) cache read on the word boundary)
+	/// Applies an app-initiated personal-data reset to the already-running extension.
+	/// Generation tickets are invalidated synchronously; mutable model state is cleared
+	/// on the engine queue after initialization so no decoder observes a half-reset state.
+	func resetPersonalization(to epoch: UInt64 = KBPersonalData.currentEpoch) {
+		cancelSuggestions()
+		cancelGlidePreviews()
+		glideLock.lock()
+		lastGlideOutcome = nil
+		glideLock.unlock()
+		glidePreviewCacheLock.lock()
+		glidePreviewCache = nil
+		glidePreviewCacheLock.unlock()
+
+		queue.async { [weak self] in
+			guard let self else { return }
+			self.initializationGroup.wait()
+			self.savePending = false
+			self.sessionKept.removeAll(keepingCapacity: false)
+			self.user.reset(to: epoch)
+			self.lexicon.resetPersonalization()
+			self.glideProfile.reset(to: epoch)
+			KBPersonalData.acknowledgeReset(epoch: epoch)
+		}
+	}
+
+	// MARK: Autocorrect decision (background decode only)
 
 	/// Bare lowercase "i" and its contractions — stock always capitalizes these.
 	/// They sit beneath the ≥3-char gate the fuzzy path uses, so they're special-cased.
 	private static let iForms: Set<String> = ["i", "i'm", "i'll", "i've", "i'd"]
 
-	/// The space-key autocorrect read — two tiers, both fast:
-	///
-	/// 1. If the debounced background pass already precomputed a decision for THIS exact
-	///    word, use it: an O(1) lock-guarded read, and the best quality available (it can
-	///    carry the neural margin-gate verdict when the model had time to run).
-	/// 2. Otherwise the user out-typed the 60 ms debounce, so compute the decision NOW,
-	///    INLINE ON THE MAIN THREAD, n-gram-only (`fast`): a bounded trie DP + n-gram rank,
-	///    ~1 ms, never a Core ML forward. Deliberately NOT `queue.sync` — the engine queue
-	///    may be mid-way through a 20–30 ms neural pass (or have several passes and learn
-	///    tasks queued), and syncing onto it from the main thread is exactly the "keyboard
-	///    hangs on space" stall. The data this touches is safe off-queue: the static trie is
-	///    immutable mmap, and the dynamic trie / boosts / user counts are behind fine-grained
-	///    locks inside Lexicon and UserModel (held microseconds each).
-	///
-	/// Net effect of the two tiers: autocorrect ALWAYS fires, at any typing speed. The async
-	/// pass upgrades the DECISION's quality (slang-survives margin gate) when it has time; it
-	/// is no longer a prerequisite for correcting at all — which is what regressed when the
-	/// neural rescorer (default-on) started dominating the debounced pass.
-	func autocorrection(for word: String, context: [String], taps: [KeyTap?]? = nil) -> String? {
-		let lw = word.lowercased()
-		if isKept(lw) { return nil }
-		if word == lw, Self.iForms.contains(lw) { return "I" + word.dropFirst() }
-		guard word.count >= 2 else { return nil }
-		if let p = readPending(), p.word == lw {
-			guard let corrected = p.correction else { return nil }   // the pass decided "keep typed"
-			return matchCase(of: word, to: corrected)
-		}
-		// No precomputed decision for this exact word yet — compute a fast one inline.
-		let corrections = lexicon.corrections(for: lw, maxCost: maxCost(for: lw.count), taps: taps)
-		guard let c = correction(from: corrections, typed: lw, context: context, fast: true) else { return nil }
-		return matchCase(of: word, to: c)
+	private struct CorrectionDecision {
+		let word: String?
+		/// Winner minus typed-word score in natural-log units. This is the actual
+		/// confidence signal published in DecodeSnapshot, not a boolean placeholder.
+		let margin: Double
 	}
 
-	/// The autocorrect decision from an ALREADY-computed correction set — lets the
-	/// suggestion pass reuse its one fuzzy search instead of running the trie DP twice
-	/// per keystroke. Runs on `queue` normally; with `fast: true` it is the space key's
-	/// synchronous MAIN-THREAD fallback: every ranking below goes n-gram-only (lock-safe,
-	/// no Core ML), and the OOV margin gate (which is only meaningful on the neural prior)
-	/// yields to the legacy always-correct rule — the same behavior as when the model
-	/// isn't resident.
-	private func correction(from corrections: [Candidate], typed lw: String, context: [String], fast: Bool = false) -> String? {
-		guard !isKept(lw) else { return nil }
+	private func rawScore(_ candidate: RankedCandidate) -> Double {
+		-candidate.spatialCost + lmWeight * candidate.logLanguageProbability
+			+ freqWeight * candidate.logFrequency
+	}
+
+	/// Decide from the same already-scored table used by the suggestion strip. The
+	/// language model is never invoked here; display and commit therefore share one
+	/// candidate generation pass and one prior batch.
+	private func correction(from scored: [RankedCandidate], correctionCosts: [String: Double],
+							typed lw: String, context: [String],
+							split: (candidate: Candidate, a: String, b: String)?) -> CorrectionDecision {
+		guard !isKept(lw) else { return CorrectionDecision(word: nil, margin: 0) }
+
+		guard let typed = scored.first(where: { $0.word == lw }) else {
+			return CorrectionDecision(word: nil, margin: 0)
+		}
+		let typedScore = rawScore(typed)
+		let eligible = scored.filter {
+			$0.word != lw && correctionCosts[$0.word] != nil
+		}
+		var bestWord = eligible.first?.word
+		var bestScore = eligible.first.map(rawScore) ?? -.infinity
+		for candidate in eligible.dropFirst() {
+			let score = rawScore(candidate)
+			if score > bestScore { bestWord = candidate.word; bestScore = score }
+		}
 
 		// Real dictionary words (js, hoe, form) are normally immune to autocorrect — that
 		// immunity is why "js" showed "is" in the bar but never applied it. Correct one
@@ -270,18 +238,15 @@ final class KeyboardEngine {
 		// (the iOS-17 "hoe → how" behaviour). Allowed down to 2 chars because the strict
 		// margin + single-edit requirement make it safe there; runs on the n-gram too.
 		if lexicon.contains(lw) {
-			guard lw.count >= 2 else { return nil }
-			let typed = Candidate(word: lw, cost: 0, logFreq: log(Double(user.uniCount(lw)) + 1))
-			let ranked = rank(corrections, including: typed, context: context, log: "realword '\(lw)'", ngramOnly: fast)
-			guard let best = ranked.first, best.word != lw, lexicon.contains(best.word),
-				  let cand = corrections.first(where: { $0.word == best.word }), cand.cost <= realWordMaxCost
-			else { return nil }
-			let typedScore = ranked.first(where: { $0.word == lw })?.score ?? 0
-			let margin = best.score - typedScore
+			guard lw.count >= 2, let bestWord, lexicon.contains(bestWord),
+				  let cost = correctionCosts[bestWord], cost <= realWordMaxCost else {
+				return CorrectionDecision(word: nil, margin: 0)
+			}
+			let margin = bestScore - typedScore
 			let fire = margin > realWordMargin
-			KBDiagnostics.logDecision(typed: lw, best: best.word, margin: margin,
+			KBDiagnostics.logDecision(typed: lw, best: bestWord, margin: margin,
 									  threshold: realWordMargin, corrected: fire)
-			return fire ? best.word : nil
+			return CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
 		}
 
 		// OOV contraction guard: "when's" / "mustn't" are valid English even though the
@@ -289,14 +254,14 @@ final class KeyboardEngine {
 		// contraction fell through to the correction machinery, whose best candidate
 		// is usually the bare base word — typing "When's" got "corrected" to "When".
 		// A known base + standard clitic is a word the user meant; never rewrite it.
-		if lexicon.isContractionForm(lw) { return nil }
+		if lexicon.isContractionForm(lw) { return CorrectionDecision(word: nil, margin: 0) }
 
 		// Apostrophe restoration — stock's contraction behavior, computed from the
 		// lexicon instead of a hardcoded pair list. An OOV string that becomes a
 		// dictionary word by inserting one apostrophe ("dont" → "don't", "im" → "i'm",
 		// "whats" → "what's") is a contraction typed without the ' (the letters page
 		// has no ' key), not a typo to score: no blend ranking can prefer "what's"
-		// over "what" (frequency + neural gaps exceed the whole channel gap), so this
+		// over "what" (frequency and context gaps exceed the whole channel gap), so this
 		// fires DIRECTLY, before scoring, on both the full and the fast inline path.
 		// Real words ("its", "cant", "well") never reach here — the real-word branch
 		// above already returned, so its strict margin still guards those.
@@ -304,48 +269,24 @@ final class KeyboardEngine {
 		   !lexicon.isProfane(restored) {
 			KBDiagnostics.logDecision(typed: lw, best: restored, margin: .infinity,
 									  threshold: 0, corrected: true)
-			return restored
+			return CorrectionDecision(word: restored, margin: 100)
 		}
 
-		guard lw.count >= 3 else { return nil }
+		guard lw.count >= 3 else { return CorrectionDecision(word: nil, margin: 0) }
 		// Missing-space split ("alot" → "a lot"): rides the same gates as single-word
-		// candidates. The neural batch scores the spaced string natively (subword
-		// tokenizer); the pure-n-gram path scores it with the PAIR probability below,
-		// because the single-candidate seam floors multi-word strings.
-		let split = splitCandidate(of: lw)
-		// Margin gate (the iOS-17 "slang survives" mechanism). Pre-gate, OOV meant
-		// probability zero → forced replacement. The neural LM can score ANY string
-		// via subwords, so the typed word rides the SAME batched forward pass as the
-		// candidates (one extra row, spatial cost 0 by definition) and a correction
-		// fires only when the best candidate beats it by `correctionMargin`. In a
-		// register where the typed word is plausible ("lol im finna…") the margin
-		// collapses and we stay silent. Repeated personal use raises the typed row's
-		// logFreq term, reinforcing the keep. Without the neural model resident, the
-		// n-gram OOV floor is meaningless, so keep the legacy always-correct rule.
-		if !fast, scorer.scoresArbitraryWords {
-			let typed = Candidate(word: lw, cost: 0,
-								  logFreq: log(Double(user.uniCount(lw)) + 1))
-			var cands = corrections
-			if let split { cands.append(split.candidate) }
-			let ranked = rank(cands, including: typed, context: context, log: "autocorrect")
-			let best = ranked.first
-			let typedScore = ranked.first(where: { $0.word == lw })?.score ?? 0
-			let margin = (best?.score ?? 0) - typedScore
-			let fire = best != nil && best!.word != lw && margin > correctionMargin
-			KBDiagnostics.logDecision(typed: lw, best: best?.word, margin: margin,
-									  threshold: correctionMargin, corrected: fire)
-			return fire ? best!.word : nil
-		}
-		let ranked = rank(corrections, context: context, log: "autocorrect", ngramOnly: fast)
-		var bestWord = ranked.first?.word
-		var bestScore = ranked.first?.score ?? -.infinity
+		// candidates. Score it as two conditional n-gram probabilities because the
+		// single-word scorer intentionally has no multi-word candidate representation.
 		if let split {
 			let s = -split.candidate.cost + freqWeight * split.candidate.logFreq
 				+ lmWeight * ngram.pairLogProb(split.a, split.b, context: context)
 			if s > bestScore { bestWord = split.candidate.word; bestScore = s }
 		}
-		guard let bestWord, bestWord != lw else { return nil }
-		return bestWord
+		guard let bestWord else { return CorrectionDecision(word: nil, margin: 0) }
+		let margin = bestScore - typedScore
+		let fire = margin > correctionMargin
+		KBDiagnostics.logDecision(typed: lw, best: bestWord, margin: margin,
+								  threshold: correctionMargin, corrected: fire)
+		return CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
 	}
 
 	/// Best "missing space" split of an OOV string into two real words, or nil.
@@ -379,12 +320,12 @@ final class KeyboardEngine {
 
 	func dontCorrect(_ word: String) {
 		let lw = word.lowercased()
-		// SYNCHRONOUS (lock-guarded, not the queue): a manual fix must be visible to the
-		// autocorrect read on the SAME commit that registers it — otherwise the word the user
-		// just fixed by hand gets re-corrected. Both fields are behind `stateLock`, so this is
-		// a microsecond write, safe to do inline on the main thread.
-		keepInsert(lw)                                           // protect now, THIS session only
-		clearPending(ifWord: lw)                                 // stale decision must not re-fire
+		queue.async { [weak self] in
+			guard let self else { return }
+			self.sessionKept.insert(lw)
+			self.user.confirmSpelling(lw)
+			self.scheduleSave()
+		}
 	}
 
 	/// The user let an autocorrect of `original` stand (typed on instead of undoing).
@@ -392,7 +333,7 @@ final class KeyboardEngine {
 	/// lift the keep so correction resumes. Nothing persists; keeps are session-scoped.
 	func correctionStood(_ original: String) {
 		let lw = original.lowercased()
-		keepRemove(lw)
+		queue.async { [weak self] in self?.sessionKept.remove(lw) }
 	}
 
 	/// The user actively replaced `original` with a different word (picked a suggestion
@@ -403,10 +344,9 @@ final class KeyboardEngine {
 	func wordReplaced(original: String, with replacement: String) {
 		let lw = original.lowercased()
 		guard lw != replacement.lowercased() else { return }
-		keepRemove(lw)
-		clearPending(ifWord: lw)
 		queue.async { [weak self] in
 			guard let self else { return }
+			self.sessionKept.remove(lw)
 			self.user.demote(lw)
 			self.scheduleSave()
 		}
@@ -421,7 +361,7 @@ final class KeyboardEngine {
 	// synthetic noisy swipes decoded by this exact production code (see WORKLOG).
 	private let glideLMWeight = 0.6
 	private let glideFreqWeight = 0.10
-	/// Shape candidates handed to the prior = the neural batch cap (16). Wider funnel so a
+	/// Shape candidates handed to the prior. The wider funnel lets a
 	/// frequent-but-sloppily-swiped word survives shape ranking for the LM/context to rescue.
 	private let glideCandidates = 16
 	/// #4 context-recall augmentation: how many n-gram-predicted next words to fold into the
@@ -447,7 +387,7 @@ final class KeyboardEngine {
 	/// nothing commits — an accidental smear types nothing, not a random word) are NOT fixed
 	/// constants anymore: the baked grid-searched values (σ 0.10, gate 0.43 — the correct-word
 	/// p95 / scribble p10 midpoint) live in `GlideProfile` as the defaults, and #37 nudges
-	/// them per user from their own accepted swipes. See `GlideProfile`.
+	/// them per user only from explicit alternative selections. See `GlideProfile`.
 	private let glideProfile = GlideProfile()
 
 	private func currentGlidePreviewGeneration() -> Int {
@@ -475,7 +415,13 @@ final class KeyboardEngine {
 					  context: [String], completion: @escaping (GlidePrediction?) -> Void) {
 		let generation = currentGlidePreviewGeneration()
 		let cacheKey = glideCacheKey(path: path, times: times, layout: layout, context: context)
+		let started = ProcessInfo.processInfo.systemUptime
+		let signpost = KBDiagnostics.beginGlidePreview()
 		glidePreviewQueue.async { [weak self] in
+			defer {
+				KBDiagnostics.endGlidePreview(signpost,
+					milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
+			}
 			func deliver(_ prediction: GlidePrediction?) {
 				DispatchQueue.main.async { completion(prediction) }
 			}
@@ -578,9 +524,7 @@ final class KeyboardEngine {
 		var candidates = GlideDecoder.decode(
 			glide, lang: lang, limit: glideCandidates, shouldCancel: shouldCancel
 		).filter { !lexicon.isProfane($0.word) }
-		guard shouldCancel?() != true,
-			  let bestShape = candidates.first?.cost,
-			  bestShape <= gate else { return nil }
+		guard shouldCancel?() != true else { return nil }
 		var knownWords = Set(candidates.map(\.word))
 
 		if !context.isEmpty {
@@ -597,6 +541,18 @@ final class KeyboardEngine {
 		if let start = glide.points.first, let end = glide.points.last {
 			let firsts = GlidePreprocess.lettersNear(start, radius: glideAnchorRadius, maxN: glideAnchorEnds)
 			let lasts = GlidePreprocess.lettersNear(end, radius: glideAnchorRadius, maxN: glideAnchorEnds)
+			let firstSet = Set(firsts)
+			let lastSet = Set(lasts)
+			for word in lexicon.glideDynamicWords(limit: 128)
+			where !knownWords.contains(word) && !lexicon.isProfane(word) {
+				guard let first = word.first, let last = word.last,
+					  firstSet.contains(first), lastSet.contains(last) else { continue }
+				guard shouldCancel?() != true else { return nil }
+				if let cost = GlideDecoder.shapeCost(of: word, glide), cost <= gate {
+					candidates.append((word: word, cost: cost))
+					knownWords.insert(word)
+				}
+			}
 			for word in lang.glideAnchorWords(first: firsts, last: lasts, perBucket: glideAnchorPerBucket)
 			where !knownWords.contains(word) && word.count >= 2 && !lexicon.isProfane(word) {
 				guard shouldCancel?() != true else { return nil }
@@ -608,6 +564,11 @@ final class KeyboardEngine {
 		}
 
 		guard shouldCancel?() != true else { return nil }
+		// Every candidate, not merely the cheapest one, must satisfy the shape gate.
+		// Otherwise a strong context prior can pull an unrelated endpoint word over a
+		// valid stroke and turn the safety gate into a no-op.
+		candidates = candidates.filter { $0.cost <= gate }
+		guard !candidates.isEmpty else { return nil }
 		let scored = scoreGlideCandidates(candidates, glide: glide, context: context)
 		return scored.isEmpty ? nil : GlideDecodeResult(candidates: candidates, scored: scored)
 	}
@@ -617,6 +578,7 @@ final class KeyboardEngine {
 	/// up to 3 alternatives for the suggestion bar (swap targets) on the MAIN queue;
 	/// (nil, []) when the swipe matched nothing well enough to commit.
 	func glide(path: [CGPoint], times: [TimeInterval] = [], layout: GlideLayout, context: [String],
+				   publishedPrediction: GlidePrediction? = nil,
 				   completion: @escaping (String?, [String]) -> Void) {
 		cancelGlidePreviews()
 		// Invalidate any suggestion pass already dispatched to the engine queue.
@@ -624,9 +586,24 @@ final class KeyboardEngine {
 		// a pass mid-execution still completes, but any further queued ones skip.
 		// The controller also cancels the debounced work item before calling here.
 		cancelSuggestions()
+		if let publishedPrediction {
+			let gestureID = noteGlideCommit(winner: publishedPrediction.word,
+				shapeCostByWord: publishedPrediction.shapeCostByWord)
+			// The visible preview is the gesture's contract. Commit it inline on the
+			// main-thread lift callback; never run a second decoder that can disagree.
+			completion(publishedPrediction.word, publishedPrediction.alternatives)
+			glideQueue.async { [weak self] in
+				guard let self,
+					  let processed = GlidePreprocess.run(path, layout: layout,
+						times: times.isEmpty ? nil : times) else { return }
+				self.logCachedGlide(publishedPrediction, path: path, times: times,
+					layout: layout, processed: processed, gestureID: gestureID)
+			}
+			return
+		}
 		let cacheKey = glideCacheKey(path: path, times: times, layout: layout, context: context)
 		if let cached = recentGlidePreview(key: cacheKey) {
-			noteGlideCommit(winner: cached.word, shapeCostByWord: cached.shapeCostByWord)
+			let gestureID = noteGlideCommit(winner: cached.word, shapeCostByWord: cached.shapeCostByWord)
 			// `glide` is invoked from touchesEnded on main. Deliver inline so an exact
 			// preview hit inserts before the next display frame.
 			completion(cached.word, cached.alternatives)
@@ -634,13 +611,20 @@ final class KeyboardEngine {
 				guard let self,
 					  let processed = GlidePreprocess.run(path, layout: layout, times: times.isEmpty ? nil : times)
 				else { return }
-				self.logCachedGlide(cached, path: path, times: times, layout: layout, processed: processed)
+				self.logCachedGlide(cached, path: path, times: times, layout: layout,
+					processed: processed, gestureID: gestureID)
 			}
 			return
 		}
-		// Dedicated interactive queue: the full-path decision never waits behind neural
+		// Dedicated interactive queue: the full-path decision never waits behind
 		// suggestions or a live-preview decode.
+		let finalStarted = ProcessInfo.processInfo.systemUptime
+		let finalSignpost = KBDiagnostics.beginGlideFinal()
 		glideQueue.async { [weak self] in
+			defer {
+				KBDiagnostics.endGlideFinal(finalSignpost,
+					milliseconds: (ProcessInfo.processInfo.systemUptime - finalStarted) * 1_000)
+			}
 			func deliver(_ w: String?, _ alts: [String]) { DispatchQueue.main.async { completion(w, alts) } }
 			guard let self else { return deliver(nil, []) }
 			self.initializationGroup.wait()
@@ -652,11 +636,8 @@ final class KeyboardEngine {
 				KBDiagnostics.logGlide(points: g.points.count, pivots: g.pivots.count, letters: "rejected")
 				return
 			}
-			// N-GRAM prior only — never the neural model. A glide commits the instant the
-			// finger lifts, so it must not block on a synchronous Core ML forward pass; the
-			// n-gram (with personalization) already ranks shape candidates well (glide_eval
-			// top-1 ~84% on shape+freq alone). Neural's contextual value is applied AFTER the
-			// commit, asynchronously, via the previous-word rescue (see `rescorePreviousWord`).
+			// The same stable n-gram tier used by previews ranks the final shape candidates.
+			// No model load or second semantic tier can alter the word at release time.
 			let cands = result.candidates
 			let scored = result.scored
 			let winner = scored[0].word
@@ -666,10 +647,10 @@ final class KeyboardEngine {
 			// and captured; the runner-up is already one tap away on the bar and one backspace wipes
 			// the whole glided word, so a low-confidence commit is cheap to correct.
 			let margin = scored.count >= 2 ? scored[0].s - scored[1].s : Double.greatestFiniteMagnitude
-			// Stash this commit's raw SHAPE costs so the controller's later verdict (accepted
-			// winner / swapped-to alternative / undone) can supervise the per-user adaptation.
-			self.noteGlideCommit(winner: winner, shapeCostByWord: Dictionary(cands.map { ($0.word, $0.cost) },
-																			  uniquingKeysWith: min))
+			// Stash raw shape costs so an explicit alternative selection can provide a
+			// supervised sample. An automatic commit is never treated as ground truth.
+			let gestureID = self.noteGlideCommit(winner: winner,
+				shapeCostByWord: Dictionary(cands.map { ($0.word, $0.cost) }, uniquingKeysWith: min))
 			// Queue the visible insertion before diagnostics and optional capture formatting.
 			// Those facilities must never add lift-to-insert latency.
 			deliver(winner, Array(alts))
@@ -680,13 +661,13 @@ final class KeyboardEngine {
 			let rawGrid = path.map { p -> (Double, Double) in
 				let gp = GlidePreprocess.toGrid(p, layout: layout); return (Double(gp.x), Double(gp.y))
 			}
-			KBDiagnostics.captureGlide(path: rawGrid, times: times.map { Double($0) }, dwell: g.dwellKeys,
+			KBDiagnostics.captureGlide(id: gestureID, path: rawGrid, times: times.map { Double($0) }, dwell: g.dwellKeys,
 									   candidates: scored.prefix(3).map(\.word), committed: winner, margin: margin)
 		}
 	}
 
 	private func logCachedGlide(_ prediction: GlidePrediction, path: [CGPoint], times: [TimeInterval],
-							layout: GlideLayout, processed: ProcessedGlide) {
+							layout: GlideLayout, processed: ProcessedGlide, gestureID: String) {
 		let displayed = [prediction.word] + prediction.alternatives
 		KBDiagnostics.logGlide(points: processed.points.count, pivots: processed.pivots.count,
 							   letters: displayed.joined(separator: ","), margin: prediction.margin)
@@ -694,7 +675,7 @@ final class KeyboardEngine {
 			let grid = GlidePreprocess.toGrid(point, layout: layout)
 			return (Double(grid.x), Double(grid.y))
 		}
-		KBDiagnostics.captureGlide(path: rawGrid, times: times.map { Double($0) },
+		KBDiagnostics.captureGlide(id: gestureID, path: rawGrid, times: times.map { Double($0) },
 								   dwell: processed.dwellKeys, candidates: Array(displayed.prefix(3)),
 								   committed: prediction.word, margin: prediction.margin)
 	}
@@ -714,98 +695,48 @@ final class KeyboardEngine {
 	// MARK: Per-user glide adaptation (#37) — supervision from the user's own verdict
 	//
 	// A committed glide leaves a stash of its candidates' raw SHAPE costs. The controller
-	// then reports what the user did with it, and that verdict — never raw noise — teaches
-	// the profile:  the winner stood → its cost is a CORRECT sample;  the user tapped a bar
-	// alternative → THAT word's cost is the correct one;  the user backspaced it away →
-	// diagnostic only (we don't know the true word, so we don't move the statistics). All of
+	// then reports what the user did with it. Only tapping a different bar alternative
+	// teaches the profile because that is the sole explicit label. Typing on or deleting
+	// merely discards the pending sample. All of
 	// these run WITHOUT the engine queue: `GlideProfile` is self-locked, the stash is behind
 	// `glideLock`, so a verdict fired from the main thread is a couple of microseconds.
 
 	private let glideLock = NSLock()
-	private struct GlideOutcome { let winner: String; let shapeCostByWord: [String: Double] }
+	private struct GlideOutcome {
+		let id: String
+		let winner: String
+		let shapeCostByWord: [String: Double]
+	}
 	private var lastGlideOutcome: GlideOutcome?
 
-	private func noteGlideCommit(winner: String, shapeCostByWord: [String: Double]) {
-		glideLock.lock(); lastGlideOutcome = GlideOutcome(winner: winner, shapeCostByWord: shapeCostByWord); glideLock.unlock()
+	@discardableResult
+	private func noteGlideCommit(winner: String, shapeCostByWord: [String: Double]) -> String {
+		let id = UUID().uuidString
+		glideLock.lock()
+		lastGlideOutcome = GlideOutcome(id: id, winner: winner, shapeCostByWord: shapeCostByWord)
+		glideLock.unlock()
+		return id
 	}
 	private func takeGlideOutcome() -> GlideOutcome? {
 		glideLock.lock(); defer { lastGlideOutcome = nil; glideLock.unlock() }; return lastGlideOutcome
 	}
 
-	/// The glided word stood (the user typed on / committed the next word without undoing).
-	func glideAccepted() {
-		guard let o = takeGlideOutcome(), let cost = o.shapeCostByWord[o.winner] else { return }
-		glideProfile.observeCorrect(cost: cost)
-		KBDiagnostics.logGlideAdapt(kind: "accept", cost: cost, profile: glideProfile)
-	}
+	/// Typing on is not proof that the automatic winner was intended. Discard the
+	/// pending sample without adapting; only an explicit alternative supplies a label.
+	func glideUnverified() { _ = takeGlideOutcome() }
 	/// The user swapped the glided word for a bar alternative — THAT word is the true one,
 	/// so its shape cost is the correct sample (the winner was a near-miss the σ/gate should
 	/// learn to rank better next time).
 	func glideCorrected(to word: String) {
-		guard let o = takeGlideOutcome(), let cost = o.shapeCostByWord[word.lowercased()] else { return }
+		guard let o = takeGlideOutcome() else { return }
+		KBDiagnostics.captureGlideLabel(id: o.id, intended: word.lowercased())
+		guard let cost = o.shapeCostByWord[word.lowercased()] else { return }
 		glideProfile.observeCorrect(cost: cost)
 		KBDiagnostics.logGlideAdapt(kind: "correct", cost: cost, profile: glideProfile)
 	}
 	/// The user backspaced the whole glided word away. We don't know what they meant, so the
 	/// cost statistics stay put; we only drop the stash so a later verdict can't double-count.
 	func glideRejected() { _ = takeGlideOutcome() }
-
-	// MARK: Previous-word (n-1) rescue — Apple-style "poler game → poker game"
-
-	/// After `current` commits, re-judge the PREVIOUS word using `current` as forward
-	/// evidence: this is where the neural model earns its keep (contextual disambiguation),
-	/// applied ASYNC and off every keystroke/glide path. Returns a replacement for `prev`,
-	/// or nil to leave it. Only the immediately-previous word (n-1) is ever touched.
-	///
-	/// Scores each single-edit real-word neighbour C of `prev` by the neural sequence score
-	///   logP(C | leftContext) + logP(current | leftContext + [C])
-	/// and fires only when the best C beats the standing word by `prevWordMargin`.
-	func rescorePreviousWord(prev: String, current: String, leftContext: [String],
-							 completion: @escaping (String?) -> Void) {
-		// Serial engine queue, entirely off the keystroke path: the cheap pre-gate below
-		// exits on most commits before any neural work, so this rarely occupies the queue.
-		queue.async { [weak self] in
-			func done(_ r: String?) { DispatchQueue.main.async { completion(r) } }
-			guard let self else { return done(nil) }
-			// Transformer-only: prev-word rescue scores logP(current | left+[C]) which
-			// requires a context signal. UnigramScorer.scoresArbitraryWords is true but
-			// has no context — it would fire on frequency differences alone, which is
-			// too aggressive. Gate specifically on the full model being resident.
-			guard self.neuralLM?.isReady == true else { return done(nil) }
-			guard prev.count >= 3, !current.isEmpty, !self.isKept(prev) else { return done(nil) }
-
-			// Single-edit real-word neighbours of the previous word (typo candidates only).
-			// CHEAP PRE-GATE before any neural work: keep only neighbours MORE frequent than
-			// the standing word and take the few most frequent. A correctly-spelled common
-			// word has no more-frequent neighbour → we exit here on most commits, spending
-			// zero neural forwards; only genuinely ambiguous slips ("poler"←"poker") escalate.
-			let prevFreq = self.lexicon.logFreq(of: prev) ?? 0
-			let neighbours = self.lexicon.corrections(for: prev, maxCost: self.realWordMaxCost)
-				.filter { $0.word != prev && self.lexicon.contains($0.word)
-						  && (self.lexicon.logFreq(of: $0.word) ?? 0) > prevFreq }
-				.sorted { (self.lexicon.logFreq(of: $0.word) ?? 0) > (self.lexicon.logFreq(of: $1.word) ?? 0) }
-				.prefix(3)
-			guard !neighbours.isEmpty else { return done(nil) }
-			let cands = [prev] + neighbours.map(\.word)   // ≤4 → at most 4 neural forwards below
-
-			// term1: logP(C | left) — one batched forward. term2: logP(current | left + [C]),
-			// ALSO one batched forward: every alternative context is a row in the same
-			// Core ML dispatch (was one prediction call per candidate — up to 4 sequential
-			// dispatches on the hottest neural path).
-			let pC = self.scorer.logProbs(cands, context: leftContext)
-			let fwd = self.scorer.logProbs(of: current, underContexts: cands.map { leftContext + [$0] })
-			var best = prev, bestScore = -Double.infinity, prevScore = -Double.infinity
-			for (i, c) in cands.enumerated() {
-				let s = pC[i] + fwd[i]
-				if c == prev { prevScore = s }
-				if s > bestScore { bestScore = s; best = c }
-			}
-			guard best != prev, bestScore - prevScore > self.prevWordMargin else { return done(nil) }
-			KBDiagnostics.logDecision(typed: prev, best: best, margin: bestScore - prevScore,
-									  threshold: self.prevWordMargin, corrected: true)
-			done(best)
-		}
-	}
 
 	// MARK: Suggestions (background; also precomputes the autocorrect decision)
 
@@ -820,13 +751,6 @@ final class KeyboardEngine {
 	private var suggestGen = 0
 	private func isLatest(_ gen: Int) -> Bool { genLock.lock(); defer { genLock.unlock() }; return gen == suggestGen }
 	func cancelSuggestions() { genLock.lock(); suggestGen &+= 1; genLock.unlock() }
-
-	/// The exact-match word→emoji table riding in emoji.bin (nil when not bundled).
-	private let emojiStore = EmojiStore.bundled
-	/// Cache for context-injection neural predictions: one beam search per word boundary,
-	/// not per keystroke. Keyed by context array; invalidated automatically when context
-	/// changes (new word committed). Lives on the engine queue — no locking needed.
-	private var injectionCache: (context: [String], words: [String])?
 
 	/// Targeted spatial alignment between two fixed strings using the same per-character
 	/// cost table as the trie DP, so injected candidates compare directly in ranking.
@@ -853,15 +777,11 @@ final class KeyboardEngine {
 		return prev[m]
 	}
 
-	/// Apple-style context injection: the neural LM (beam search over trie-valid subword
-	/// sequences) predicts likely next words from context, then the spatial model validates
+	/// Context injection lets likely n-gram successors enter the spatial candidate set,
+	/// then the spatial model validates
 	/// them against the typed string. Surfaces candidates the fixed-radius trie DP misses
 	/// when input is heavily corrupted — e.g. "coeevitjkn" → "correction" after "auto"
 	/// (spatial cost ~9.7, far above the normal trie budget of 3.6).
-	///
-	/// Neural predictions are CACHED by context: one beam search fires the first time a
-	/// context is seen, then every subsequent keystroke of the same word is a free hit.
-	/// N-gram predictions supplement when the neural model isn't resident (Tier 1 devices).
 	///
 	/// Two-tier spatial gate:
 	///  • Strict (budget 2×): cost ≤ budget → use actual spatial cost.
@@ -874,25 +794,7 @@ final class KeyboardEngine {
 		guard lw.count >= 4, !context.isEmpty else { return [] }
 		let budget = maxCost(for: lw.count) * 2.0
 
-		// --- Prediction: neural (cached) + n-gram supplement ---
-		var neuralWords: [String] = []
-		if let neural = neuralLM, neural.isReady {
-			if let cached = injectionCache, cached.context == context {
-				neuralWords = cached.words
-			} else {
-				let preds = neural.predictWords(
-					context: context, limit: 8,
-					isPrefix: { [lexicon] in lexicon.isPrefix($0) },
-					isWord:   { [lexicon] in lexicon.contains($0) })
-				neuralWords = (preds ?? []).map(\.word).filter { !lexicon.isProfane($0) }
-				injectionCache = (context, neuralWords)
-			}
-		}
-		// N-gram fills remaining slots and is the whole answer while neural loads.
-		let ngramWords = ngram.nextWords(context: context, limit: 20)
-		var seen = Set(neuralWords)
-		var allWords = neuralWords
-		for w in ngramWords where !seen.contains(w) { seen.insert(w); allWords.append(w) }
+		let allWords = ngram.nextWords(context: context, limit: 32)
 
 		// --- Spatial validation ---
 		var out: [Candidate] = []
@@ -912,53 +814,63 @@ final class KeyboardEngine {
 		return out
 	}
 
-	func suggestions(currentWord: String, context: [String], taps: [KeyTap?]? = nil,
-					 completion: @escaping ([String], [Character: Double]) -> Void) {
+	func decode(_ request: DecodeRequest, completion: @escaping (DecodeSnapshot) -> Void) {
 		genLock.lock(); suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
+		let started = ProcessInfo.processInfo.systemUptime
+		let signpost = KBDiagnostics.beginTapDecode()
 		queue.async { [weak self] in
+			defer {
+				KBDiagnostics.endTapDecode(signpost,
+					milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
+			}
 			guard let self, self.isLatest(gen) else { return }   // superseded — the newest pass delivers
 			KBDiagnostics.recorder.sample()   // cheap footprint/headroom probe, background only
+			let currentWord = request.currentWord
+			let context = request.context
+			let taps = request.taps
 			let lw = currentWord.lowercased()
 			var result: [String]
+			var decision: String?
+			var decisionConfidence = 0.0
+			var evidence: [DecodeCandidateEvidence] = []
 			if currentWord.isEmpty {
-				self.injectionCache = nil   // context changed at word boundary; stale predictions freed
-				self.setPending(nil)
 				result = self.nextWords(context: context)
 			} else {
 				// One fuzzy search per keystroke: the corrections feed BOTH the suggestion
 				// ranking and the precomputed autocorrect decision below (previously the
 				// trie DP ran twice — once here, once inside computeCorrection).
-				let corrections = self.lexicon.corrections(for: lw, maxCost: self.maxCost(for: lw.count), taps: taps)
-				// Publish a FAST (n-gram) decision immediately — ~1 ms into the pass — so a
-				// space that lands while the neural rank below is still running reads a real
-				// decision instead of nothing. `pending` is word-keyed, so if the user has
-				// already typed on, this entry simply never matches.
-				self.setPending(PendingCorrection(word: lw,
-					correction: self.correction(from: corrections, typed: lw, context: context, fast: true)))
-				// First early exit: bail before context injection. The neural beam search
-				// inside contextInjectedCandidates takes ~50 ms on first call; if glide
-				// superseded this pass, skip that work entirely so glide gets the queue fast.
+				let corrections = self.lexicon.corrections(for: lw,
+					maxCost: self.maxCost(for: lw.count), taps: taps,
+					shouldCancel: { [weak self] in self?.isLatest(gen) != true })
+				// Exit before context expansion if a newer key or Glide superseded this pass.
 				guard self.isLatest(gen) else { return }
-				// Context injection: neural beam search + n-gram predictions validated
+				// Context injection: n-gram successors validated
 				// spatially. Finds candidates the fixed-radius trie DP misses when input is
 				// heavily corrupted (e.g. "coeevitjkn" → "correction" after "auto").
 				let injected = self.contextInjectedCandidates(typed: lw, context: context, taps: taps)
-				// Broad-radius fallback: when the normal 3-edit budget found zero candidates,
-				// retry at 2× budget to catch 4-5 edit typos on longer words. Only fires when
-				// corrections is empty (zero added cost on the normal path). Lock-free after a
-				// brief snapshot so the main thread's fast-autocorrect can never block on this.
-				// Only on 5+ char words — short words generate too many false matches at wide budget.
-				let broadCorrections: [Candidate] = corrections.isEmpty && lw.count >= 5
+				let completions = self.lexicon.completions(prefix: lw,
+					limit: self.completionCandidateLimit)
+				// Candidate recovery cannot depend on the close search returning zero: a
+				// plausible-but-wrong neighbour is exactly what hid severe intended words in
+				// the old decoder. Escalate an OOV only when it has no prefix completions and
+				// close evidence is absent or weak. Cooperative cancellation keeps an older
+				// wide walk from building a queue while the user continues typing.
+				let closestCost = corrections.map(\.cost).min() ?? .infinity
+				let shouldRecover = lw.count >= 6 && !self.lexicon.contains(lw)
+					&& completions.isEmpty
+					&& (corrections.isEmpty || closestCost > 0.65)
+				let broadCorrections: [Candidate] = shouldRecover
 					? Array(
-						self.lexicon.broadCorrections(for: lw, maxCost: self.maxCost(for: lw.count) * 2.0, taps: taps)
+						self.lexicon.broadCorrections(for: lw,
+							maxCost: self.maxCost(for: lw.count) * 2.0, taps: taps,
+							shouldCancel: { [weak self] in self?.isLatest(gen) != true })
 							.sorted { $0.cost < $1.cost }
-							.prefix(8)
+							.prefix(16)
 					  )
 					: []
 				let correctionWords = Set((corrections + broadCorrections).map(\.word))
 				let newFromContext = injected.filter { !correctionWords.contains($0.word) }
 				let allCorrections = corrections + broadCorrections + newFromContext
-				let completions = self.lexicon.completions(prefix: lw, limit: self.completionCandidateLimit)
 				// Injected and broad candidates don't share the typed prefix — they only appear
 				// in the bar when there are no completions (pure correction mode). The LM
 				// ranking naturally suppresses weak candidates that don't fit context.
@@ -976,31 +888,87 @@ final class KeyboardEngine {
 					correctionSuggestions.append(Candidate(word: restored, cost: Self.apostropheCost,
 														   logFreq: self.lexicon.logFreq(of: restored) ?? 0))
 				}
-				// Second early exit: bail before the neural ranking pass (rank() → CoreML
-				// forward, 15–20 ms). A glide that fired after the injection step gets the
-				// queue as soon as this returns rather than waiting for a full neural forward.
+				// Exit before ranking if Glide or a newer key took ownership.
 				guard self.isLatest(gen) else { return }
-				let ranked = self.rank(completions + correctionSuggestions, context: context, log: "suggest '\(lw)'",
-					frequencyMode: .compressed).prefix(self.nBest)
-				result = ranked.prefix(3).map { matchCase(of: currentWord, to: $0.word) }
-				// SwiftKey-style emoji candidate: an exact word→emoji hit takes the last
-				// slot; picking it replaces the word (stock QuickType behavior).
-				if let e = self.emojiStore?.emoji(forWord: lw) {
-					if result.count >= 3 { result[2] = e } else { result.append(e) }
+				let split = self.splitCandidate(of: lw)
+				var scoringCandidates = completions + correctionSuggestions + allCorrections
+				if let split { scoringCandidates.append(split.candidate) }
+				// The typed row is always present, including for a real dictionary word.
+				// Using its shipped frequency fixes the old real-word gate, which compared
+				// candidates against a typed row whose frequency was incorrectly near zero.
+				let typedFrequency = self.lexicon.logFreq(of: lw)
+					?? log(Double(self.user.uniCount(lw)) + 1)
+				let typed = Candidate(word: lw, cost: 0, logFreq: typedFrequency)
+				let ranked = self.rank(scoringCandidates, including: typed, context: context,
+					log: "decode '\(lw)'", frequencyMode: .compressed)
+				let displayWords = Set((completions + correctionSuggestions).map(\.word))
+				let displayed = ranked.filter { displayWords.contains($0.word) }.prefix(3)
+				result = displayed.map { matchCase(of: currentWord, to: $0.word) }
+				evidence = ranked.prefix(self.nBest).map {
+					DecodeCandidateEvidence(word: matchCase(of: currentWord, to: $0.word),
+						score: $0.score, spatialCost: $0.spatialCost,
+						logFrequency: $0.logFrequency,
+						logLanguageProbability: $0.logLanguageProbability)
 				}
-				// UPGRADE the pending decision with allCorrections (includes injected) so
-				// the neural margin gate considers context-predicted candidates too.
-				self.setPending(PendingCorrection(word: lw,
-					correction: self.correction(from: allCorrections, typed: lw, context: context)))
+				if currentWord == lw, Self.iForms.contains(lw) {
+					decision = "I" + currentWord.dropFirst()
+					decisionConfidence = 100
+				} else {
+					var correctionCosts: [String: Double] = [:]
+					for candidate in allCorrections {
+						correctionCosts[candidate.word] = min(
+							correctionCosts[candidate.word] ?? .infinity,
+							candidate.cost
+						)
+					}
+					if let split { correctionCosts[split.candidate.word] = split.candidate.cost }
+					let resolved = self.correction(from: ranked, correctionCosts: correctionCosts,
+						typed: lw, context: context, split: split)
+					decision = resolved.word.map { matchCase(of: currentWord, to: $0) }
+					decisionConfidence = resolved.margin
+				}
+				// The center suggestion and boundary decision are one contract. If a
+				// correction is ready, make it the primary suggestion regardless of whether
+				// a completion happened to rank higher for display.
+				if let decision {
+					result.removeAll { $0.caseInsensitiveCompare(decision) == .orderedSame }
+					result.insert(decision, at: 0)
+				} else if !result.contains(where: {
+					$0.caseInsensitiveCompare(currentWord) == .orderedSame
+				}) {
+					if result.count >= 3 { result[2] = currentWord }
+					else { result.append(currentWord) }
+				}
+				result = Array(result.prefix(3))
 			}
 			// Next-character priors for key-target resizing, straight off the mmap trie
 			// for the CURRENT prefix (root when the word is empty = sentence starts).
-			// Never the neural model: this must stay microseconds, every pass.
+			// This trie lookup must stay in the microsecond-scale path on every pass.
 			let priors = self.lexicon.nextCharPriors(prefix: lw)
 			// Deliver the UI only if still the newest pass; a newer pass owns the bar now.
 			guard self.isLatest(gen) else { return }
-			DispatchQueue.main.async { completion(result, priors) }
+			let snapshot = DecodeSnapshot(
+				request: request,
+				suggestions: result,
+				candidates: evidence,
+				correction: decision,
+				confidence: decisionConfidence,
+				nextCharacterPriors: priors,
+				modelTier: .ngram,
+				completedAtUptime: ProcessInfo.processInfo.systemUptime
+			)
+			DispatchQueue.main.async { completion(snapshot) }
 		}
+	}
+
+	/// Compatibility wrapper for tests and non-controller callers. Production typing
+	/// uses the versioned `decode` contract above.
+	func suggestions(currentWord: String, context: [String], taps: [KeyTap?]? = nil,
+					 completion: @escaping ([String], [Character: Double]) -> Void) {
+		let request = DecodeRequest(fieldRevision: 0, documentRevision: 0,
+			wordSessionID: 0, generation: 0, layoutRevision: 0,
+			currentWord: currentWord, context: context, taps: taps)
+		decode(request) { completion($0.suggestions, $0.nextCharacterPriors) }
 	}
 
 	/// iOS supplementary lexicon (contact names, text-replacement shortcuts): make
@@ -1032,8 +1000,25 @@ final class KeyboardEngine {
 			guard let self else { return }
 			self.user.learn(context: ctx, word: lw)
 			self.user.pruneIfNeeded()
-			self.lexicon.noteUse(of: lw, timesUsed: self.user.uniCount(lw), adoptAfter: self.adoptAfter)
+			let count = self.user.uniCount(lw)
+			self.lexicon.noteUse(of: lw, timesUsed: count, adoptAfter: self.adoptAfter,
+				allowAdoption: self.allowsPersonalAdoption(of: lw, count: count))
 			self.scheduleSave()
+		}
+	}
+
+	/// Unknown spellings enter the searchable trie only after meaningful evidence.
+	/// A user-confirmed spelling may graduate at the normal threshold. Otherwise it
+	/// needs use in multiple contexts (or twice the normal count) and must not be a
+	/// one-edit neighbour of a shipped word. This keeps repeated fat-finger errors out
+	/// of completions without preventing genuinely novel vocabulary from adapting.
+	private func allowsPersonalAdoption(of word: String, count: Int) -> Bool {
+		guard count >= adoptAfter else { return false }
+		if lexicon.contains(word) { return true }
+		if user.spellingConfirmationCount(word) > 0 { return true }
+		guard user.contextDiversity(for: word) >= 2 || count >= adoptAfter * 2 else { return false }
+		return !lexicon.corrections(for: word, maxCost: 1.05).contains {
+			$0.word != word && $0.cost <= 1.05 && lexicon.isStaticWord($0.word)
 		}
 	}
 
@@ -1055,14 +1040,12 @@ final class KeyboardEngine {
 	///   final = -spatialCost + lmWeight·logP(w|ctx) + freqWeight·logFreq
 	/// Suggestion ranking uses a compressed frequency term; correction ranking keeps
 	/// raw frequency so the calibrated autocorrect gates remain stable.
-	/// Runs on `queue` normally; ALSO safe from the main thread when `ngramOnly` (the
-	/// space key's fast fallback) — everything it touches is immutable or self-locked.
+	/// Runs only on the serial decoder queue.
 	/// `extra` (the margin gate's typed-word row) is exempt from the profanity filter
 	/// and the cap: it must always come back scored.
 	private func rank(_ cands: [Candidate], including extra: Candidate? = nil,
 						  context: [String], log label: String? = nil,
-						  ngramOnly: Bool = false,
-						  frequencyMode: FrequencyMode = .raw) -> [(word: String, score: Double)] {
+						  frequencyMode: FrequencyMode = .raw) -> [RankedCandidate] {
 		var best: [String: Candidate] = [:]
 		for c in cands where !lexicon.isProfane(c.word) {
 			if let cur = best[c.word], cur.cost <= c.cost { continue }
@@ -1070,12 +1053,8 @@ final class KeyboardEngine {
 		}
 		guard !best.isEmpty else { return [] }
 		var list = Array(best.values)
-		// A fuzzy search can return dozens of candidates, but the prior (esp. the neural
-		// model, whose Core ML batch is capped at `scoreCap`) should only rescore the
-		// strongest handful. Pre-rank cheaply on channel + frequency and keep the top
-		// `scoreCap`: a candidate the crude score ranks below that never climbs into the
-		// shown top 3 after rescoring, and this bounds the prior to a single batch.
-		// With an `extra` row, keep one slot free so the batch still fits in one pass.
+		// Bound long candidate tails before one batched n-gram lookup. With an `extra`
+		// typed row, keep one slot free so confidence always compares against the input.
 		let cap = extra == nil ? scoreCap : scoreCap - 1
 		if list.count > cap {
 			list.sort {
@@ -1087,65 +1066,41 @@ final class KeyboardEngine {
 		if let extra, !list.contains(where: { $0.word == extra.word }) { list.append(extra) }
 		let doLog = label != nil && KBDiagnostics.verbose
 		let t0 = doLog ? Date() : nil
-		let prior: LanguageScorer = ngramOnly ? ngram : scorer
-		let priors = prior.logProbs(list.map(\.word), context: context)
+		let priors = ngram.logProbs(list.map(\.word), context: context)
 		let scored = zip(list, priors)
-			.map { (word: $0.word, score: -$0.cost + lmWeight * $1 + freqWeight * frequencyTerm($0.logFreq, mode: frequencyMode)) }
-			.sorted { $0.score > $1.score }
-		// Helpfulness telemetry: when the neural prior contributed (lastSplit non-nil),
-		// re-rank the same list on the n-gram column alone and record whether blending
-		// changed the winner. ≤16 candidates, so this is a trivial second argmax.
-		if let split = prior.lastSplit, let blendedTop = scored.first?.word {
-			var ngTop: String?
-			var ngBest = -Double.infinity
-			for (i, c) in list.enumerated() {
-				let s = -c.cost + lmWeight * split.ngram[i] + freqWeight * frequencyTerm(c.logFreq, mode: frequencyMode)
-				if s > ngBest { ngBest = s; ngTop = c.word }
+			.map { candidate, prior in
+				RankedCandidate(
+					word: candidate.word,
+					score: -candidate.cost + lmWeight * prior
+						+ freqWeight * frequencyTerm(candidate.logFreq, mode: frequencyMode),
+					spatialCost: candidate.cost,
+					logFrequency: candidate.logFreq,
+					logLanguageProbability: prior
+				)
 			}
-			KBDiagnostics.recorder.rankPass(changedTop1: blendedTop != ngTop)
-		}
+			.sorted { $0.score > $1.score }
 		if doLog, let label {
 			let ms = t0.map { Date().timeIntervalSince($0) * 1000 } ?? 0
-			let split = prior.lastSplit
 			var rows: [KBDiagnostics.RankRow] = []
 			for (i, c) in list.enumerated() {
 				let freqTerm = frequencyTerm(c.logFreq, mode: frequencyMode)
 				rows.append(.init(word: c.word, cost: c.cost, logFreq: c.logFreq,
 									  freqTerm: freqTerm,
-									  neural: split?.neural[i] ?? Double.nan,
-									  ngram: split?.ngram[i] ?? priors[i],
-									  prior: priors[i],
+									  ngram: priors[i],
 									  score: -c.cost + lmWeight * priors[i] + freqWeight * freqTerm))
 			}
 			rows.sort { $0.score > $1.score }
-			KBDiagnostics.logRanking(label: label, context: context, rows: rows,
-									 modelActive: prior.scoresArbitraryWords, ms: ms)
+			KBDiagnostics.logRanking(label: label, context: context, rows: rows, ms: ms)
 		}
 		return scored
 	}
 
 	/// Must run on `queue`.
 	private func nextWords(context: [String]) -> [String] {
-		// Trie-constrained beam search when the LM is resident: the model proposes
-		// subword pieces, every partial expansion must stay a valid trie prefix, and
-		// only complete trie words score — open, whole-sentence-context generation
-		// with zero hallucinated strings (prediction is where the neural model
-		// measurably beats the n-gram). The n-gram list — which carries the user's
-		// personal counts — fills remaining slots, and is the whole answer while
-		// the model loads. Background queue only.
 		// Never re-offer the word that was just committed — "the the" reads as a bug,
 		// and stock never does it. (Legit doubles are rare and still typeable.)
 		let last = context.last?.lowercased()
 		var out: [String] = []
-		if !context.isEmpty, let preds = neuralLM?.predictWords(
-			context: context, limit: 8,
-			isPrefix: { [lexicon] in lexicon.isPrefix($0) },
-			isWord: { [lexicon] in lexicon.contains($0) }) {
-			let allPreds = preds.map(\.word).filter { !lexicon.isProfane($0) }
-			injectionCache = (context, allPreds)   // warm the injection cache so the first keystroke is free
-			out = allPreds.filter { $0 != last }
-		}
-		let beamCount = out.count
 		for w in ngram.nextWords(context: context, limit: 8)
 			where w != last && !out.contains(w) && !lexicon.isProfane(w) { out.append(w) }
 		// Sparse personal or corpus contexts should not monopolize the bar. Fill any
@@ -1154,7 +1109,7 @@ final class KeyboardEngine {
 			out.append(w)
 		}
 		let final = Array(out.prefix(3).map(displayCase))
-		KBDiagnostics.logPredict(context: context, words: final, beam: beamCount, ngram: out.count - beamCount)
+		KBDiagnostics.logPredict(context: context, words: final, beam: 0, ngram: out.count)
 		return final
 	}
 	/// Bare "i" / "i'm" from lowercased corpora read wrong on the suggestion bar.
@@ -1191,9 +1146,8 @@ private func matchCase(of source: String, to target: String) -> String {
 //     and σ shrinks (shape dominates, as it should when the trace is clean).
 //
 // Safety (the reason #37 waited on #36's real data — "adapt now and you adapt toward noise"):
-//   1. Supervised ONLY. Statistics move on the user's own verdict — an accepted winner or a
-//      picked alternative, whose TRUE word (and therefore correct shape cost) we know — never
-//      on raw, unlabeled strokes.
+//   1. Supervised ONLY. Statistics move only when the user explicitly picks a different
+//      candidate, whose intended word and shape cost are known, never on automatic commits.
 //   2. Warm-up blend. Until `warmup` supervised samples exist the returned σ/gate are exactly
 //      the baked defaults; the adapted value ramps in linearly, so a first odd stroke moves
 //      nothing and the keyboard is identical to today's on a fresh install.
@@ -1212,11 +1166,12 @@ final class GlideProfile {
 	/// EWMA of the CORRECT-word shape cost, seeded near the synthetic-harness correct-cost
 	/// distribution (mean ~0.22, var ~0.006) so early on-device samples blend smoothly.
 	private nonisolated struct State: Codable {
+		var epoch: UInt64?
 		var n = 0
 		var mean = 0.22
 		var varc = 0.006
 	}
-	private var state = State()
+	private var state = State(epoch: KBPersonalData.currentEpoch)
 	private let lock = NSLock()
 
 	private static let key = "kb.glideprofile"
@@ -1230,20 +1185,35 @@ final class GlideProfile {
 	private static let gateK  = 2.7                  // gate sits ~2.7σ above the mean (≈ the offline p95 midpoint)
 
 	func load() {
+		let epoch = KBPersonalData.currentEpoch
 		guard let d = Self.store.data(forKey: Self.key),
-			  let s = try? JSONDecoder().decode(State.self, from: d) else { return }
+			  var s = try? JSONDecoder().decode(State.self, from: d),
+			  (s.epoch ?? epoch) == epoch else {
+			reset(to: epoch)
+			return
+		}
+		s.epoch = epoch
 		lock.lock(); state = s; lock.unlock()
 	}
 	private func persist(_ s: State) {
-		Self.io.async { if let d = try? JSONEncoder().encode(s) { Self.store.set(d, forKey: Self.key) } }
+		Self.io.async {
+			guard let epoch = s.epoch,
+				  let d = try? JSONEncoder().encode(s) else { return }
+			KBPersonalData.withExclusiveStoreLock {
+				guard KBPersonalData.currentEpoch == epoch else { return }
+				Self.store.set(d, forKey: Self.key)
+			}
+		}
 	}
 	private func snapshot() -> State { lock.lock(); defer { lock.unlock() }; return state }
 
-	/// Feed a known-CORRECT shape cost (an accepted winner, or the alternative the user picked).
+	/// Feed a known-correct shape cost from an explicitly selected alternative.
 	func observeCorrect(cost: Double) {
 		guard cost.isFinite, cost >= 0 else { return }
+		let epoch = KBPersonalData.currentEpoch
 		let s: State = {
 			lock.lock(); defer { lock.unlock() }
+			if state.epoch != epoch { state = State(epoch: epoch) }
 			let old = state.mean
 			state.mean = (1 - Self.alpha) * state.mean + Self.alpha * cost
 			// EWMA variance (Welford-style increment) — the spread the gate leaves headroom over.
@@ -1252,6 +1222,12 @@ final class GlideProfile {
 			return state
 		}()
 		persist(s)
+	}
+
+	func reset(to epoch: UInt64 = KBPersonalData.currentEpoch) {
+		lock.lock()
+		state = State(epoch: epoch)
+		lock.unlock()
 	}
 
 	/// 0 until the first sample, ramping to 1 at `warmup` — how much of the adapted value shows.

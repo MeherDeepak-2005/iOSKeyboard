@@ -21,6 +21,23 @@ enum KBEmojiRecents {
 	}
 }
 
+enum KBEmojiVariants {
+	private static let skinTones: [Unicode.Scalar] =
+		(0x1F3FB...0x1F3FF).compactMap(Unicode.Scalar.init)
+
+	static func skinToneVariants(of emoji: String) -> [String] {
+		let scalars = Array(emoji.unicodeScalars)
+		guard !scalars.contains(where: { (0x1F3FB...0x1F3FF).contains(Int($0.value)) }),
+			  let baseIndex = scalars.firstIndex(where: { $0.properties.isEmojiModifierBase })
+		else { return [] }
+		return skinTones.map { tone in
+			var variant = scalars
+			variant.insert(tone, at: variant.index(after: baseIndex))
+			return String(String.UnicodeScalarView(variant))
+		}
+	}
+}
+
 // MARK: - EmojiStore: zero-copy reader for `emoji.bin`
 //
 // The catalog used to be split from string literals into ~1,300 heap Strings on the
@@ -108,36 +125,57 @@ nonisolated final class EmojiStore {
 	}
 
 	/// Emoji whose keyword matches `query`, ranked by exact then prefix.
-	/// Scans the generated word->emoji map: the same binary data powers search and
-	/// suggestion-bar emoji candidates.
+	/// The generated map is normalized and byte-sorted, so one lower-bound lookup
+	/// finds the complete prefix range without decoding/scanning unrelated keywords.
 	func search(_ query: String) -> [String] {
 		guard mapCount > 0 else { return [] }
 		let q = normalizedSearchTerm(query)
 		guard !q.isEmpty else { return [] }
-		let hasExactMatch = (0..<mapCount).contains {
-			normalizedSearchTerm(string(u32(mapBase + 8 * $0))) == q
-		}
-		var hits: [(rank: Int, order: Int, emoji: String)] = []
+		let key = Array(q.utf8)
+		var index = lowerBound(key)
+		var exact: [String] = []
+		var prefixes: [(length: Int, order: Int, emoji: String)] = []
 		var seen = Set<String>()
-		for i in 0..<mapCount {
-			let w = string(u32(mapBase + 8 * i))
-			let term = normalizedSearchTerm(w)
-			let rank: Int?
-			if term == q {
-				rank = 0
-			} else if term.hasPrefix(q), !hasExactMatch || term.count <= q.count + 3 {
-				rank = 100 + term.count
+		while index < mapCount {
+			let bytes = stringBytes(u32(mapBase + 8 * index))
+			guard hasPrefix(bytes, key) else { break }
+			let emoji = string(u32(mapBase + 8 * index + 4))
+			if bytes.count == key.count {
+				if seen.insert(emoji).inserted { exact.append(emoji) }
 			} else {
-				rank = nil
+				prefixes.append((bytes.count, index, emoji))
 			}
-			guard let rank else { continue }
-			let e = string(u32(mapBase + 8 * i + 4))
-			guard seen.insert(e).inserted else { continue }
-			hits.append((rank, i, e))
+			index += 1
 		}
-		return hits.sorted {
-			$0.rank == $1.rank ? $0.order < $1.order : $0.rank < $1.rank
-		}.map(\.emoji)
+		let hasExact = !exact.isEmpty
+		prefixes = prefixes.filter { !hasExact || $0.length <= key.count + 3 }
+		prefixes.sort { $0.length == $1.length ? $0.order < $1.order : $0.length < $1.length }
+		var result = exact
+		for hit in prefixes where seen.insert(hit.emoji).inserted {
+			result.append(hit.emoji)
+			if result.count >= 120 { break }
+		}
+		return result
+	}
+
+	private func lowerBound(_ key: [UInt8]) -> Int {
+		var low = 0, high = mapCount
+		while low < high {
+			let middle = (low + high) >> 1
+			let word = stringBytes(u32(mapBase + 8 * middle))
+			if compare(word, key) < 0 { low = middle + 1 } else { high = middle }
+		}
+		return low
+	}
+
+	private func hasPrefix(_ bytes: Data, _ prefix: [UInt8]) -> Bool {
+		guard bytes.count >= prefix.count else { return false }
+		var index = bytes.startIndex
+		for byte in prefix {
+			guard bytes[index] == byte else { return false }
+			index = bytes.index(after: index)
+		}
+		return true
 	}
 
 	private func normalizedSearchTerm(_ text: String) -> String {
@@ -156,6 +194,10 @@ nonisolated final class EmojiStore {
 	}
 }
 
+#if EMOJI_ATLAS_EXPERIMENT
+// Deprecated experiment. Excluded from every production target: persisting rendered
+// Apple Color Emoji artwork creates an unnecessary derived-asset and review surface.
+// The shipping UI renders Unicode directly and bounds memory by category/page lifetime.
 // MARK: - EmojiAtlas: pre-rasterized emoji tiles served from an mmap'd file
 //
 // Why: drawing emoji as TEXT routes through CoreText's Apple Color Emoji renderer,
@@ -340,14 +382,12 @@ final class EmojiAtlas {
 		}
 	}
 }
+#endif
 
 // MARK: - Cells
 
 private final class EmojiCell: UICollectionViewCell {
 	let label = UILabel()
-	/// Atlas tiles render here instead of the label — a cropped CGImage from the
-	/// mmap'd strip costs no CoreText glyph cache (see EmojiAtlas).
-	private let imageView = UIImageView()
 	private var highlightColor = UIColor.clear
 
 	override var isHighlighted: Bool {
@@ -359,38 +399,46 @@ private final class EmojiCell: UICollectionViewCell {
 		label.textAlignment = .center
 		label.font = .systemFont(ofSize: 28)
 		label.translatesAutoresizingMaskIntoConstraints = false
-		imageView.contentMode = .scaleAspectFit
-		imageView.translatesAutoresizingMaskIntoConstraints = false
 		contentView.layer.cornerRadius = 8
 		contentView.layer.cornerCurve = .continuous
 		contentView.clipsToBounds = true
 		contentView.addSubview(label)
-		contentView.addSubview(imageView)
 		NSLayoutConstraint.activate([
 			label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-			label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-			imageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-			imageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-			imageView.widthAnchor.constraint(equalToConstant: EmojiAtlas.pointSize),
-			imageView.heightAnchor.constraint(equalToConstant: EmojiAtlas.pointSize)
+			label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
 		])
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
-	func configure(emoji: String, image: UIImage?, theme: KeyboardTheme) {
-		if let image {
-			imageView.image = image
-			imageView.isHidden = false
-			label.isHidden = true
-			label.text = nil
-		} else {
-			label.text = emoji
-			label.isHidden = false
-			imageView.isHidden = true
-			imageView.image = nil
-		}
+	func configure(emoji: String, theme: KeyboardTheme) {
+		label.text = emoji
+		isAccessibilityElement = true
+		accessibilityLabel = emoji
+		accessibilityTraits = .button
 		highlightColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 0, alpha: 0.08)
 		contentView.backgroundColor = isHighlighted ? highlightColor : .clear
+	}
+}
+
+private final class EmojiSearchResultCell: UICollectionViewCell {
+	private let label = UILabel()
+	override init(frame: CGRect) {
+		super.init(frame: frame)
+		label.textAlignment = .center
+		label.font = .systemFont(ofSize: 28)
+		label.translatesAutoresizingMaskIntoConstraints = false
+		contentView.addSubview(label)
+		NSLayoutConstraint.activate([
+			label.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+			label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+		])
+		isAccessibilityElement = true
+		accessibilityTraits = .button
+	}
+	required init?(coder: NSCoder) { fatalError() }
+	func configure(_ emoji: String) {
+		label.text = emoji
+		accessibilityLabel = emoji
 	}
 }
 
@@ -426,9 +474,6 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	var onABC: (() -> Void)?
 	var onNextKeyboard: (() -> Void)?
 	var onSearch: (() -> Void)?
-	/// GIF button on the bottom bar — opens the KLIPY media panel (GIFs tab;
-	/// stickers are a tab inside the panel).
-	var onGIF: (() -> Void)?
 
 	private let theme: KeyboardTheme
 	private let showsGlobe: Bool
@@ -438,8 +483,8 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	private let bottomBar = UIView()
 	private var tabButtons: [UIButton] = []
 	private var activeTab = 0
-	private let searchRowHeight: CGFloat = 42
-	private let barHeight: CGFloat = 42
+	private let searchRowHeight: CGFloat = 44
+	private let barHeight: CGFloat = 44
 
 	/// Recents come from UserDefaults; the catalog comes from the mmap'd EmojiStore.
 	/// If the bundled resource is missing, the view fails closed instead of shipping
@@ -450,11 +495,6 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	}
 	private var sections: [Section] = []
 	private let store: EmojiStore?
-	private let explicitAtlas: EmojiAtlas?
-	/// Lazy so the first cell resolves it in-window, where displayScale is real
-	/// (it is 0 for a view that was never attached). nil → text-label fallback.
-	private lazy var atlas: EmojiAtlas? =
-		explicitAtlas ?? EmojiAtlas.loadShared(store: store, scale: traitCollection.displayScale)
 
 	private func name(of s: Int) -> String {
 		switch sections[s] {
@@ -481,13 +521,12 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		}
 	}
 
-	/// `store` and `atlas` are injectable for tests.
+	/// `store` is injectable for deterministic tests.
 	init(theme: KeyboardTheme, showsGlobe: Bool,
-		 store: EmojiStore? = EmojiStore.bundled, atlas: EmojiAtlas? = nil) {
+		 store: EmojiStore? = EmojiStore.bundled) {
 		self.theme = theme
 		self.showsGlobe = showsGlobe
 		self.store = store
-		self.explicitAtlas = atlas
 		super.init(frame: .zero)
 
 		let recents = KBEmojiRecents.all()
@@ -544,7 +583,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		searchPill.frame = CGRect(x: 8, y: 5, width: bounds.width - 16, height: searchRowHeight - 10)
+		searchPill.frame = CGRect(x: 8, y: 2, width: bounds.width - 16, height: searchRowHeight - 4)
 		bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
 		collection.frame = CGRect(x: 0, y: searchRowHeight, width: bounds.width,
 								  height: max(0, bounds.height - searchRowHeight - barHeight))
@@ -566,7 +605,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		searchPill.configuration = cfg
 		searchPill.contentHorizontalAlignment = .leading
 		searchPill.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 1, alpha: 0.55)
-		searchPill.layer.cornerRadius = (searchRowHeight - 10) / 2
+		searchPill.layer.cornerRadius = (searchRowHeight - 4) / 2
 		searchPill.layer.cornerCurve = .continuous
 		searchPill.isEnabled = store != nil          // no catalog → nothing to search
 		searchPill.addAction(UIAction { [weak self] _ in self?.onSearch?() }, for: .touchUpInside)
@@ -579,7 +618,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	func collectionView(_ cv: UICollectionView, cellForItemAt ip: IndexPath) -> UICollectionViewCell {
 		let cell = cv.dequeueReusableCell(withReuseIdentifier: "e", for: ip) as! EmojiCell
 		let e = emoji(at: ip)
-		cell.configure(emoji: e, image: atlas?.image(for: e), theme: theme)
+		cell.configure(emoji: e, theme: theme)
 		return cell
 	}
 	func collectionView(_ cv: UICollectionView, viewForSupplementaryElementOfKind kind: String,
@@ -590,9 +629,24 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		return h
 	}
 	func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
-		let e = emoji(at: ip)
-		onPick?(e)
-		KBEmojiRecents.add(e)
+		commit(emoji(at: ip))
+	}
+
+	func collectionView(_ collectionView: UICollectionView,
+						contextMenuConfigurationForItemAt indexPath: IndexPath,
+						point: CGPoint) -> UIContextMenuConfiguration? {
+		let variants = KBEmojiVariants.skinToneVariants(of: emoji(at: indexPath))
+		guard !variants.isEmpty else { return nil }
+		return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+			UIMenu(title: "Skin Tone", children: variants.map { variant in
+				UIAction(title: variant) { [weak self] _ in self?.commit(variant) }
+			})
+		}
+	}
+
+	private func commit(_ emoji: String) {
+		onPick?(emoji)
+		KBEmojiRecents.add(emoji)
 	}
 
 	/// Keep the active category tab tracking the topmost visible section.
@@ -607,7 +661,6 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		bottomBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
 		var leading: [UIButton] = [barButton(title: "ABC") { [weak self] in self?.onABC?() }]
 		if showsGlobe { leading.append(barButton(symbol: "globe") { [weak self] in self?.onNextKeyboard?() }) }
-		leading.append(barButton(title: "GIF") { [weak self] in self?.onGIF?() })
 
 		let nav = UIStackView()
 		nav.axis = .horizontal
@@ -617,6 +670,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 				self?.scrollTo(section: i)
 			}
 			tabButtons.append(b)
+			b.accessibilityLabel = name(of: i)
 			nav.addArrangedSubview(b)
 		}
 		setActiveTab(0)
@@ -629,12 +683,12 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		nav.setContentHuggingPriority(.defaultLow, for: .horizontal)      // tabs take the slack
 		for b in leading + [del] {
 			b.setContentHuggingPriority(.required, for: .horizontal)
-			b.widthAnchor.constraint(equalToConstant: 40).isActive = true
+			b.widthAnchor.constraint(equalToConstant: 44).isActive = true
 		}
 		stack.translatesAutoresizingMaskIntoConstraints = false
 		bottomBar.addSubview(stack)
 		// Sub-required trailing: bottomBar is frame-laid, so its width is 0 on the first
-		// Auto Layout pass and required 40pt children can't fit — see ClipboardPanel.
+		// Auto Layout pass and required children cannot fit at the initial zero width.
 		let trailing = stack.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -4)
 		trailing.priority = .required - 1
 		NSLayoutConstraint.activate([
@@ -683,6 +737,9 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		if let symbol {
 			b.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: .regular)), for: .normal)
 		}
+		if title == "ABC" { b.accessibilityLabel = "Letters" }
+		if symbol == "globe" { b.accessibilityLabel = "Next Keyboard" }
+		if symbol == "delete.left" { b.accessibilityLabel = "Delete" }
 		b.tintColor = theme.specialKeyText.withAlphaComponent(0.5)
 		b.setTitleColor(theme.specialKeyText, for: .normal)
 		b.addAction(UIAction { _ in action() }, for: .touchUpInside)
@@ -697,20 +754,18 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 // a horizontal strip of results. Typing goes through the real keys — KeyboardView
 // routes inserts/deletes into the query instead of the host document — so there is
 // no cramped mini keyboard, and every typing nicety (popups, multitouch) just works.
-final class EmojiSearchHeader: UIView {
-	static let height: CGFloat = 86     // 38 search row + 48 results row
+final class EmojiSearchHeader: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
+	static let height: CGFloat = 92     // 44 search row + 48 results row
 
 	var onCancel: (() -> Void)?
 	var onClear: (() -> Void)?
 	var onPick: ((String) -> Void)?
 
-	// Wording knobs so the media (GIF/sticker) search can ride the same header.
 	var placeholder = "Search emoji"
 	var emptyStatus = "Type to search emoji"
 	var noResultsStatus = "No emoji found"
 
 	private let theme: KeyboardTheme
-	private let atlas: EmojiAtlas?
 	private let pill = UIView()
 	private let queryLabel = UILabel()
 	private let caret = UIView()
@@ -719,14 +774,19 @@ final class EmojiSearchHeader: UIView {
 	private var caretAtStart: NSLayoutConstraint!
 	private var caretAfterText: NSLayoutConstraint!
 	private let clearButton = UIButton(type: .system)
-	private let resultsScroll = UIScrollView()
-	private let resultsStack = UIStackView()
+	private let resultsCollection: UICollectionView
+	private var results: [String] = []
 	private let statusLabel = UILabel()
 	private let resultCap = 60          // plenty to swipe through; keeps the strip cheap
 
-	init(theme: KeyboardTheme, atlas: EmojiAtlas? = nil) {
+	init(theme: KeyboardTheme) {
 		self.theme = theme
-		self.atlas = atlas
+		let layout = UICollectionViewFlowLayout()
+		layout.scrollDirection = .horizontal
+		layout.itemSize = CGSize(width: 44, height: 48)
+		layout.minimumLineSpacing = 0
+		layout.minimumInteritemSpacing = 0
+		self.resultsCollection = UICollectionView(frame: .zero, collectionViewLayout: layout)
 		super.init(frame: .zero)
 
 		// Row 1: back chevron + query pill.
@@ -734,6 +794,7 @@ final class EmojiSearchHeader: UIView {
 		back.setImage(UIImage(systemName: "arrow.left",
 			withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .medium)), for: .normal)
 		back.tintColor = theme.specialKeyText
+		back.accessibilityLabel = "Back"
 		back.addAction(UIAction { [weak self] _ in self?.onCancel?() }, for: .touchUpInside)
 		back.translatesAutoresizingMaskIntoConstraints = false
 		addSubview(back)
@@ -764,18 +825,20 @@ final class EmojiSearchHeader: UIView {
 		clearButton.setImage(UIImage(systemName: "xmark.circle.fill",
 			withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)), for: .normal)
 		clearButton.tintColor = theme.keyText.withAlphaComponent(0.35)
+		clearButton.accessibilityLabel = "Clear search"
 		clearButton.addAction(UIAction { [weak self] _ in self?.onClear?() }, for: .touchUpInside)
 		clearButton.translatesAutoresizingMaskIntoConstraints = false
 		pill.addSubview(clearButton)
 
 		// Row 2: horizontal results strip (or a status line when there's nothing to show).
-		resultsStack.axis = .horizontal
-		resultsStack.spacing = 2
-		resultsStack.translatesAutoresizingMaskIntoConstraints = false
-		resultsScroll.showsHorizontalScrollIndicator = false
-		resultsScroll.translatesAutoresizingMaskIntoConstraints = false
-		resultsScroll.addSubview(resultsStack)
-		addSubview(resultsScroll)
+		resultsCollection.backgroundColor = .clear
+		resultsCollection.showsHorizontalScrollIndicator = false
+		resultsCollection.dataSource = self
+		resultsCollection.delegate = self
+		resultsCollection.register(EmojiSearchResultCell.self,
+			forCellWithReuseIdentifier: "emoji-search-result")
+		resultsCollection.translatesAutoresizingMaskIntoConstraints = false
+		addSubview(resultsCollection)
 
 		statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
 		statusLabel.textColor = theme.specialKeyText.withAlphaComponent(0.5)
@@ -784,14 +847,14 @@ final class EmojiSearchHeader: UIView {
 
 		NSLayoutConstraint.activate([
 			back.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-			back.centerYAnchor.constraint(equalTo: topAnchor, constant: 19),
-			back.widthAnchor.constraint(equalToConstant: 36),
-			back.heightAnchor.constraint(equalToConstant: 36),
+			back.centerYAnchor.constraint(equalTo: topAnchor, constant: 22),
+			back.widthAnchor.constraint(equalToConstant: 44),
+			back.heightAnchor.constraint(equalToConstant: 44),
 
 			pill.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 2),
 			pill.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-			pill.centerYAnchor.constraint(equalTo: topAnchor, constant: 19),
-			pill.heightAnchor.constraint(equalToConstant: 32),
+			pill.centerYAnchor.constraint(equalTo: topAnchor, constant: 22),
+			pill.heightAnchor.constraint(equalToConstant: 36),
 
 			glass.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 11),
 			glass.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
@@ -806,21 +869,15 @@ final class EmojiSearchHeader: UIView {
 
 			clearButton.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -6),
 			clearButton.centerYAnchor.constraint(equalTo: pill.centerYAnchor),
-			clearButton.widthAnchor.constraint(equalToConstant: 28),
-			clearButton.heightAnchor.constraint(equalToConstant: 28),
+			clearButton.widthAnchor.constraint(equalToConstant: 36),
+			clearButton.heightAnchor.constraint(equalToConstant: 36),
 
-			resultsScroll.topAnchor.constraint(equalTo: topAnchor, constant: 38),
-			resultsScroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-			resultsScroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-			resultsScroll.heightAnchor.constraint(equalToConstant: 48),
+			resultsCollection.topAnchor.constraint(equalTo: topAnchor, constant: 44),
+			resultsCollection.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+			resultsCollection.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+			resultsCollection.heightAnchor.constraint(equalToConstant: 48),
 
-			resultsStack.topAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.topAnchor),
-			resultsStack.bottomAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.bottomAnchor),
-			resultsStack.leadingAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.leadingAnchor),
-			resultsStack.trailingAnchor.constraint(equalTo: resultsScroll.contentLayoutGuide.trailingAnchor),
-			resultsStack.heightAnchor.constraint(equalTo: resultsScroll.frameLayoutGuide.heightAnchor),
-
-			statusLabel.centerYAnchor.constraint(equalTo: resultsScroll.centerYAnchor),
+			statusLabel.centerYAnchor.constraint(equalTo: resultsCollection.centerYAnchor),
 			statusLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16)
 		])
 		caretAtStart = caret.trailingAnchor.constraint(equalTo: queryLabel.leadingAnchor, constant: -1)
@@ -831,8 +888,9 @@ final class EmojiSearchHeader: UIView {
 
 	override func didMoveToWindow() {
 		super.didMoveToWindow()
-		guard window != nil else { return }
+		guard window != nil else { caret.layer.removeAllAnimations(); return }
 		caret.alpha = 1
+		guard !UIAccessibility.isReduceMotionEnabled else { return }
 		UIView.animate(withDuration: 0.55, delay: 0.3, options: [.repeat, .autoreverse, .allowUserInteraction]) {
 			self.caret.alpha = 0
 		}
@@ -855,28 +913,43 @@ final class EmojiSearchHeader: UIView {
 			caretAfterText.isActive = true
 		}
 
-		resultsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-		for e in results.prefix(resultCap) {
-			let b = UIButton(type: .system)
-			// Atlas tile when available — same clean-memory path as the grid; text
-			// glyphs otherwise (bounded: at most `resultCap` per refresh).
-			if let img = atlas?.image(for: e) {
-				b.setImage(img.withRenderingMode(.alwaysOriginal), for: .normal)
-			} else {
-				b.setTitle(e, for: .normal)
-				b.titleLabel?.font = .systemFont(ofSize: 28)
-			}
-			b.widthAnchor.constraint(equalToConstant: 44).isActive = true
-			b.addAction(UIAction { [weak self] _ in self?.onPick?(e) }, for: .touchUpInside)
-			resultsStack.addArrangedSubview(b)
-		}
-		resultsScroll.setContentOffset(.zero, animated: false)
+		self.results = Array(results.prefix(resultCap))
+		resultsCollection.reloadData()
+		resultsCollection.setContentOffset(.zero, animated: false)
 
 		if results.isEmpty {
 			statusLabel.text = showingRecents ? emptyStatus : noResultsStatus
 			statusLabel.isHidden = false
 		} else {
 			statusLabel.isHidden = true
+		}
+	}
+
+	func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+		results.count
+	}
+
+	func collectionView(_ collectionView: UICollectionView,
+						cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+		let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "emoji-search-result",
+			for: indexPath) as! EmojiSearchResultCell
+		cell.configure(results[indexPath.item])
+		return cell
+	}
+
+	func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+		onPick?(results[indexPath.item])
+	}
+
+	func collectionView(_ collectionView: UICollectionView,
+						contextMenuConfigurationForItemAt indexPath: IndexPath,
+						point: CGPoint) -> UIContextMenuConfiguration? {
+		let variants = KBEmojiVariants.skinToneVariants(of: results[indexPath.item])
+		guard !variants.isEmpty else { return nil }
+		return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+			UIMenu(title: "Skin Tone", children: variants.map { variant in
+				UIAction(title: variant) { [weak self] _ in self?.onPick?(variant) }
+			})
 		}
 	}
 }

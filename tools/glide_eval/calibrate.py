@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Fit the glide harness noise model to REAL swipes (task #36).
 
-Input: glide_capture.jsonl, produced on-device when KBSettings.glideCapture is on
-(diagnostics screen). Each line: {"path": [[gx,gy],...], "cands": [...], "word": "..."}.
-The path is already in grid coordinates (q=(0,0)…), so no keyboard geometry is needed.
+Input: glide_capture.jsonl, produced on-device when KBSettings.glideCapture is on.
+Gesture and explicit-label events share an opaque ID. Automatic commits are recorded
+for debugging but are never treated as intent; only a user-picked alternative creates
+an `intended` label. The path is already in grid coordinates (q=(0,0)…), so no keyboard
+geometry is needed.
 
-For every stroke whose committed word we trust, we compare the real path to that word's
+For every stroke with an explicit intended word, we compare the real path to that word's
 IDEAL path (polyline through its letter centers) and measure:
 
   jitter    – RMS perpendicular deviation of interior samples from the ideal polyline
@@ -25,7 +27,7 @@ import sys
 from pathlib import Path
 
 ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
-OFFS = [0.0, 0.25, 0.75]
+OFFS = [0.0, 0.5, 1.5]
 POS = {ch: (c + OFFS[r], float(r)) for r, row in enumerate(ROWS) for c, ch in enumerate(row)}
 
 
@@ -60,7 +62,8 @@ def main():
         sys.exit(f"no capture file at {src} — enable Glide capture in the app, swipe ~50 "
                  f"words, then copy glide_capture.jsonl out of the App Group container.")
 
-    jit, end, over, n = [], [], [], 0
+    records = []
+    labels = {}
     for line in src.read_text().splitlines():
         line = line.strip()
         if not line:
@@ -69,7 +72,15 @@ def main():
             rec = json.loads(line)
         except json.JSONDecodeError:
             continue
-        word, path = rec.get("word"), rec.get("path")
+        if rec.get("event") == "label" and rec.get("id") and rec.get("intended"):
+            labels[rec["id"]] = rec["intended"]
+        elif rec.get("event") == "gesture":
+            records.append(rec)
+
+    jit, end, over, n = [], [], [], 0
+    for rec in records:
+        word = labels.get(rec.get("id"))
+        path = rec.get("path")
         if not word or not path or len(path) < 4:
             continue
         poly = ideal_path(word)
@@ -84,7 +95,8 @@ def main():
         over.append(max((poly_dist(p, poly) for p in path), default=0))
 
     if n == 0:
-        sys.exit("no usable strokes (need committed word + >=4 path points).")
+        sys.exit("no explicitly labelled strokes (pick a Glide alternative for each "
+                 "calibration gesture; automatic commits are intentionally unlabelled).")
 
     def med(xs):
         xs = sorted(xs); return xs[len(xs) // 2] if xs else 0.0

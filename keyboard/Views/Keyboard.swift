@@ -5,6 +5,91 @@ import os
 // KeyboardView — the on-screen key deck (touches, layout, popups, shift).
 // Emoji picker → Emoji.swift; keys/theme/suggestion bar → their own files.
 
+struct KeyboardLayoutMetrics: Equatable {
+	enum Profile: Equatable { case compactPhone, phone, largePhone, landscapePhone, pad }
+	let profile: Profile
+	let rowHeight, keySpacing, rowSpacing, sidePadding, topPadding, bottomPadding: CGFloat
+	let maximumDeckWidth: CGFloat
+
+	static func resolve(width: CGFloat, idiom: UIUserInterfaceIdiom) -> KeyboardLayoutMetrics {
+		if idiom == .pad {
+			return .init(profile: .pad, rowHeight: 48, keySpacing: 7, rowSpacing: 8,
+				sidePadding: 12, topPadding: 6, bottomPadding: 7, maximumDeckWidth: 820)
+		}
+		if width >= 600 {
+			return .init(profile: .landscapePhone, rowHeight: 36, keySpacing: 5, rowSpacing: 5,
+				sidePadding: 10, topPadding: 3, bottomPadding: 4, maximumDeckWidth: 700)
+		}
+		if width <= 360 {
+			return .init(profile: .compactPhone, rowHeight: 40, keySpacing: 5, rowSpacing: 6,
+				sidePadding: 5, topPadding: 4, bottomPadding: 5, maximumDeckWidth: .greatestFiniteMagnitude)
+		}
+		if width >= 430 {
+			return .init(profile: .largePhone, rowHeight: 43, keySpacing: 6, rowSpacing: 7,
+				sidePadding: 7, topPadding: 4, bottomPadding: 6, maximumDeckWidth: .greatestFiniteMagnitude)
+		}
+		return .init(profile: .phone, rowHeight: 42, keySpacing: 6, rowSpacing: 7,
+			sidePadding: 6, topPadding: 4, bottomPadding: 5, maximumDeckWidth: .greatestFiniteMagnitude)
+	}
+}
+
+private final class KeyAlternativesView: UIView {
+	private let options: [String]
+	private var labels: [UILabel] = []
+	private let selection = UIView()
+	private(set) var selectedIndex = 0
+
+	init(options: [String], theme: KeyboardTheme) {
+		self.options = options
+		super.init(frame: .zero)
+		backgroundColor = theme.popupFill
+		layer.cornerRadius = 12
+		layer.cornerCurve = .continuous
+		layer.shadowColor = UIColor.black.cgColor
+		layer.shadowOpacity = theme.isDark ? 0.42 : 0.20
+		layer.shadowRadius = 6
+		layer.shadowOffset = CGSize(width: 0, height: 2)
+		selection.backgroundColor = theme.accentSoft
+		selection.layer.cornerRadius = 9
+		selection.layer.cornerCurve = .continuous
+		addSubview(selection)
+		for option in options {
+			let label = UILabel()
+			label.text = option
+			label.textAlignment = .center
+			label.textColor = theme.popupText
+			label.font = .systemFont(ofSize: 24,
+				weight: UIAccessibility.isBoldTextEnabled ? .medium : .regular)
+			labels.append(label)
+			addSubview(label)
+		}
+		isAccessibilityElement = false
+	}
+	required init?(coder: NSCoder) { fatalError() }
+
+	override func layoutSubviews() {
+		super.layoutSubviews()
+		guard !labels.isEmpty else { return }
+		let width = bounds.width / CGFloat(labels.count)
+		selection.frame = CGRect(x: CGFloat(selectedIndex) * width + 3, y: 3,
+			width: max(0, width - 6), height: max(0, bounds.height - 6))
+		for (index, label) in labels.enumerated() {
+			label.frame = CGRect(x: CGFloat(index) * width, y: 0, width: width, height: bounds.height)
+		}
+	}
+
+	func select(atX x: CGFloat) {
+		guard !labels.isEmpty, bounds.width > 0 else { return }
+		let index = min(labels.count - 1, max(0,
+			Int(floor(x / (bounds.width / CGFloat(labels.count))))))
+		guard index != selectedIndex else { return }
+		selectedIndex = index
+		setNeedsLayout()
+	}
+
+	var selectedValue: String { options[selectedIndex] }
+}
+
 final class KeyboardView: UIView {
 
 	/// The second argument is the tap's landing point relative to the pressed key's
@@ -13,20 +98,22 @@ final class KeyboardView: UIView {
 	var onInsert:         ((String, KeyTap?) -> Void)?
 	var onDelete:         (() -> Void)?
 	var onReturn:         (() -> Void)?
+	var onCursorModeBegan: (() -> Void)?
+	var onCursorMove:     ((Int) -> Void)?
+	var onCursorModeEnded: (() -> Void)?
+	/// A long-press alternate replaces the base character already committed on
+	/// touch-down. The controller owns the atomic proxy edit and buffer revision.
+	var onReplaceLastInput: ((String) -> Void)?
 	var onNextKeyboard:   (() -> Void)?
+	var onInputModeEvent: ((UIView, UIEvent) -> Void)?
 	var onPickSuggestion: ((String) -> Void)?
-	/// Clipboard icon tapped — the controller calls back into `showClipboard(hasFullAccess:)`
-	/// (it owns the full-access fact; the view can't read it).
-	var onOpenClipboard:  (() -> Void)?
-	/// A history row picked in the clipboard panel.
-	var onClipboardPick:  ((String) -> Void)?
-	/// GIF button on the emoji page — the controller calls back into
-	/// `showMedia(kind:query:hasFullAccess:)` (it owns the full-access fact).
-	var onOpenMedia:      ((KlipyKind) -> Void)?
 	/// Fired whenever `keyboardHeight` changes out from under the controller (entering
 	/// or leaving emoji search, which swaps the 34 pt strip for the 86 pt search header)
 	/// so it can update its height constraint.
 	var onHeightChange:   (() -> Void)?
+	/// Width/orientation changed the physical layout profile. The controller includes
+	/// this revision in decode requests so no touch model survives a geometry change.
+	var onGeometryChange: (() -> Void)?
 
 	/// Set to the tapped key's landing offset for the duration of `key.action()`, so
 	/// the char closures can attach it to `onInsert`. nil outside a live letter tap.
@@ -40,21 +127,11 @@ final class KeyboardView: UIView {
 
 	private let theme: KeyboardTheme
 	private let deckLayer = CAGradientLayer()
-	private let photoLayer = CALayer()       // Theme Studio background photo (optional)
 	private let showsGlobe: Bool
 	private var page: KeyboardPage = .letters
 	private var shift: ShiftState = .on
 	private var rows: [[KeyButton]] = []
 	private var emojiView: EmojiKeyboardView?
-	private var clipboardView: ClipboardPanelView?
-	private var mediaView: MediaPanelView?
-	// Media (GIF/sticker) search rides the SAME real-deck mechanism as emoji search:
-	// the letter keys edit a query in an EmojiSearchHeader; return submits to KLIPY.
-	private var mediaSearchHeader: EmojiSearchHeader?
-	private var isMediaSearching = false
-	private var mediaQuery = ""
-	private var mediaSearchKind: KlipyKind = .gifs
-	private var mediaHasFullAccess = false
 	// Emoji search (Gboard-style): the REAL letter deck types into a query shown in a
 	// header where the suggestion strip normally sits; results insert into the host.
 	private var emojiSearchHeader: EmojiSearchHeader?
@@ -63,16 +140,26 @@ final class KeyboardView: UIView {
 	// Live references so a shift change can relabel in place instead of rebuilding every key.
 	private var letterKeys: [(base: String, key: KeyButton)] = []
 	private weak var shiftKey: KeyButton?
+	private weak var actionKey: KeyButton?
+	private var lastShiftTapAt: TimeInterval = 0
 	private var actionTitle: String?          // contextual label for the action key (go / search / send …)
+	private var actionEnabled = true
 	private let suggestionBar: SuggestionBar
+	private(set) var inputKind: KeyboardInputKind = .standard
+	private var lastLayoutProfile: KeyboardLayoutMetrics.Profile?
 
 	/// Light haptic on each key press. Off unless enabled in settings (and the keyboard
 	/// has Full Access — otherwise iOS silently ignores the feedback generator).
 	var hapticsEnabled = false
-	private let haptic = UIImpactFeedbackGenerator(style: .light)
+	private let keyHaptic = UISelectionFeedbackGenerator()
+	private let actionHaptic = UIImpactFeedbackGenerator(style: .light)
 
 	/// Prime the Taptic Engine so the first key tap fires without latency.
-	func prepareHaptics() { if hapticsEnabled { haptic.prepare() } }
+	func prepareHaptics() {
+		guard hapticsEnabled else { return }
+		keyHaptic.prepare()
+		actionHaptic.prepare()
+	}
 
 	// MARK: Glide typing (P1: trajectory capture + tap/glide classification)
 	//
@@ -114,18 +201,22 @@ final class KeyboardView: UIView {
 	private let trailLayer = CAShapeLayer()
 	private let trailHeadLayer = CAShapeLayer()
 	private var lastGlidePreviewTime: TimeInterval = 0
-	private let glidePreviewInterval: TimeInterval = 0.06
+	private let glidePreviewInterval: TimeInterval = 0.035
 	/// A stroke becomes a glide once it travels this far AND crosses into a second key —
 	/// enough to tell a deliberate swipe from a jittery tap. Tuned for real hands in P5.
 	private var glideThreshold: CGFloat { unitPitch * 0.85 }
 
-	private let keySpacing: CGFloat = 6
-	private let rowSpacing: CGFloat = 8         // rows sit a touch closer; the reclaimed space…
-	private let rowHeight:  CGFloat = 45        // …goes into taller, easier-to-hit keys
-	private let stripHeight: CGFloat = 34       // predictive strip trimmed (was 40) to free that space
-	private let sidePad: CGFloat = 6            // keeps q/p off the screen edges
-	private let topPad: CGFloat = 5
-	private let botPad: CGFloat = 6
+	private let stripHeight: CGFloat = 44       // full minimum touch target for suggestions
+	private var metrics: KeyboardLayoutMetrics {
+		let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
+		return .resolve(width: width, idiom: traitCollection.userInterfaceIdiom)
+	}
+	private var keySpacing: CGFloat { metrics.keySpacing }
+	private var rowSpacing: CGFloat { metrics.rowSpacing }
+	private var rowHeight: CGFloat { metrics.rowHeight }
+	private var sidePad: CGFloat { metrics.sidePadding }
+	private var topPad: CGFloat { metrics.topPadding }
+	private var botPad: CGFloat { metrics.bottomPadding }
 
 	/// The predictive-suggestion strip is hidden (and its height reclaimed) in fields where
 	/// stock iOS hides predictions — URL/search/numeric/secure. Toggled by the controller.
@@ -141,16 +232,11 @@ final class KeyboardView: UIView {
 	private var stripSpace: CGFloat { showsSuggestions ? stripHeight : collapsedTopPad }
 
 	private var headerSpace: CGFloat {
-		(isEmojiSearching || isMediaSearching) ? EmojiSearchHeader.height : stripSpace
+		isEmojiSearching ? EmojiSearchHeader.height : stripSpace
 	}
 
-	/// Extra height while a BROWSING overlay is up (emoji grid, GIF/sticker panel):
-	/// more content rows without touching the typing deck's metrics. Applied only to
-	/// those pages — the clipboard list and the letter deck stay at normal height —
-	/// and snaps back the moment the overlay closes (every show*/hide* fires
-	/// onHeightChange, and the controller re-reads `keyboardHeight`).
-	private let overlayExpansion: CGFloat = 96
-	private var expansionSpace: CGFloat { (page == .emoji || page == .media) ? overlayExpansion : 0 }
+	/// Reserved for a browsing overlay without changing key geometry.
+	private var expansionSpace: CGFloat { 0 }
 
 	var keyboardHeight: CGFloat { headerSpace + expansionSpace + topPad + rowHeight*4 + rowSpacing*3 + botPad }
 
@@ -160,21 +246,26 @@ final class KeyboardView: UIView {
 		self.suggestionBar = SuggestionBar(theme: theme)
 		super.init(frame: .zero)
 		backgroundColor = .clear
-		deckLayer.colors = [theme.backgroundTop.cgColor, theme.backgroundBottom.cgColor]
+		isOpaque = false
+		layer.isOpaque = false
 		deckLayer.startPoint = CGPoint(x: 0.5, y: 0)
 		deckLayer.endPoint = CGPoint(x: 0.5, y: 1)
 		layer.insertSublayer(deckLayer, at: 0)
-		// Theme Studio photo background: the APP pre-downscales to keyboard size at
-		// save time, so this decodes ~1-2 MB once — never a full camera image.
-		if KBSettings.customThemeEnabled, KBSettings.customTheme?.usesPhoto == true,
-		   let url = KBSettings.themePhotoURL, let img = UIImage(contentsOfFile: url.path) {
-			photoLayer.contents = img.cgImage
-			photoLayer.contentsGravity = .resizeAspectFill
-			photoLayer.masksToBounds = true
-			layer.insertSublayer(photoLayer, above: deckLayer)
-		}
+		updateBackdrop()
+		NotificationCenter.default.addObserver(
+			self,
+			selector: #selector(reduceTransparencyDidChange),
+			name: UIAccessibility.reduceTransparencyStatusDidChangeNotification,
+			object: nil
+		)
+		NotificationCenter.default.addObserver(
+			self,
+			selector: #selector(reduceTransparencyDidChange),
+			name: UIAccessibility.darkerSystemColorsStatusDidChangeNotification,
+			object: nil
+		)
 		trailLayer.fillColor = nil
-		trailLayer.lineWidth = 7.5
+		trailLayer.lineWidth = 8
 		trailLayer.lineCap = .round
 		trailLayer.lineJoin = .round
 		trailLayer.strokeColor = theme.accentStart.withAlphaComponent(0.38).cgColor
@@ -187,18 +278,36 @@ final class KeyboardView: UIView {
 		addSubview(suggestionBar)
 		suggestionBar.isHidden = !showsSuggestions    // start collapsed until the host is known
 		suggestionBar.onPick = { [weak self] in self?.onPickSuggestion?($0) }
-		suggestionBar.onOpenClipboard = { [weak self] in self?.onOpenClipboard?() }
 		reload()
 	}
 	required init?(coder: NSCoder) { fatalError() }
-	deinit { repeatTimer?.invalidate() }
-
-	func setSuggestions(_ s: [String], typedPrefix: String? = nil) {
-		suggestionBar.setSuggestions(s, typedPrefix: typedPrefix)
+	deinit {
+		repeatTimer?.invalidate()
+		cursorTimer?.invalidate()
+		alternativeTimers.values.forEach { $0.invalidate() }
+		NotificationCenter.default.removeObserver(self)
 	}
 
-	func setGlidePreview(_ word: String?) {
-		suggestionBar.setGlidePreview(word)
+	@objc private func reduceTransparencyDidChange() {
+		updateBackdrop()
+	}
+
+	private func updateBackdrop() {
+		let useFallback = theme.usesSystemTransparency
+			&& (UIAccessibility.isReduceTransparencyEnabled || UIAccessibility.isDarkerSystemColorsEnabled)
+		let top = useFallback ? theme.fallbackBackgroundTop : theme.backgroundTop
+		let bottom = useFallback ? theme.fallbackBackgroundBottom : theme.backgroundBottom
+		CATransaction.begin(); CATransaction.setDisableActions(true)
+		deckLayer.colors = [top.cgColor, bottom.cgColor]
+		CATransaction.commit()
+	}
+
+	func setSuggestions(_ s: [String], typedPrefix: String? = nil, highlightPrimary: Bool = false) {
+		suggestionBar.setSuggestions(s, typedPrefix: typedPrefix, highlightPrimary: highlightPrimary)
+	}
+
+	func setGlidePreview(_ word: String?, confident: Bool = true) {
+		suggestionBar.setGlidePreview(word, confident: confident)
 	}
 
 	func setGlideResult(_ word: String, alternatives: [String]) {
@@ -219,7 +328,7 @@ final class KeyboardView: UIView {
 	/// Ignored during emoji search: the query is case-insensitive and the host
 	/// document context that drives auto-shift is irrelevant to it.
 	func setAutoShift(_ on: Bool) {
-		guard shift != .locked, !isEmojiSearching, !isMediaSearching else { return }
+		guard shift != .locked, !isEmojiSearching else { return }
 		applyShiftState(on ? .on : .off)
 	}
 
@@ -230,7 +339,14 @@ final class KeyboardView: UIView {
 		guard shift != new else { return }
 		shift = new
 		guard page == .letters else { return }   // shift only affects the letters layout
-		for (base, key) in letterKeys { key.setTitle(shifted(base)) }
+		for (base, key) in letterKeys {
+			key.setTitle(shifted(base))
+			key.setAlternatives(accentAlternatives(for: base)) { [weak self] value in
+				guard let self else { return }
+				self.routeInsert(value, nil)
+				if self.shift == .on { self.applyShiftState(.off) }
+			}
+		}
 		shiftKey?.setSymbol(shiftSymbol)
 	}
 
@@ -239,7 +355,31 @@ final class KeyboardView: UIView {
 	func setActionTitle(_ title: String?) {
 		guard title != actionTitle else { return }
 		actionTitle = title
+		guard let actionKey else { return }
+		if let title, !title.isEmpty {
+			actionKey.setTitle(title)
+			actionKey.accessibilityLabel = title
+		} else {
+			actionKey.setSymbol("return")
+			actionKey.accessibilityLabel = "Return"
+		}
+	}
+
+	func setActionEnabled(_ enabled: Bool) {
+		actionEnabled = enabled
+		actionKey?.setInputEnabled(enabled)
+	}
+
+	/// Apply host input traits without reconstructing the whole controller. Returning
+	/// true tells the controller that decoder/layout identity changed.
+	@discardableResult
+	func setInputKind(_ kind: KeyboardInputKind) -> Bool {
+		guard inputKind != kind else { return false }
+		inputKind = kind
+		page = kind == .numbersAndPunctuation || kind.usesDedicatedNumberPad ? .numbers : .letters
+		shift = kind == .standard ? shift : .off
 		reload()
+		return true
 	}
 
 	// MARK: Emoji page (overlay collection view, not a key grid)
@@ -257,7 +397,6 @@ final class KeyboardView: UIView {
 		ev.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
 		ev.onABC = { [weak self] in self?.hideEmoji() }
 		ev.onSearch = { [weak self] in self?.showEmojiSearch() }
-		ev.onGIF = { [weak self] in self?.onOpenMedia?(.gifs) }
 		addSubview(ev)
 		emojiView = ev
 		onHeightChange?()                             // height snaps back if search was up
@@ -274,127 +413,6 @@ final class KeyboardView: UIView {
 		onHeightChange?()                             // expansion released
 	}
 
-	// MARK: Clipboard panel (overlay, same height — the emoji-page pattern)
-
-	/// `hasFullAccess` comes from the controller (UIInputViewController owns it); the
-	/// panel uses it only to word its empty state.
-	func showClipboard(hasFullAccess: Bool) {
-		if isEmojiSearching { tearDownEmojiSearch() }
-		emojiView?.removeFromSuperview()
-		emojiView = nil
-		guard page != .clipboard else { return }
-		page = .clipboard
-		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
-		rows = []
-		suggestionBar.isHidden = true
-		let panel = ClipboardPanelView(theme: theme, showsGlobe: showsGlobe, hasFullAccess: hasFullAccess)
-		panel.onPick = { [weak self] in self?.onClipboardPick?($0) }
-		panel.onABC = { [weak self] in self?.hideClipboard() }
-		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
-		addSubview(panel)
-		clipboardView = panel
-		onHeightChange?()                             // height snaps back if search was up
-		setNeedsLayout()
-	}
-
-	private func hideClipboard() {
-		clipboardView?.removeFromSuperview()
-		clipboardView = nil
-		page = .letters
-		suggestionBar.isHidden = !showsSuggestions
-		reload()
-	}
-
-	// MARK: Media panel (KLIPY GIFs/stickers — overlay, same height)
-
-	/// Opened from the emoji page's GIF button (controller passes full access) and
-	/// re-entered by the media-search submit below. Always rebuilds: kind and query
-	/// change between entries.
-	func showMedia(kind: KlipyKind, query: String? = nil, hasFullAccess: Bool) {
-		mediaHasFullAccess = hasFullAccess
-		if isEmojiSearching { tearDownEmojiSearch() }
-		if isMediaSearching { tearDownMediaSearch() }
-		emojiView?.removeFromSuperview()
-		emojiView = nil
-		clipboardView?.removeFromSuperview()
-		clipboardView = nil
-		mediaView?.removeFromSuperview()
-		mediaView = nil
-		page = .media
-		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
-		rows = []
-		suggestionBar.isHidden = true
-		let panel = MediaPanelView(theme: theme, showsGlobe: showsGlobe,
-								   hasFullAccess: hasFullAccess, kind: kind, query: query)
-		panel.onABC = { [weak self] in self?.hideMedia() }
-		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
-		panel.onSearch = { [weak self] in self?.showMediaSearch(kind: $0) }
-		addSubview(panel)
-		mediaView = panel
-		onHeightChange?()                             // height snaps back if a search was up
-		setNeedsLayout()
-	}
-
-	private func hideMedia() {
-		mediaView?.removeFromSuperview()
-		mediaView = nil
-		page = .letters
-		suggestionBar.isHidden = !showsSuggestions
-		reload()
-		onHeightChange?()                             // expansion released
-	}
-
-	// MARK: Media search — the real deck types the query; return submits to KLIPY
-
-	private func showMediaSearch(kind: KlipyKind) {
-		guard page == .media, !isMediaSearching else { return }
-		mediaView?.removeFromSuperview()
-		mediaView = nil
-		isMediaSearching = true
-		mediaSearchKind = kind
-		mediaQuery = ""
-		page = .letters
-		shift = .off
-		suggestionBar.isHidden = true
-		let header = EmojiSearchHeader(theme: theme)
-		header.placeholder = "Search \(kind.displayName)"
-		header.emptyStatus = "Type, then press return to search"
-		header.onCancel = { [weak self] in self?.exitMediaSearch(submit: false) }
-		header.onClear = { [weak self] in
-			guard let self else { return }
-			mediaQuery = ""
-			refreshMediaSearch()
-		}
-		addSubview(header)
-		mediaSearchHeader = header
-		reload()
-		refreshMediaSearch()
-		onHeightChange?()
-		setNeedsLayout()
-	}
-
-	private func refreshMediaSearch() {
-		// No live results strip (searches are network round-trips submitted on
-		// return); the header shows the query plus its hint line.
-		mediaSearchHeader?.update(query: mediaQuery, results: [], showingRecents: true)
-	}
-
-	private func tearDownMediaSearch() {
-		mediaSearchHeader?.removeFromSuperview()
-		mediaSearchHeader = nil
-		isMediaSearching = false
-	}
-
-	private func exitMediaSearch(submit: Bool) {
-		guard isMediaSearching else { return }
-		let q = mediaQuery.trimmingCharacters(in: .whitespaces)
-		mediaQuery = ""
-		tearDownMediaSearch()
-		showMedia(kind: mediaSearchKind,
-				  query: submit && !q.isEmpty ? q : nil,
-				  hasFullAccess: mediaHasFullAccess)     // fires onHeightChange itself
-	}
-
 	// MARK: Emoji search — the real deck types into a query (no mini keyboard)
 
 	private func showEmojiSearch() {
@@ -406,9 +424,7 @@ final class KeyboardView: UIView {
 		page = .letters
 		shift = .off                                  // emoji keywords are lowercase
 		suggestionBar.isHidden = true
-		let header = EmojiSearchHeader(
-			theme: theme,
-			atlas: EmojiAtlas.loadShared(store: EmojiStore.bundled, scale: traitCollection.displayScale))
+		let header = EmojiSearchHeader(theme: theme)
 		header.onCancel = { [weak self] in self?.exitEmojiSearch(backToEmoji: true) }
 		header.onClear = { [weak self] in
 			guard let self else { return }
@@ -450,23 +466,13 @@ final class KeyboardView: UIView {
 	}
 
 	/// The user touched the host document directly (tapped the input field, moved the
-	/// cursor): snap any overlay — emoji page, emoji search, clipboard panel — back to
+	/// cursor): snap the emoji page or emoji search back to
 	/// the letter deck, stock-style. Returns true when something was actually dismissed
 	/// (the controller refreshes the suggestion bar only then).
 	@discardableResult
 	func dismissOverlaysIfActive() -> Bool {
 		if isEmojiSearching { exitEmojiSearch(backToEmoji: false); return true }
-		if isMediaSearching {
-			tearDownMediaSearch()
-			suggestionBar.isHidden = !showsSuggestions
-			reload()
-			onHeightChange?()
-			setNeedsLayout()
-			return true
-		}
 		if page == .emoji { hideEmoji(); return true }
-		if page == .clipboard { hideClipboard(); return true }
-		if page == .media { hideMedia(); return true }
 		return false
 	}
 
@@ -487,11 +493,6 @@ final class KeyboardView: UIView {
 			refreshEmojiSearch()
 			return
 		}
-		if isMediaSearching {
-			mediaQuery += s.lowercased()
-			refreshMediaSearch()
-			return
-		}
 		onInsert?(s, tap)
 	}
 	private func routeDelete() {
@@ -501,14 +502,10 @@ final class KeyboardView: UIView {
 			// Empty query: fall through to the host — the emoji just inserted from the
 			// results strip stays erasable without leaving search.
 		}
-		if isMediaSearching {
-			if !mediaQuery.isEmpty { mediaQuery.removeLast(); refreshMediaSearch(); return }
-		}
 		onDelete?()
 	}
 	private func routeReturn() {
 		if isEmojiSearching { exitEmojiSearch(backToEmoji: true); return }
-		if isMediaSearching { exitMediaSearch(submit: true); return }
 		onReturn?()
 	}
 
@@ -524,32 +521,34 @@ final class KeyboardView: UIView {
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
+		let resolvedMetrics = metrics
+		trailLayer.lineWidth = max(7, min(10, resolvedMetrics.rowHeight * 0.20))
+		if lastLayoutProfile != resolvedMetrics.profile {
+			let wasResolved = lastLayoutProfile != nil
+			lastLayoutProfile = resolvedMetrics.profile
+			DispatchQueue.main.async { [weak self] in
+				guard let self else { return }
+				self.onHeightChange?()
+				if wasResolved { self.onGeometryChange?() }
+			}
+		}
 		CATransaction.begin(); CATransaction.setDisableActions(true)
 		deckLayer.frame = bounds
-		photoLayer.frame = bounds
 		CATransaction.commit()
 		if page == .emoji {
 			emojiView?.frame = bounds
 			return
 		}
-		if page == .clipboard {
-			clipboardView?.frame = bounds
-			return
-		}
-		if page == .media {
-			mediaView?.frame = bounds
-			return
-		}
 		if isEmojiSearching {
 			emojiSearchHeader?.frame = CGRect(x: 0, y: 0, width: bounds.width, height: EmojiSearchHeader.height)
-		} else if isMediaSearching {
-			mediaSearchHeader?.frame = CGRect(x: 0, y: 0, width: bounds.width, height: EmojiSearchHeader.height)
 		} else {
 			suggestionBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: stripSpace)
 		}
 
-		let W = bounds.width - sidePad*2
+		let availableWidth = bounds.width - sidePad * 2
+		let W = min(availableWidth, resolvedMetrics.maximumDeckWidth)
 		guard W > 0 else { return }
+		let deckOriginX = (bounds.width - W) / 2
 		let unit = max(1, (W - keySpacing*9)/10)
 		unitPitch = unit + keySpacing            // grid-unit scale for tap offsets
 		let wide = unit*1.5 + keySpacing/2
@@ -565,7 +564,7 @@ final class KeyboardView: UIView {
 			let gaps = keySpacing * CGFloat(max(0, row.count - 1))
 			let flexW = flexCount > 0 ? max(1, (W - fixedSum - gaps)/CGFloat(flexCount)) : 0
 			let content = fixedSum + flexW*CGFloat(flexCount) + gaps
-			var x = sidePad + (flexCount == 0 ? (W - content)/2 : 0)
+			var x = deckOriginX + (flexCount == 0 ? (W - content)/2 : 0)
 			for b in row {
 				let w = b.widthKind == .flex ? flexW : fixed(b.widthKind)
 				b.frame = CGRect(x: x, y: y, width: w, height: rowHeight)
@@ -578,12 +577,15 @@ final class KeyboardView: UIView {
 	// MARK: Multi-touch — fire on contact, track every finger
 
 	private var touchKeys: [UITouch: KeyButton] = [:]
+	private var touchSequences: [UITouch: UInt64] = [:]
+	private var nextTouchSequence: UInt64 = 0
 
 	// Stock-style character balloon above the pressed key. One per active touch so
 	// two-thumb typing shows both; removed on lift, slide-off, or cancel.
 	private var touchPopups: [UITouch: UIView] = [:]
 	private var poppedKeys: [UITouch: KeyButton] = [:]   // key whose glyph is hidden under its balloon
-	private let popupClearDelay: TimeInterval = 0.018
+	private var alternativeTimers: [UITouch: Timer] = [:]
+	private var alternativePopups: [UITouch: KeyAlternativesView] = [:]
 
 	var containingKeys: [String] = []
 	private func showPopup(for key: KeyButton, at point: CGPoint, touch: UITouch) {
@@ -594,7 +596,7 @@ final class KeyboardView: UIView {
 
 		let keyFrame = key.frame
 		let edge: CGFloat = 3
-		let gap: CGFloat = 4
+		let tailHeight: CGFloat = 7
 
 		// Prefer a key-height balloon, but cap it to the visible keyboard bounds.
 		let popupWidth = max(keyFrame.width * 1.32, 42)
@@ -611,7 +613,7 @@ final class KeyboardView: UIView {
 		let popupX = min(max(desiredX, edge), maximumX)
 
 		// Normally place it just above the key, then clamp within the keyboard frame.
-		let desiredY = keyFrame.minY - popupHeight - gap
+		let desiredY = keyFrame.minY - popupHeight
 		let maximumY = max(edge, bounds.height - edge - popupHeight)
 		let popupY = min(max(edge, desiredY), maximumY)
 
@@ -628,20 +630,21 @@ final class KeyboardView: UIView {
 		popupView.layer.masksToBounds = false
 		popupView.layer.zPosition = 1000
 
-		// A simple rounded rectangle: no neck or tail.
-		let bubblePath = UIBezierPath(
-			roundedRect: popupView.bounds,
-			cornerRadius: 11
-		)
+		let body = CGRect(x: 0, y: 0, width: popupView.bounds.width,
+			height: max(1, popupView.bounds.height - tailHeight))
+		let bubblePath = UIBezierPath(roundedRect: body, cornerRadius: 11)
+		let anchor = min(max(keyFrame.midX - popupFrame.minX, 10), popupFrame.width - 10)
+		let tail = UIBezierPath()
+		tail.move(to: CGPoint(x: anchor - 7, y: body.maxY - 1))
+		tail.addLine(to: CGPoint(x: anchor, y: popupView.bounds.maxY))
+		tail.addLine(to: CGPoint(x: anchor + 7, y: body.maxY - 1))
+		tail.close()
+		bubblePath.append(tail)
 
 		let shapeLayer = CAShapeLayer()
 		shapeLayer.frame = popupView.bounds
 		shapeLayer.path = bubblePath.cgPath
-		shapeLayer.fillColor = (
-			theme.isDark
-				? UIColor(hex: 0x4A4A50)
-				: UIColor.white
-		).cgColor
+		shapeLayer.fillColor = theme.popupFill.cgColor
 
 		shapeLayer.shadowColor = UIColor.black.cgColor
 		shapeLayer.shadowOpacity = theme.isDark ? 0.45 : 0.20
@@ -651,15 +654,11 @@ final class KeyboardView: UIView {
 
 		popupView.layer.addSublayer(shapeLayer)
 
-		let label = UILabel(frame: popupView.bounds.insetBy(dx: 4, dy: 2))
+		let label = UILabel(frame: body.insetBy(dx: 4, dy: 2))
 		label.text = text
 		label.textAlignment = .center
-		label.font = theme.font.uiFont(
-			ofSize: min(34, popupHeight * 0.78)
-		)
-		label.textColor = theme.isDark
-			? UIColor(hex: 0xECECF0)
-			: UIColor(hex: 0x1B1B1D)
+		label.font = .systemFont(ofSize: min(34, popupHeight * 0.78))
+		label.textColor = theme.popupText
 
 		popupView.addSubview(label)
 		addSubview(popupView)
@@ -676,15 +675,7 @@ final class KeyboardView: UIView {
 		poppedKeys[touch]?.setCovered(false)
 		poppedKeys[touch] = nil
 	}
-	private func clearCommittedPopups(except preservedTouch: UITouch? = nil) {
-		for touch in Array(touchPopups.keys) {
-			if let preservedTouch, touch === preservedTouch { continue }
-			guard !pendingCommit.contains(touch), touch != repeatTouch else { continue }
-			clearRegisteredKey(for: touch)
-		}
-	}
 	private func registerKey(_ key: KeyButton, at point: CGPoint, for touch: UITouch) {
-		clearCommittedPopups(except: touch)
 		touchKeys[touch]?.setHighlighted(false)
 		removePopup(for: touch)
 		touchKeys[touch] = key
@@ -695,6 +686,71 @@ final class KeyboardView: UIView {
 		touchKeys[touch]?.setHighlighted(false)
 		touchKeys[touch] = nil
 		removePopup(for: touch)
+	}
+
+	private func beginAlternatives(for key: KeyButton, touch: UITouch,
+								 base: String, alternatives: [String]) {
+		guard !alternatives.isEmpty else { return }
+		alternativeTimers[touch]?.invalidate()
+		let options = [base] + alternatives.filter { $0 != base }
+		let timer = Timer(timeInterval: 0.34, repeats: false) { [weak self, weak key, weak touch] _ in
+			guard let self, let key, let touch,
+				  self.touchKeys[touch] === key,
+				  self.glide?.isGlide != true else { return }
+			self.showAlternatives(options, for: key, touch: touch)
+		}
+		RunLoop.main.add(timer, forMode: .common)
+		alternativeTimers[touch] = timer
+	}
+
+	private func showAlternatives(_ options: [String], for key: KeyButton, touch: UITouch) {
+		alternativeTimers[touch] = nil
+		removePopup(for: touch)
+		let popup = KeyAlternativesView(options: options, theme: theme)
+		let optionWidth: CGFloat = 42
+		let width = min(bounds.width - 8, optionWidth * CGFloat(options.count))
+		let height: CGFloat = 50
+		let desiredX = key.frame.midX - width / 2
+		let x = min(max(4, desiredX), max(4, bounds.width - width - 4))
+		let y = max(3, key.frame.minY - height - 4)
+		popup.frame = CGRect(x: x, y: y, width: width, height: height)
+		addSubview(popup)
+		bringSubviewToFront(popup)
+		alternativePopups[touch] = popup
+		key.setCovered(true)
+		poppedKeys[touch] = key
+		if hapticsEnabled { keyHaptic.selectionChanged(); keyHaptic.prepare() }
+	}
+
+	private func updateAlternativeSelection(for touch: UITouch, at point: CGPoint) {
+		guard let popup = alternativePopups[touch] else { return }
+		// Keep the originally committed base while the finger remains on the key.
+		guard point.y <= popup.frame.maxY + 16 else { return }
+		popup.select(atX: point.x - popup.frame.minX)
+	}
+
+	@discardableResult
+	private func finishAlternatives(for touch: UITouch, commit: Bool) -> Bool {
+		alternativeTimers[touch]?.invalidate()
+		alternativeTimers[touch] = nil
+		guard let popup = alternativePopups.removeValue(forKey: touch) else { return false }
+		let base = popup.selectedIndex == 0
+		let replacement = popup.selectedValue
+		popup.removeFromSuperview()
+		poppedKeys[touch]?.setCovered(false)
+		poppedKeys[touch] = nil
+		if commit, !base { replaceLastRoutedInput(with: replacement) }
+		return true
+	}
+
+	private func replaceLastRoutedInput(with replacement: String) {
+		if isEmojiSearching {
+			if !emojiQuery.isEmpty { emojiQuery.removeLast() }
+			emojiQuery.append(contentsOf: replacement.lowercased())
+			refreshEmojiSearch()
+		} else {
+			onReplaceLastInput?(replacement)
+		}
 	}
 
 	// Press-and-hold auto-repeat (delete): one timer, tied to the finger holding it.
@@ -708,7 +764,7 @@ final class KeyboardView: UIView {
 		repeatTouch = touch
 		let t = Timer(timeInterval: 0.09, repeats: true) { [weak self, weak key] _ in
 			guard let self, let key, self.repeatKey === key else { self?.endRepeat(); return }
-			key.action()
+			key.trigger()
 		}
 		t.fireDate = Date().addingTimeInterval(0.4)     // hold ~0.4s before it starts repeating
 		RunLoop.main.add(t, forMode: .common)
@@ -719,62 +775,99 @@ final class KeyboardView: UIView {
 		repeatTouch = nil; repeatKey = nil
 	}
 
-	// Keys register on LIFT, not on contact (Apple-style): touch-down only previews
-	// (highlight + balloon). A deferred key commits when the finger lifts, OR when a NEW
-	// key is pressed while it's still held — fast "roll onto the next key before releasing
-	// the last" typing, committed in press order. Delete is the exception: it fires on
-	// contact and auto-repeats while held. Because nothing is inserted until lift, a glide
-	// simply never commits its letter — there's no insert to undo.
-	private var pendingCommit: Set<UITouch> = []       // deferred taps awaiting lift/rollover
+	// Space cursor control. A normal tap remains touch-down-fast. Holding retracts
+	// that one provisional space, then horizontal motion moves the host cursor.
+	private var cursorTimer: Timer?
+	private weak var cursorTouch: UITouch?
+	private weak var cursorKey: KeyButton?
+	private var cursorStartX: CGFloat = 0
+	private var cursorStep = 0
+	private var isCursorTracking = false
 
-	/// Fire a deferred key: the one under the finger at `p` (updated as the finger moves,
-	/// so a slide-and-lift commits the key you release on). Idempotent via `pendingCommit`.
-	private func commit(_ touch: UITouch, at p: CGPoint) {
-		guard pendingCommit.remove(touch) != nil, let key = touchKeys[touch] else { return }
-		if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }  // it was a tap
-
-		let shouldHoldPopup = key.popupText != nil
-		if shouldHoldPopup, touchPopups[touch] == nil {
-			showPopup(for: key, at: p, touch: touch)
+	private func beginCursorHold(_ key: KeyButton, touch: UITouch, point: CGPoint) {
+		endCursorHold()
+		cursorTouch = touch
+		cursorKey = key
+		cursorStartX = point.x
+		let timer = Timer(timeInterval: 0.32, repeats: false) { [weak self, weak key, weak touch] _ in
+			guard let self, let key, let touch,
+				  self.cursorTouch === touch,
+				  self.touchKeys[touch] === key else { return }
+			self.cursorTimer = nil
+			self.isCursorTracking = true
+			self.removePopup(for: touch)
+			self.onCursorModeBegan?()
+			if self.hapticsEnabled { self.keyHaptic.selectionChanged(); self.keyHaptic.prepare() }
 		}
+		RunLoop.main.add(timer, forMode: .common)
+		cursorTimer = timer
+	}
 
-		activeTap = keyTap(for: key, at: p)
-		key.action()
-		activeTap = nil
+	private func updateCursorHold(_ touch: UITouch, point: CGPoint) {
+		guard cursorTouch === touch, isCursorTracking else { return }
+		let stepWidth = max(12, unitPitch * 0.45)
+		let nextStep = Int((point.x - cursorStartX) / stepWidth)
+		let delta = nextStep - cursorStep
+		guard delta != 0 else { return }
+		cursorStep = nextStep
+		onCursorMove?(delta)
+		if hapticsEnabled { keyHaptic.selectionChanged(); keyHaptic.prepare() }
+	}
 
-		if shouldHoldPopup {
-			DispatchQueue.main.asyncAfter(deadline: .now() + popupClearDelay) { [weak self, weak key] in
-				guard let self, !self.pendingCommit.contains(touch) else { return }
-				if let key, self.touchKeys[touch] === key {
-					self.clearRegisteredKey(for: touch)
-				} else {
-					self.removePopup(for: touch)
-				}
-			}
-		} else {
-			clearRegisteredKey(for: touch)
-		}
+	private func endCursorHold(notify: Bool = true) {
+		cursorTimer?.invalidate()
+		cursorTimer = nil
+		let wasTracking = isCursorTracking
+		cursorTouch = nil
+		cursorKey = nil
+		cursorStep = 0
+		isCursorTracking = false
+		if notify, wasTracking { onCursorModeEnded?() }
 	}
 
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-		for touch in touches {
+		// UIKit gives a Set. Sort simultaneous begins so multi-touch replay and fast
+		// thumb rollover commit in a deterministic order.
+		let ordered = touches.sorted {
+			if $0.timestamp != $1.timestamp { return $0.timestamp < $1.timestamp }
+			let a = $0.location(in: self), b = $1.location(in: self)
+			return a.x == b.x ? a.y < b.y : a.x < b.x
+		}
+		for touch in ordered {
+			nextTouchSequence &+= 1
+			touchSequences[touch] = nextTouchSequence
 			// A classified glide owns the deck: other fingers are ignored.
 			if glide?.isGlide == true { continue }
-			// Rollover: a new key press finalizes any keys still held under other fingers.
-			for held in Array(pendingCommit) where held != touch { commit(held, at: held.location(in: self)) }
 
 			let p = touch.location(in: self)
 			guard let key = key(at: p) else { continue }
 			registerKey(key, at: p, for: touch)           // preview follows the registered key
-			if hapticsEnabled { haptic.impactOccurred(intensity: 0.6); haptic.prepare() }
+			if key.isInputModeSwitch {
+				if let event { onInputModeEvent?(key, event) } else { key.trigger() }
+				performHaptic(for: key)
+				continue
+			}
 			if key.repeats {
-				key.action()                              // delete: immediate + auto-repeat
+				key.trigger()                             // delete: immediate + auto-repeat
+				performHaptic(for: key)
 				beginRepeat(key, touch: touch)
 			} else {
-				pendingCommit.insert(touch)               // everything else registers on lift
+				// Commit on touch-down. If this becomes a glide, `onGlideBegan` retracts
+				// this one provisional start letter before any preview/final decode.
+				if let base = key.popupText {
+					beginAlternatives(for: key, touch: touch, base: base,
+						alternatives: key.alternatives)
+				}
+				activeTap = keyTap(for: key, at: p)
+				key.trigger()
+				activeTap = nil
+				performHaptic(for: key)
+				if key.isSpace, !isEmojiSearching {
+					beginCursorHold(key, touch: touch, point: p)
+				}
 				if glideTouch == nil,
 				   page == .letters,
-				   !isEmojiSearching, !isMediaSearching,   // search queries are tapped, not glided
+				   !isEmojiSearching,   // search queries are tapped, not glided
 				   key.letterBase != nil {
 					glideTouch = touch
 					lastGlidePreviewTime = 0
@@ -782,6 +875,17 @@ final class KeyboardView: UIView {
 									   keys: [ObjectIdentifier(key)])
 				}
 			}
+		}
+	}
+
+	private func performHaptic(for key: KeyButton) {
+		guard hapticsEnabled else { return }
+		if key.letterBase != nil || key.role == .normal {
+			keyHaptic.selectionChanged()
+			keyHaptic.prepare()
+		} else {
+			actionHaptic.impactOccurred(intensity: key.repeats ? 0.72 : 0.56)
+			actionHaptic.prepare()
 		}
 	}
 
@@ -803,6 +907,18 @@ final class KeyboardView: UIView {
 	) {
 		for touch in touches {
 			let point = touch.location(in: self)
+			if cursorTouch === touch {
+				updateCursorHold(touch, point: point)
+				if isCursorTracking { continue }
+			}
+			if alternativePopups[touch] != nil {
+				updateAlternativeSelection(for: touch, at: point)
+				continue
+			}
+			if let key = touchKeys[touch], key.isInputModeSwitch {
+				if let event { onInputModeEvent?(key, event) }
+				continue
+			}
 
 			if touch == glideTouch, glide != nil {
 				trackGlide(touch)
@@ -818,46 +934,61 @@ final class KeyboardView: UIView {
 				continue
 			}
 
-			guard pendingCommit.contains(touch),
-				  let newKey = key(at: point) else {
-				continue
-			}
-
-			if newKey !== touchKeys[touch] {
-				registerKey(newKey, at: point, for: touch)
-			}
+			// A non-glide tap already committed on touch-down. Sliding within the
+			// cancellation threshold does not silently change the inserted key.
 		}
 	}
 	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
+			if cursorTouch === touch { endCursorHold() }
+			if finishAlternatives(for: touch, commit: true) {
+				if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }
+				clearRegisteredKey(for: touch)
+				touchSequences[touch] = nil
+				continue
+			}
+			if let key = touchKeys[touch], key.isInputModeSwitch {
+				if let event { onInputModeEvent?(key, event) }
+				clearRegisteredKey(for: touch)
+				touchSequences[touch] = nil
+				continue
+			}
 			if touch == glideTouch, glide?.isGlide == true {   // a glide: decode, commit nothing
 				let pts = glide?.points ?? []
 				let times = glide?.times ?? []
 				let layout = glideLayout()
 				glideTouch = nil; glide = nil; lastGlidePreviewTime = 0; clearTrail()
-				pendingCommit.remove(touch)
 				clearRegisteredKey(for: touch)
 				onGlide?(pts, times, layout)
+				touchSequences[touch] = nil
 				continue
 			}
 			if touch == repeatTouch {                          // delete: just stop
 				endRepeat()
 				clearRegisteredKey(for: touch)
+				touchSequences[touch] = nil
 				continue
 			}
-			commit(touch, at: touch.location(in: self))        // deferred tap → register on lift
+			if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }
+			clearRegisteredKey(for: touch)
+			touchSequences[touch] = nil
 		}
 	}
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
+			if cursorTouch === touch { endCursorHold() }
+			_ = finishAlternatives(for: touch, commit: false)
+			if let key = touchKeys[touch], key.isInputModeSwitch, let event {
+				onInputModeEvent?(key, event)
+			}
 			if touch == glideTouch {
 				glideTouch = nil; glide = nil; lastGlidePreviewTime = 0; clearTrail()
 				suggestionBar.setGlidePreview(nil)
 				onGlideCancelled?()
 			}
-			pendingCommit.remove(touch)                        // cancelled: never commit
 			if touch == repeatTouch { endRepeat() }
 			clearRegisteredKey(for: touch)
+			touchSequences[touch] = nil
 		}
 	}
 	
@@ -886,7 +1017,7 @@ final class KeyboardView: UIView {
 
 	/// Feed one movement sample into the tracked stroke; reclassify to a glide once it
 	/// travels past the threshold across ≥2 keys, then suppress its tap feedback and drop
-	/// it from `pendingCommit` (nothing was inserted, so the swipe decodes on lift instead).
+	/// retract its provisional touch-down letter before the swipe decodes on lift.
 	private func trackGlide(_ touch: UITouch) {
 		guard var glide = glide else { return }
 		let wasGlide = glide.isGlide
@@ -914,8 +1045,10 @@ final class KeyboardView: UIView {
 		   glide.keys.count >= 2 {
 			glide.isGlide = true
 
+			alternativeTimers[touch]?.invalidate()
+			alternativeTimers[touch] = nil
+			_ = finishAlternatives(for: touch, commit: false)
 			clearRegisteredKey(for: touch)
-			pendingCommit.remove(touch)
 			onGlideBegan?()
 		}
 
@@ -933,9 +1066,22 @@ final class KeyboardView: UIView {
 		guard points.count > 1 else { return }
 		let path = UIBezierPath()
 		path.move(to: points[0])
-		for p in points.dropFirst() { path.addLine(to: p) }
+		if points.count == 2 {
+			path.addLine(to: points[1])
+		} else {
+			for index in 1..<(points.count - 1) {
+				let control = points[index]
+				let next = points[index + 1]
+				let midpoint = CGPoint(x: (control.x + next.x) / 2,
+					y: (control.y + next.y) / 2)
+				path.addQuadCurve(to: midpoint, controlPoint: control)
+			}
+			if let penultimate = points.dropLast().last, let last = points.last {
+				path.addQuadCurve(to: last, controlPoint: penultimate)
+			}
+		}
 		let point = points[points.count - 1]
-		let headDiameter: CGFloat = 18
+		let headDiameter = max(20, min(28, rowHeight * 0.58))
 		let head = CGRect(x: point.x - headDiameter / 2,
 						  y: point.y - headDiameter / 2,
 						  width: headDiameter,
@@ -953,10 +1099,19 @@ final class KeyboardView: UIView {
 	}
 
 	private func key(at p: CGPoint) -> KeyButton? {
+		// Resolve the visual row first. Language priors may arbitrate a horizontal
+		// gap, but can never pull a touch into a different row.
+		let row = rows.min { lhs, rhs in
+			func verticalDistance(_ keys: [KeyButton]) -> CGFloat {
+				guard let first = keys.first else { return .greatestFiniteMagnitude }
+				let frame = first.frame
+				return max(frame.minY - p.y, 0, p.y - frame.maxY)
+			}
+			return verticalDistance(lhs) < verticalDistance(rhs)
+		} ?? []
 		var best: KeyButton?
 		var bestDist = CGFloat.greatestFiniteMagnitude
-		for row in rows {
-			for key in row {
+		for key in row {
 				let f = key.frame
 				// Authoritative inner core: a tap solidly inside a key ALWAYS returns it,
 				// so LM target-resizing can only ever affect edge and gap taps — the
@@ -971,7 +1126,6 @@ final class KeyboardView: UIView {
 					d -= CGFloat(prior) * unitPitch * unitPitch * 0.12
 				}
 				if d < bestDist { bestDist = d; best = key }
-			}
 		}
 		return best                                           // nearest key — gaps aren't dead zones
 	}
@@ -979,6 +1133,11 @@ final class KeyboardView: UIView {
 	// MARK: Build keys
 
 	private func reload() {
+		endCursorHold()
+		alternativeTimers.values.forEach { $0.invalidate() }
+		alternativeTimers.removeAll(keepingCapacity: false)
+		alternativePopups.values.forEach { $0.removeFromSuperview() }
+		alternativePopups.removeAll(keepingCapacity: false)
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
 		rows = specs().map { row in
 			row.map { spec -> KeyButton in
@@ -990,7 +1149,20 @@ final class KeyboardView: UIView {
 		// Cache the keys a shift change touches, so applyShiftState can relabel in place.
 		let all = rows.flatMap { $0 }
 		letterKeys = all.compactMap { k in k.letterBase.map { (base: $0, key: k) } }
+		for key in all where !key.alternatives.isEmpty {
+			let values = key.alternatives
+			key.setAlternatives(values) { [weak self, weak key] value in
+				guard let self else { return }
+				self.routeInsert(value, nil)
+				if key?.letterBase != nil, self.shift == .on { self.applyShiftState(.off) }
+			}
+		}
 		shiftKey = all.first { $0.isShift }
+		actionKey = all.first { $0.role == .accent }
+		actionKey?.setInputEnabled(actionEnabled)
+		var orderedAccessibilityElements: [Any] = [suggestionBar]
+		for row in rows { orderedAccessibilityElements.append(contentsOf: row) }
+		accessibilityElements = orderedAccessibilityElements
 		bringSubviewToFront(suggestionBar)
 		touchPopups.values.forEach { bringSubviewToFront($0) }   // page-reload mid-press
 		layer.addSublayer(trailLayer)          // keep the glide feedback above freshly-added keys
@@ -998,61 +1170,160 @@ final class KeyboardView: UIView {
 		setNeedsLayout()
 	}
 
+	/// Test seam for keeping visual centers and the decoder's normalized QWERTY grid
+	/// in lockstep. A mismatch here directly creates systematic tap and Glide errors.
+	func letterCenter(for letter: Character) -> CGPoint? {
+		guard let frame = letterKeys.first(where: { $0.base.first == letter })?.key.frame else { return nil }
+		return CGPoint(x: frame.midX, y: frame.midY)
+	}
+
+	func keyAccessibilityLabels() -> [String] {
+		rows.flatMap { $0 }.compactMap(\.accessibilityLabel)
+	}
+
 	private func shifted(_ c: String) -> String { shift == .off ? c : c.uppercased() }
+	private func accentAlternatives(for base: String) -> [String] {
+		let values: [String]
+		switch base.lowercased() {
+		case "a": values = ["á", "à", "â", "ä", "ã", "å", "æ"]
+		case "c": values = ["ç", "ć", "č"]
+		case "e": values = ["é", "è", "ê", "ë"]
+		case "i": values = ["í", "ì", "î", "ï"]
+		case "n": values = ["ñ", "ń"]
+		case "o": values = ["ó", "ò", "ô", "ö", "õ", "ø", "œ"]
+		case "s": values = ["ß", "ś", "š"]
+		case "u": values = ["ú", "ù", "û", "ü"]
+		case "y": values = ["ý", "ÿ"]
+		case "z": values = ["ž", "ź"]
+		default: values = []
+		}
+		return shift == .off ? values : values.map { $0.uppercased() }
+	}
+
+	private func punctuationAlternatives(for value: String) -> [String] {
+		switch value {
+		case ".": return ["…"]
+		case "?": return ["¿"]
+		case "!": return ["¡"]
+		case "-": return ["–", "—"]
+		case "'": return ["’", "‘", "\""]
+		case "\"": return ["“", "”", "'"]
+		case "/": return ["\\"]
+		default: return []
+		}
+	}
 	private var shiftSymbol: String {
 		switch shift { case .off: return "shift"; case .on: return "shift.fill"; case .locked: return "capslock.fill" }
 	}
 	private func charSpec(_ c: String) -> KeySpec {
 		if page == .letters {
-			return KeySpec(label: shifted(c), width: .unit, popup: true, letterBase: c) { [weak self] in
+			return KeySpec(label: shifted(c), width: .unit, popup: true, letterBase: c,
+				alternatives: accentAlternatives(for: c)) { [weak self] in
 				guard let self else { return }
 				self.routeInsert(self.shifted(c), self.activeTap)
 				if self.shift == .on { self.applyShiftState(.off) }   // in place — no rebuild
 			}
 		}
-		return KeySpec(label: c, width: .unit, popup: true) { [weak self] in self?.routeInsert(c, nil) }
+		return KeySpec(label: c, width: .unit, popup: true,
+			alternatives: punctuationAlternatives(for: c)) { [weak self] in self?.routeInsert(c, nil) }
 	}
 	private func punct(_ c: String) -> KeySpec {
-		KeySpec(label: c, width: .flex, popup: true) { [weak self] in self?.routeInsert(c, nil) }
+		KeySpec(label: c, width: .flex, popup: true,
+			alternatives: punctuationAlternatives(for: c)) { [weak self] in self?.routeInsert(c, nil) }
+	}
+	private func fixedPunct(_ c: String) -> KeySpec {
+		KeySpec(label: c, width: .unit, popup: true,
+			alternatives: punctuationAlternatives(for: c)) { [weak self] in self?.routeInsert(c, nil) }
 	}
 
 	private func specs() -> [[KeySpec]] {
-		let del = KeySpec(symbol: "delete.left", role: .accentSoft, width: .wide, repeats: true) { [weak self] in self?.routeDelete() }
+		let del = KeySpec(symbol: "delete.left", accessibilityLabel: "Delete",
+			role: .accentSoft, width: .wide, repeats: true) { [weak self] in self?.routeDelete() }
 		let ret: KeySpec = {
 			if let t = actionTitle, !t.isEmpty {
-				return KeySpec(label: t, role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
+				return KeySpec(label: t, accessibilityLabel: t, role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
 			}
-			return KeySpec(symbol: "return", role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
+			return KeySpec(symbol: "return", accessibilityLabel: "Return",
+				role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
 		}()
-		let space = KeySpec(label: "space", width: .flex, pill: true) { [weak self] in
+		let space = KeySpec(label: "space", accessibilityLabel: "Space", width: .flex,
+			pill: true, isSpace: true) { [weak self] in
 			self?.routeInsert(" ", nil)
 			self?.returnToLettersFromSymbolPage()   // stock: space snaps back to ABC from 123/#+=
 		}
 		func switchKey(_ l: String, to t: KeyboardPage) -> KeySpec {
-			KeySpec(label: l, role: .special, width: .wide, pill: true) { [weak self] in self?.page = t; self?.reload() }
+			let spoken = t == .letters ? "Letters" : (t == .numbers ? "Numbers" : "Symbols")
+			return KeySpec(label: l, accessibilityLabel: spoken,
+				role: .special, width: .wide, pill: true) { [weak self] in self?.page = t; self?.reload() }
 		}
-		let emojiKey = KeySpec(symbol: "face.smiling", role: .special, width: .unit, pill: false) { [weak self] in self?.showEmoji() }
-		func bottom(_ leading: KeySpec) -> [KeySpec] {
+		let emojiKey = KeySpec(symbol: "face.smiling", accessibilityLabel: "Emoji",
+			role: .special, width: .unit, pill: false) { [weak self] in self?.showEmoji() }
+		func bottom(_ leading: KeySpec, extras: [KeySpec] = []) -> [KeySpec] {
 			var r = [leading]
-			if showsGlobe { r.append(KeySpec(symbol: "globe", role: .special, width: .unit, pill: true) { [weak self] in self?.onNextKeyboard?() }) }
+			if showsGlobe {
+				r.append(KeySpec(symbol: "globe", accessibilityLabel: "Next Keyboard",
+					role: .special, width: .unit, pill: true, isInputModeSwitch: true) { [weak self] in self?.onNextKeyboard?() })
+			}
 			r.append(emojiKey)
+			r.append(contentsOf: extras)
 			r.append(space); r.append(ret); return r
 		}
-		let shiftKey = KeySpec(symbol: shiftSymbol, role: .accentSoft, width: .wide, isShift: true) { [weak self] in
+		let shiftKey = KeySpec(symbol: shiftSymbol, accessibilityLabel: "Shift",
+			role: .accentSoft, width: .wide, isShift: true) { [weak self] in
 			guard let self else { return }
+			let now = ProcessInfo.processInfo.systemUptime
+			let isDoubleTap = now - self.lastShiftTapAt <= 0.35
+			self.lastShiftTapAt = now
 			let next: ShiftState
-			switch self.shift { case .off: next = .on; case .on: next = .locked; case .locked: next = .off }
+			if self.shift == .locked {
+				next = .off
+			} else if isDoubleTap {
+				next = .locked
+			} else {
+				next = self.shift == .off ? .on : .off
+			}
 			self.applyShiftState(next)                              // in place — no rebuild
 		}
 		switch page {
 		case .letters:
+			let extras: [KeySpec]
+			switch inputKind {
+			case .email: extras = [fixedPunct("@"), fixedPunct(".")]
+			case .url: extras = [fixedPunct("/"), fixedPunct(".")]
+			case .webSearch: extras = [fixedPunct(".")]
+			case .twitter: extras = [fixedPunct("@"), fixedPunct("#")]
+			default: extras = []
+			}
 			return [
-				["q","w","e","r","t","y","u","i","o","p"].map(charSpec),
-				["a","s","d","f","g","h","j","k","l"].map(charSpec),
-				[shiftKey] + ["z","x","c","v","b","n","m"].map(charSpec) + [del],
-				bottom(switchKey("123", to: .numbers))
+				KB.rows[0].map { charSpec(String($0)) },
+				KB.rows[1].map { charSpec(String($0)) },
+				[shiftKey] + KB.rows[2].map { charSpec(String($0)) } + [del],
+				bottom(switchKey("123", to: .numbers), extras: extras)
 			]
 		case .numbers:
+			if inputKind.usesDedicatedNumberPad {
+				func digit(_ value: String) -> KeySpec {
+					KeySpec(label: value, width: .flex, popup: true) { [weak self] in
+						self?.routeInsert(value, nil)
+					}
+				}
+				let auxiliary: KeySpec? = {
+					switch inputKind {
+					case .decimalPad: return digit(Locale.current.decimalSeparator ?? ".")
+					case .phonePad: return digit("+")
+					default: return nil
+					}
+				}()
+				var final = [switchKey("ABC", to: .letters)]
+				if let auxiliary { final.append(auxiliary) }
+				final.append(digit("0")); final.append(del); final.append(ret)
+				return [
+					["1", "2", "3"].map(digit),
+					["4", "5", "6"].map(digit),
+					["7", "8", "9"].map(digit),
+					final
+				]
+			}
 			return [
 				["1","2","3","4","5","6","7","8","9","0"].map(charSpec),
 				["-","/",":",";","(",")","$","&","@","\""].map(charSpec),
@@ -1066,8 +1337,8 @@ final class KeyboardView: UIView {
 				[switchKey("123", to: .numbers)] + [".",",","?","!","'"].map(punct) + [del],
 				bottom(switchKey("ABC", to: .letters))
 			]
-		case .emoji, .clipboard, .media:
-			return []   // overlay pages (emoji grid / clipboard / GIF panel), not key grids
+		case .emoji:
+			return []   // emoji uses its collection-view overlay, not a key grid
 		}
 	}
 }

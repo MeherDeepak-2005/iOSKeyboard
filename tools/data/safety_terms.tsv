@@ -1,0 +1,31 @@
+# Exact terms excluded from automatic suggestions/corrections. This list does not
+# censor user input. Additions require a false-positive review and product approval.
+arsehole	en
+asshole	en
+bastard	en
+bitch	en
+bullshit	en
+cocksucker	en
+cunt	en
+dickhead	en
+douchebag	en
+faggot	en
+fuck	en
+fucked	en
+fucker	en
+fucking	en
+motherfucker	en
+motherfucking	en
+nigga	en
+nigger	en
+prick	en
+pussy	en
+retard	en
+retarded	en
+shit	en
+shithead	en
+shitty	en
+slut	en
+twat	en
+wanker	en
+whore	en
