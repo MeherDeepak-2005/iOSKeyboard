@@ -1,4 +1,10 @@
-"""TinyLM — the 4-layer decoder-only rescorer (~4.7M params at the defaults).
+"""Keyboard language-model definitions used by training and Core ML export.
+
+``TinyLM`` is the legacy 4-layer decoder (~4.7M parameters). The production
+exporter also understands ``KeyboardStudentLM``, the 6-layer/384-wide model
+from ``qwen_lm_distil`` (10,601,472 unique parameters). Keeping both loaders in
+one module lets old checkpoints remain reproducible while the keyboard ships the
+larger model without an unsafe state-dict rename.
 
 Explicit attention (not nn.TransformerEncoder) for two reasons:
   1. MPS hangs on TransformerEncoder + float causal mask (nested-tensor path).
@@ -11,6 +17,8 @@ Param math:
   ---------------------------------
                             ~4.7M    -> ~4.7 MB int8
 """
+
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -144,6 +152,176 @@ class TinyLM(nn.Module):
         return self.head(self.norm(x)), new_cache
 
 
+@dataclass(frozen=True)
+class StudentModelConfig:
+    vocab_size: int = 6000
+    d_model: int = 384
+    layers: int = 6
+    heads: int = 6
+    ffn_dim: int = 1024
+    max_length: int = 32
+    dropout: float = 0.05
+
+    @classmethod
+    def from_dict(cls, value):
+        allowed = cls.__dataclass_fields__.keys()
+        return cls(**{key: value[key] for key in allowed if key in value})
+
+
+class StudentDecoderBlock(nn.Module):
+    """State-dict-compatible block for the supplied 10.6M checkpoint."""
+
+    def __init__(self, config):
+        super().__init__()
+        width = config.d_model
+        if width % config.heads:
+            raise ValueError("d_model must be divisible by heads")
+        self.heads = config.heads
+        self.head_dim = width // config.heads
+        self.norm1 = nn.LayerNorm(width)
+        self.qkv = nn.Linear(width, 3 * width)
+        self.proj = nn.Linear(width, width)
+        self.norm2 = nn.LayerNorm(width)
+        self.ff1 = nn.Linear(width, config.ffn_dim)
+        self.ff2 = nn.Linear(config.ffn_dim, width)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x, causal):
+        batch, length, width = x.shape
+        hidden = self.norm1(x)
+        q, k, v = self.qkv(hidden).split(width, dim=-1)
+
+        def split_heads(tensor):
+            return tensor.view(batch, length, self.heads, self.head_dim).transpose(1, 2)
+
+        q, k, v = split_heads(q), split_heads(k), split_heads(v)
+        attention = (q @ k.transpose(-2, -1)) / (self.head_dim ** 0.5)
+        attention = (attention + causal).softmax(dim=-1)
+        out = (attention @ v).transpose(1, 2).reshape(batch, length, width)
+        x = x + self.dropout(self.proj(out))
+        feed_forward = self.ff2(F.gelu(self.ff1(self.norm2(x)), approximate="tanh"))
+        return x + self.dropout(feed_forward)
+
+
+class KeyboardStudentLM(nn.Module):
+    """The supplied 6-layer English keyboard student, independent of train stage."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.maxlen = config.max_length
+        self.embedding = nn.Embedding(config.vocab_size, config.d_model)
+        self.position = nn.Embedding(config.max_length, config.d_model)
+        self.blocks = nn.ModuleList([
+            StudentDecoderBlock(config) for _ in range(config.layers)
+        ])
+        self.norm = nn.LayerNorm(config.d_model)
+        self.head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+        self.head.weight = self.embedding.weight
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_length), persistent=False
+        )
+        self.register_buffer(
+            "causal",
+            torch.triu(torch.full((config.max_length, config.max_length), float("-inf")), 1),
+            persistent=False,
+        )
+        self.apply(self._initialize)
+
+    @staticmethod
+    def _initialize(module):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
+            nn.init.normal_(module.weight, std=0.02)
+            if getattr(module, "bias", None) is not None:
+                nn.init.zeros_(module.bias)
+
+    def hidden(self, tokens):
+        x = self.embedding(tokens) + self.position(self.position_ids)
+        for block in self.blocks:
+            x = block(x, self.causal)
+        return self.norm(x)
+
+    def forward(self, tokens):
+        return self.head(self.hidden(tokens))
+
+
+class SmoothLinear(nn.Linear):
+    """Inference-only linear with an exactly compensating input-channel scale."""
+
+    def __init__(self, source, scale):
+        super().__init__(
+            source.in_features,
+            source.out_features,
+            bias=source.bias is not None,
+            device=source.weight.device,
+            dtype=source.weight.dtype,
+        )
+        with torch.no_grad():
+            self.weight.copy_(source.weight * scale.unsqueeze(0))
+            if source.bias is not None:
+                self.bias.copy_(source.bias)
+        self.weight.requires_grad_(source.weight.requires_grad)
+        if self.bias is not None:
+            self.bias.requires_grad_(source.bias.requires_grad)
+        self.register_buffer("inverse_input_scale", scale.reciprocal())
+
+    def forward(self, inputs):
+        return F.linear(inputs * self.inverse_input_scale, self.weight, self.bias)
+
+
+def apply_smooth_quant(model, input_absmax, alpha=0.5):
+    """Balance transformer activations and weight columns without changing outputs.
+
+    ``input_absmax`` maps module names to per-input-channel calibration maxima.
+    The tied vocabulary head is deliberately excluded so its embedding matrix is
+    neither altered nor duplicated in the exported package.
+    """
+    if not 0 <= alpha <= 1:
+        raise ValueError("SmoothQuant alpha must be between 0 and 1")
+
+    summaries = {}
+    modules = list(model.named_modules())
+    for name, module in modules:
+        if not name or name == "head" or not isinstance(module, nn.Linear):
+            continue
+        activation = input_absmax.get(name)
+        if activation is None or activation.numel() != module.in_features:
+            raise ValueError(f"missing SmoothQuant calibration for {name}")
+        activation = activation.to(device=module.weight.device, dtype=module.weight.dtype)
+        weight = module.weight.detach().abs().amax(dim=0)
+        scale = activation.clamp_min(1e-5).pow(alpha) / weight.clamp_min(1e-5).pow(1 - alpha)
+        scale = scale.clamp(1e-4, 1e4)
+        parent_name, _, child_name = name.rpartition(".")
+        parent = model.get_submodule(parent_name) if parent_name else model
+        setattr(parent, child_name, SmoothLinear(module, scale))
+        summaries[name] = {
+            "minimum": float(scale.min()),
+            "maximum": float(scale.max()),
+        }
+    return summaries
+
+
+def count_parameters(model):
+    """Count unique trainable parameters; tied embedding/head weights count once."""
+    return sum(parameter.numel() for parameter in model.parameters())
+
+
+def load_inference_checkpoint(path):
+    """Load either the legacy TinyLM checkpoint or the supplied 10.6M format."""
+    try:
+        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    except TypeError:  # torch < 2.6 has no weights_only argument
+        checkpoint = torch.load(path, map_location="cpu")
+
+    if "model_config" in checkpoint:
+        config = StudentModelConfig.from_dict(checkpoint["model_config"])
+        model = KeyboardStudentLM(config)
+    else:
+        model = TinyLM(vocab=checkpoint["vocab"])
+    model.load_state_dict(checkpoint["model"])
+    return model.eval(), checkpoint
+
+
 class KeyboardInferenceModel(nn.Module):
     """Memory-bounded Core ML interface used by the keyboard extension.
 
@@ -161,10 +339,11 @@ class KeyboardInferenceModel(nn.Module):
     """
     score_slots = 8
 
-    def __init__(self, lm: TinyLM):
+    def __init__(self, lm):
         super().__init__()
         self.lm = lm
-        self.d = lm.emb.embedding_dim
+        embedding = lm.emb if hasattr(lm, "emb") else lm.embedding
+        self.d = embedding.embedding_dim
 
     def _gather_hidden(self, hidden, positions):
         index = positions.to(torch.int64).unsqueeze(-1).expand(-1, -1, self.d)

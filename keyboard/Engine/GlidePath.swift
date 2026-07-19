@@ -236,9 +236,9 @@ enum GlideDecoder {
 	/// lose, at a fraction of the cost. A glide fires ONCE per word on lift, not per keystroke.
 	///
 	/// Once the prune window (Phase 4) is in place, width barely moves accuracy — glide_eval
-	/// bw48→128 is 86.7→87.6 top-1 — so 64 is chosen for latency: ~3 ms/word (3× faster than the
-	/// unwindowed bw192) at 86.7 top-1 / 89.1 recall, +2.5 pp over that old config.
-	static let defaultBeamWidth = 64
+	/// bw48→128 is 86.7→87.3 top-1 — so 48 is chosen for latency: ~2.4 ms/word (4× faster than the
+	/// unwindowed bw192) at 86.7 top-1 / 89.4 recall, +2.5 pp over that old config.
+	static let defaultBeamWidth = 48
 	/// Seed anchoring radius (grid units ≈ key pitches). The beam is seeded only from first-letters
 	/// whose key center is within this far of the swipe's first point — the start key is the most
 	/// reliable point of a glide, so this prunes ~26→~4 root branches (and the depth-2 explosion
@@ -265,9 +265,10 @@ enum GlideDecoder {
 					   band: Int = defaultBand, freqLambda: Double = defaultFreqLambda,
 					   dirWeight: Double = defaultDirWeight,
 					   seedRadius: CGFloat = defaultSeedRadius,
-					   pruneWindow: Int = defaultPruneWindow)
+					   pruneWindow: Int = defaultPruneWindow,
+					   shouldCancel: (() -> Bool)? = nil)
 			-> [(word: String, cost: Double)] {
-		guard lang.hasTrie, g.points.count >= 2 else { return [] }
+		guard lang.hasTrie, g.points.count >= 2, shouldCancel?() != true else { return [] }
 		let obs = resampleN(g.points, N)             // observed swipe, fixed N points
 		guard obs.count == N else { return [] }
 		let obsTan = dirWeight > 0 ? tangents(obs) : []
@@ -307,6 +308,7 @@ enum GlideDecoder {
 
 		let maxDepth = 22
 		for _ in 1..<maxDepth {
+			if shouldCancel?() == true { return [] }
 			var next: [Hyp] = []
 			for h in beam {
 				lang.forEachChild(ofNode: h.node) { label, node in

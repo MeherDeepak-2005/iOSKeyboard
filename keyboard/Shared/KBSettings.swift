@@ -26,6 +26,13 @@ enum KBLanguage: String, CaseIterable {
 	var isAvailable: Bool { self == .english }
 }
 
+enum KBWordCase {
+	static func sentenceDisplay(_ word: String, capitalized: Bool) -> String {
+		guard capitalized, !word.isEmpty else { return word }
+		return word.prefix(1).uppercased() + word.dropFirst()
+	}
+}
+
 enum KBFont: String, CaseIterable {
 	case system   = "System"
 	case rounded  = "Rounded"
@@ -199,7 +206,11 @@ struct KBCustomTheme: Codable, Equatable {
 
 enum KBSettings {
 	nonisolated static let appGroup = "group.com.swiftuimasterclass.keyboard"
-	private static var store: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
+	/// Open the App Group preference suite once per process. Reconstructing it at every
+	/// read causes unnecessary CFPreferences container attachment work in the extension
+	/// and can repeat Apple's `kCFPreferencesAnyUser` diagnostic.
+	nonisolated(unsafe) static let sharedDefaults = UserDefaults(suiteName: appGroup) ?? .standard
+	private static var store: UserDefaults { sharedDefaults }
 
 	private enum Key {
 		static let language = "kb.language"
@@ -208,6 +219,8 @@ enum KBSettings {
 		static let haptics  = "kb.haptics"
 		static let neural   = "kb.neural"
 		static let glideCap = "kb.glidecapture"
+		static let hasUsed  = "kb.hasused"
+		static let fullAccess = "kb.fullaccess"
 	}
 
 	static var language: KBLanguage {
@@ -245,6 +258,18 @@ enum KBSettings {
 	static var haptics: Bool {
 		get { store.object(forKey: Key.haptics) as? Bool ?? true }
 		set { store.set(newValue, forKey: Key.haptics) }
+	}
+	/// Set by the extension after it is presented at least once. iOS does not expose a
+	/// reliable API for checking whether this specific third-party keyboard is enabled.
+	static var hasUsedKeyboard: Bool {
+		get { store.bool(forKey: Key.hasUsed) }
+		set { store.set(newValue, forKey: Key.hasUsed) }
+	}
+	/// Last Full Access state observed by the extension after a real host connection.
+	/// The containing app cannot query this directly, so it presents this cached state.
+	static var lastFullAccess: Bool {
+		get { store.bool(forKey: Key.fullAccess) }
+		set { store.set(newValue, forKey: Key.fullAccess) }
 	}
 	/// Load the on-device neural rescorer. Default ON — it earns its ~20-30 MB working
 	/// set with better ranking, and it already sheds that memory when the OS signals

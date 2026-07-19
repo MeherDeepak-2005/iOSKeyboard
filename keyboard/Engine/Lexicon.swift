@@ -131,6 +131,12 @@ final class Lexicon {
 		lock.lock(); defer { lock.unlock() }
 		return staticTrie ? langData?.trieWordID(lw) : dynamicTrie.wordID(lw)
 	}
+	/// Immutable mmap snapshot for the dedicated Glide queues. The reference is copied
+	/// under the lock; all trie/ngram bytes are read-only after bundle loading completes.
+	func languageDataSnapshot() -> LangData? {
+		lock.lock(); defer { lock.unlock() }
+		return staticTrie ? langData : nil
+	}
 	func corrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil) -> [Candidate] {
 		lock.lock(); defer { lock.unlock() }
 		var out = dynamicTrie.search(lw, maxCost: maxCost, taps: taps)
@@ -226,8 +232,13 @@ final class Lexicon {
 	}
 
 	func loadFromBundle() {
-		if let url = Bundle.main.url(forResource: "langdata", withExtension: "bin"),
-		   let ld = LangData(url: url) {
+		load(from: Bundle.main.url(forResource: "langdata", withExtension: "bin"))
+	}
+
+	/// Explicit resource seam for deterministic engine tests and offline tools. The
+	/// shipping engine calls `loadFromBundle()` and follows the same implementation.
+	func load(from url: URL?) {
+		if let url, let ld = LangData(url: url) {
 			lock.lock(); langData = ld; lock.unlock()
 			if ld.hasTrie {
 				// v3: the dictionary is searched in place — nothing to copy to the heap.
@@ -280,4 +291,3 @@ final class Lexicon {
 		}
 	}
 }
-

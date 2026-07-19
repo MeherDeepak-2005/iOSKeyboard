@@ -35,8 +35,8 @@ struct KeyboardTheme {
 				accentKeyText: .white,
 				accentStart: g.startColor, accentEnd: g.endColor,
 				accentSoft: UIColor(white: 1, alpha: 0.09), accentSoftText: UIColor(hex: 0xECECF0),
-				shadowColor: .white, shadowOpacity: 0, cornerRadius: 8, isDark: true,
-				font: KBSettings.font)
+					shadowColor: .white, shadowOpacity: 0, cornerRadius: 8, isDark: true,
+					font: .system)
 		} else {
 			return KeyboardTheme(name: "Light",
 				backgroundTop: .clear,
@@ -46,8 +46,8 @@ struct KeyboardTheme {
 				accentKeyText: .white,
 				accentStart: g.startColor, accentEnd: g.endColor,
 				accentSoft: UIColor(white: 1, alpha: 0.22), accentSoftText: UIColor(hex: 0x1B1B1D),
-				shadowColor: UIColor(white: 0, alpha: 1), shadowOpacity: 0, cornerRadius: 8, isDark: false,
-				font: KBSettings.font)
+					shadowColor: UIColor(white: 0, alpha: 1), shadowOpacity: 0, cornerRadius: 8, isDark: false,
+					font: .system)
 		}
 	}
 
@@ -69,9 +69,9 @@ struct KeyboardTheme {
 			accentKeyText: accentGlyph,
 			accentStart: UIColor(hex: c.accentStart), accentEnd: UIColor(hex: c.accentEnd),
 			accentSoft: specialFill, accentSoftText: text,
-			shadowColor: c.dark ? .white : UIColor(white: 0, alpha: 1),
-			shadowOpacity: 0, cornerRadius: 8, isDark: c.dark,
-			font: KBSettings.font)
+				shadowColor: c.dark ? .white : UIColor(white: 0, alpha: 1),
+				shadowOpacity: 0, cornerRadius: 8, isDark: c.dark,
+				font: .system)
 	}
 
 	/// Relative luminance of a hex RGB (0…1) — picks glyph color on accent fills.
@@ -102,4 +102,3 @@ struct KeySpec {
 	var isShift: Bool = false        // the shift key, whose glyph updates on shift changes
 	var action: () -> Void
 }
-

@@ -8,7 +8,7 @@ from pathlib import Path
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from model import KeyboardInferenceModel, TinyLM
+from model import KeyboardInferenceModel, TinyLM, apply_smooth_quant, count_parameters
 
 
 class KeyboardInferenceModelTests(unittest.TestCase):
@@ -57,6 +57,28 @@ class KeyboardInferenceModelTests(unittest.TestCase):
         actual = traced(*batch)
         torch.testing.assert_close(actual[0], eager[0])
         torch.testing.assert_close(actual[1], eager[1])
+
+    def test_smooth_quant_transform_preserves_outputs_and_tied_head(self):
+        torch.manual_seed(11)
+        lm = TinyLM(vocab=101, d=32, layers=2, heads=4, ff=64).eval()
+        tokens = torch.randint(0, 101, (3, 32), dtype=torch.int32)
+        before_count = count_parameters(lm)
+        with torch.no_grad():
+            expected = lm(tokens)
+
+        input_absmax = {
+            name: torch.linspace(0.5, 3.0, module.in_features)
+            for name, module in lm.named_modules()
+            if name != "head" and isinstance(module, torch.nn.Linear)
+        }
+        summary = apply_smooth_quant(lm, input_absmax, alpha=0.5)
+        with torch.no_grad():
+            actual = lm(tokens)
+
+        self.assertTrue(summary)
+        self.assertEqual(count_parameters(lm), before_count)
+        self.assertIs(lm.head.weight, lm.emb.weight)
+        torch.testing.assert_close(actual, expected, atol=2e-5, rtol=2e-5)
 
 
 if __name__ == "__main__":

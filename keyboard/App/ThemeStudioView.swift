@@ -1,29 +1,16 @@
 import SwiftUI
 import PhotosUI
 
-// Theme Studio — design-your-own keyboard, separate from the stock Themes page.
-// The demo keyboard at the bottom is LIVE: tap any letter to edit the letter-key
-// color, shift/delete/123 for special keys, return for the action key, the deck
-// behind the keys for the background. Colors come from a hue radio + five shades
-// (plus a free wheel); the background can be a solid, a from→to gradient, or a
-// photo — downscaled HERE, in the app, so the extension only ever decodes a
-// keyboard-sized image.
+// One appearance surface for presets and custom keyboard colors.
 
 struct ThemeStudioView: View {
 	fileprivate enum Element: String, CaseIterable {
 		case keys = "Keys", special = "Special", action = "Action", text = "Text", background = "Background"
-		var help: String {
-			switch self {
-			case .keys: return "letter keys"
-			case .special: return "shift · delete · 123"
-			case .action: return "return key"
-			case .text: return "key lettering"
-			case .background: return "the deck behind the keys"
-			}
-		}
 	}
 	private enum BGSlot: String, CaseIterable { case from = "From", to = "To" }
 
+	@EnvironmentObject private var store: SettingsStore
+	@Environment(\.colorScheme) private var scheme
 	@State private var theme = KBSettings.customTheme ?? KBCustomTheme()
 	@State private var enabled = KBSettings.customThemeEnabled
 	@State private var selection: Element = .keys
@@ -37,82 +24,166 @@ struct ThemeStudioView: View {
 		0x2F97EC, 0x3A5BD9, 0x7B4FD8, 0xC2185B, 0x8D6E63, 0x607D8B,
 		0x1B1B1D, 0xFFFFFF,
 	]
+	private var isDark: Bool { scheme == .dark }
 
 	var body: some View {
 		List {
+			Section("Theme") {
+				presetCarousel
+					.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 0))
+			}
+
 			Section {
 				Toggle(isOn: $enabled) {
-					Label("Use my design", systemImage: "paintbrush.pointed.fill")
+					Label("Custom Theme", systemImage: "paintbrush.pointed.fill")
 				}
 				.onChange(of: enabled) { _, on in
 					KBSettings.customThemeEnabled = on
 					if on { save() }
 				}
-			} footer: {
-				Text("Tap a part of the keyboard below, then pick its color. Tap the area behind the keys to edit the background.")
 			}
 
-			Section("Editing: \(selection.rawValue) — \(selection.help)") {
-				Picker("Element", selection: $selection) {
-					ForEach(Element.allCases, id: \.self) { Text($0.rawValue) }
-				}
-				.pickerStyle(.segmented)
-
-				if selection == .background {
-					Picker("Gradient stop", selection: $bgSlot) {
-						ForEach(BGSlot.allCases, id: \.self) { Text("\($0.rawValue) color") }
-					}
-					.pickerStyle(.segmented)
-				}
-
-				hueRadio
-				shadeRow
-				ColorPicker("Fine-tune", selection: customBinding, supportsOpacity: false)
-			}
-
-			if selection == .background {
-				Section {
-					PhotosPicker(selection: $photoItem, matching: .images) {
-						Label(hasPhoto ? "Replace photo" : "Upload photo", systemImage: "photo.on.rectangle")
-					}
-					if hasPhoto {
-						Button(role: .destructive) {
-							if let url = KBSettings.themePhotoURL { try? FileManager.default.removeItem(at: url) }
-							hasPhoto = false
-							theme.usesPhoto = false
-							save()
-						} label: {
-							Label("Remove photo", systemImage: "trash")
-						}
-					}
-				} header: {
-					Text("Background photo")
-				} footer: {
-					Text("Photos are shrunk to keyboard size before saving, so they cost the keyboard almost nothing.")
-				}
-			}
-
-			Section {
-				Toggle(isOn: $theme.dark) {
-					Label("Dark styling", systemImage: "moon.fill")
-				}
-				.onChange(of: theme.dark) { _, _ in save() }
-			} footer: {
-				Text("Use for dark backgrounds — key popups and highlights adapt.")
-			}
-
-			Section("Preview — tap to edit") {
-				DemoKeyboard(theme: theme, hasPhoto: hasPhoto) { tapped in
-					selection = tapped
+			Section("Preview") {
+				DemoKeyboard(theme: previewTheme, hasPhoto: enabled && hasPhoto) { tapped in
+					if enabled { selection = tapped }
 				}
 				.listRowInsets(EdgeInsets())
 			}
+
+			if enabled {
+				Section(selection.rawValue) {
+					Picker("Editing", selection: $selection) {
+						ForEach(Element.allCases, id: \.self) { Text($0.rawValue) }
+					}
+					.pickerStyle(.menu)
+
+					if selection == .background {
+						Picker("Gradient stop", selection: $bgSlot) {
+							ForEach(BGSlot.allCases, id: \.self) { Text($0.rawValue) }
+						}
+						.pickerStyle(.segmented)
+					}
+
+					hueRadio
+					shadeRow
+					ColorPicker("Fine-tune", selection: customBinding, supportsOpacity: false)
+				}
+
+				if selection == .background {
+					Section("Photo") {
+						PhotosPicker(selection: $photoItem, matching: .images) {
+							Label(hasPhoto ? "Replace Photo" : "Choose Photo", systemImage: "photo.on.rectangle")
+						}
+						if hasPhoto {
+							Button(role: .destructive) {
+								if let url = KBSettings.themePhotoURL { try? FileManager.default.removeItem(at: url) }
+								hasPhoto = false
+								theme.usesPhoto = false
+								save()
+							} label: {
+								Label("Remove Photo", systemImage: "trash")
+							}
+						}
+					}
+				}
+
+				Section {
+					Toggle(isOn: $theme.dark) {
+						Label("Dark Contrast", systemImage: "moon.fill")
+					}
+					.onChange(of: theme.dark) { _, _ in save() }
+				}
+			}
 		}
-		.navigationTitle("Theme Studio")
+		.navigationTitle("Appearance")
 		.navigationBarTitleDisplayMode(.inline)
 		.onChange(of: photoItem) { _, item in
 			guard let item else { return }
 			Task { await importPhoto(item) }
+		}
+	}
+
+	private var previewTheme: KBCustomTheme {
+		guard !enabled else { return theme }
+		let gradient = store.accent.gradient(dark: isDark)
+		var value = KBCustomTheme()
+		value.keys = isDark ? 0x3A3A3E : 0xFFFFFF
+		value.special = isDark ? 0x2D2D31 : 0xDDE1EA
+		value.text = isDark ? 0xF2F2F4 : 0x1B1B1D
+		value.bgStart = isDark ? 0x202023 : 0xECEAF0
+		value.bgEnd = isDark ? 0x18181A : 0xDDDCE2
+		value.accentStart = gradient.start
+		value.accentEnd = gradient.end
+		value.dark = isDark
+		return value
+	}
+
+	private var presetCarousel: some View {
+		ScrollView(.horizontal, showsIndicators: false) {
+			HStack(spacing: 10) {
+				ForEach(KBPalette.all) { accent in
+					presetSwatch(accent)
+				}
+			}
+			.padding(.trailing, 16)
+		}
+	}
+
+	private func presetSwatch(_ accent: KBAccent) -> some View {
+		let selected = !enabled && store.accentID == accent.id
+		return Button {
+			withAnimation(.snappy) {
+				enabled = false
+				KBSettings.customThemeEnabled = false
+				store.accentID = accent.id
+			}
+		} label: {
+			VStack(spacing: 5) {
+				miniKeyboard(accent)
+					.frame(width: 70, height: 46)
+					.overlay {
+						if selected {
+							Image(systemName: "checkmark.circle.fill")
+								.font(.system(size: 15, weight: .bold))
+								.foregroundStyle(.white)
+								.shadow(radius: 1)
+						}
+					}
+					.overlay {
+						RoundedRectangle(cornerRadius: 8, style: .continuous)
+							.strokeBorder(selected ? Color.accentColor : .primary.opacity(0.10), lineWidth: selected ? 2 : 1)
+					}
+				Text(accent.name)
+					.font(.caption2)
+					.foregroundStyle(.secondary)
+			}
+		}
+		.buttonStyle(.plain)
+	}
+
+	private func miniKeyboard(_ accent: KBAccent) -> some View {
+		let key = isDark ? Color.white.opacity(0.20) : Color.white.opacity(0.88)
+		let special = isDark ? Color.white.opacity(0.10) : Color.black.opacity(0.10)
+		return ZStack {
+			RoundedRectangle(cornerRadius: 8, style: .continuous)
+				.fill(isDark ? Color(uiColor: .secondarySystemBackground) : Color(uiColor: .systemGray5))
+			VStack(spacing: 3) {
+				ForEach(0..<3, id: \.self) { row in
+					HStack(spacing: 2) {
+						ForEach(0..<(row == 1 ? 7 : 8), id: \.self) { _ in
+							RoundedRectangle(cornerRadius: 2).fill(key).frame(height: 6)
+						}
+					}
+				}
+				HStack(spacing: 3) {
+					RoundedRectangle(cornerRadius: 3).fill(special).frame(width: 13, height: 6)
+					RoundedRectangle(cornerRadius: 3).fill(key).frame(height: 6)
+					RoundedRectangle(cornerRadius: 3)
+						.fill(accent.linearGradient(dark: isDark))
+						.frame(width: 17, height: 6)
+				}
+			}
+			.padding(6)
 		}
 	}
 

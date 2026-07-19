@@ -13,9 +13,9 @@ import CoreGraphics
 // MEMORY LEDGER — why this client is shaped the way it is:
 //   · One JSON page (24 items) ≈ 60–150 KB, parsed once and dropped; the retained
 //     [KlipyMediaItem] array is a few KB of URLs/ints per page.
-//   · PREVIEW picks the SMALLEST animated variant (xs/sm, webp before gif — webp
-//     thumbs run ~40–150 KB where the same gif is 2–3×). Files stream to the disk
-//     LRU (KBMediaCache); nothing is held as Data in this process.
+//   · PREVIEW picks the smallest animated variant that can fill the 256 px decoder
+//     target (webp before gif). This avoids enlarging a blurry 120 px thumbnail while
+//     the decoded bitmap cap — and therefore resident memory — remains unchanged.
 //   · SEND picks the biggest gif (hd→md, universally pasteable); it is fetched only
 //     on tap, straight to disk, and handed to the pasteboard from a mapped read.
 
@@ -75,8 +75,7 @@ final class KlipyClient {
 		let hasNext = (payload["has_next"] as? Bool) ?? false
 		let items: [KlipyMediaItem] = rows.compactMap { row in
 			guard let file = row["file"] as? [String: Any],
-				  // smallest animated thumb for cells; biggest gif for the pasteboard
-				  let preview = variant(file, sizes: ["xs", "sm", "md", "hd"], formats: ["webp", "gif"]),
+				  let preview = previewVariant(file),
 				  let send = variant(file, sizes: ["hd", "md", "sm", "xs"], formats: ["gif"])
 			else { return nil }
 			let id = (row["id"] as? Int).map(String.init) ?? (row["slug"] as? String) ?? preview.url.absoluteString
@@ -89,17 +88,39 @@ final class KlipyClient {
 		return (items, hasNext)
 	}
 
+	private nonisolated static func previewVariant(_ file: [String: Any])
+		-> (url: URL, size: CGSize)? {
+		let target: CGFloat = 256
+		var largest: (url: URL, size: CGSize)?
+		for sizeName in ["xs", "sm", "md", "hd"] {
+			guard let bucket = file[sizeName] as? [String: Any],
+				  let candidate = mediaVariant(bucket, formats: ["webp", "gif"])
+			else { continue }
+			largest = candidate
+			if max(candidate.size.width, candidate.size.height) >= target { return candidate }
+		}
+		return largest
+	}
+
 	private nonisolated static func variant(_ file: [String: Any], sizes: [String], formats: [String])
 		-> (url: URL, size: CGSize)? {
 		for s in sizes {
 			guard let bucket = file[s] as? [String: Any] else { continue }
-			for f in formats {
-				guard let v = bucket[f] as? [String: Any],
-					  let raw = v["url"] as? String, let url = URL(string: raw) else { continue }
-				let w = (v["width"] as? Double) ?? 0
-				let h = (v["height"] as? Double) ?? 0
-				return (url, CGSize(width: w, height: h))
-			}
+			if let candidate = mediaVariant(bucket, formats: formats) { return candidate }
+		}
+		return nil
+	}
+
+	private nonisolated static func mediaVariant(_ bucket: [String: Any], formats: [String])
+		-> (url: URL, size: CGSize)? {
+		for format in formats {
+			guard let value = bucket[format] as? [String: Any],
+				  let raw = value["url"] as? String,
+				  let url = URL(string: raw)
+			else { continue }
+			let width = (value["width"] as? Double) ?? 0
+			let height = (value["height"] as? Double) ?? 0
+			return (url, CGSize(width: width, height: height))
 		}
 		return nil
 	}

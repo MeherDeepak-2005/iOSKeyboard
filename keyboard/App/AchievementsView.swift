@@ -21,47 +21,48 @@ struct AchievementBanner: View {
 			banner
 		}
 		.buttonStyle(.plain)
+		.accessibilityIdentifier("achievements.banner")
 		.onAppear { stats = KBStats.load() }
 	}
 
 	private var banner: some View {
 		let g = league.gradient
-		return RoundedRectangle(cornerRadius: 22, style: .continuous)
-			.fill(LinearGradient(colors: [Color(uiColor: UIColor(hex: g.start)),
-										  Color(uiColor: UIColor(hex: g.end))],
-								 startPoint: .topLeading, endPoint: .bottomTrailing))
-			.overlay(
-				HStack(spacing: 14) {
+		let leagueGradient = LinearGradient(
+			colors: [Color(uiColor: UIColor(hex: g.start)), Color(uiColor: UIColor(hex: g.end))],
+			startPoint: .topLeading,
+			endPoint: .bottomTrailing)
+		return HStack(spacing: 12) {
+			ZStack {
+				Circle()
+					.fill(leagueGradient)
+					.frame(width: 42, height: 42)
 					Image(systemName: league.symbol)
-						.font(.system(size: 34, weight: .semibold))
-					VStack(alignment: .leading, spacing: 3) {
-						Text("\(league.rawValue) League")
-							.font(.headline)
-						Text("\(stats.total.formatted()) words typed")
-							.font(.caption)
-							.opacity(0.9)
-						ProgressView(value: KBLeague.progress(for: stats.total))
-							.tint(.white)
-							.frame(maxWidth: 180)
-					}
-					Spacer()
-					VStack(spacing: 2) {
-						Image(systemName: "flame.fill")
-							.font(.title3)
-						Text("\(streak)")
-							.font(.system(.title3, design: .rounded).bold())
-						Text("day streak")
-							.font(.system(size: 9))
-							.opacity(0.85)
-					}
-					Image(systemName: "chevron.right")
-						.font(.footnote.bold())
-						.opacity(0.7)
+					.font(.system(size: 18, weight: .semibold))
+					.foregroundStyle(.white)
+			}
+			VStack(alignment: .leading, spacing: 4) {
+				Text("\(league.rawValue) League")
+					.font(.subheadline.weight(.semibold))
+				HStack(spacing: 8) {
+					ProgressView(value: KBLeague.progress(for: stats.total))
+						.tint(Color(uiColor: UIColor(hex: g.end)))
+					Text("\(stats.total.formatted())")
+						.font(.caption.monospacedDigit())
+						.foregroundStyle(.secondary)
 				}
-				.foregroundStyle(.white)
-				.padding(.horizontal, 18)
-			)
-			.padding(.horizontal)
+				Label("\(streak)-day streak", systemImage: "flame.fill")
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
+			Spacer(minLength: 4)
+		}
+		.padding(.horizontal, 12)
+		.padding(.vertical, 10)
+		.background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+		.overlay {
+			RoundedRectangle(cornerRadius: 8, style: .continuous)
+				.strokeBorder(.primary.opacity(0.08), lineWidth: 0.5)
+		}
 	}
 }
 
@@ -89,34 +90,38 @@ struct AchievementsView: View {
 	}
 
 	var body: some View {
-		List {
-			Section {
+		ScrollView {
+			LazyVStack(alignment: .leading, spacing: 14) {
 				leagueCard
-			}
-			Section("Last 14 days") {
+				sectionHeader("Last 14 days")
 				chart
-			}
-			Section("Your numbers") {
-				statRow("keyboard", "Words typed", stats.totalTyped.formatted())
-				statRow("hand.draw.fill", "Words glided", "\(stats.totalGlided.formatted()) (\(glidePercent)%)")
-				statRow("bolt.fill", "Best day", "\(stats.bestDay.formatted()) words")
-				statRow("flame.fill", "Best streak", "\(stats.bestStreak) days")
-			}
-			Section("Trophies") {
+				sectionHeader("Your numbers")
+				LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+					statTile("keyboard", "Tapped", stats.totalTyped.formatted())
+					statTile("hand.draw.fill", "Glided", "\(stats.totalGlided.formatted()) · \(glidePercent)%")
+					statTile("bolt.fill", "Best day", stats.bestDay.formatted())
+					statTile("flame.fill", "Best streak", "\(stats.bestStreak) days")
+				}
+				sectionHeader("Trophies · \(earnedTrophyCount) of \(KBStats.trophies.count)")
 				trophyGrid
 			}
+			.padding(.horizontal, 16)
+			.padding(.bottom, 24)
 		}
+		.background(Color(uiColor: .systemGroupedBackground))
 		.navigationTitle("Achievements")
-		.navigationBarTitleDisplayMode(.inline)
+		.navigationBarTitleDisplayMode(.large)
 		.onAppear { stats = KBStats.load() }
 	}
+
+	private var earnedTrophyCount: Int { KBStats.trophies.filter { $0.isEarned(stats) }.count }
 
 	private var leagueCard: some View {
 		let g = league.gradient
 		let next = league.next
-		return VStack(spacing: 10) {
+		return VStack(spacing: 8) {
 			Image(systemName: league.symbol)
-				.font(.system(size: 44, weight: .semibold))
+				.font(.system(size: 38, weight: .semibold))
 				.foregroundStyle(LinearGradient(colors: [Color(uiColor: UIColor(hex: g.start)),
 														 Color(uiColor: UIColor(hex: g.end))],
 												startPoint: .top, endPoint: .bottom))
@@ -135,7 +140,12 @@ struct AchievementsView: View {
 			}
 		}
 		.frame(maxWidth: .infinity)
-		.padding(.vertical, 8)
+		.padding(16)
+		.background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+		.overlay {
+			RoundedRectangle(cornerRadius: 8, style: .continuous)
+				.strokeBorder(.primary.opacity(0.08), lineWidth: 0.5)
+		}
 	}
 
 	private var chart: some View {
@@ -155,45 +165,56 @@ struct AchievementsView: View {
 				AxisGridLine()
 			}
 		}
-		.frame(height: 190)
-		.padding(.vertical, 6)
+		.frame(height: 140)
+		.padding(12)
+		.background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 	}
 
-	private func statRow(_ icon: String, _ title: String, _ value: String) -> some View {
-		HStack {
+	private func sectionHeader(_ title: String) -> some View {
+		Text(title.uppercased())
+			.font(.caption.weight(.semibold))
+			.foregroundStyle(.secondary)
+			.padding(.horizontal, 2)
+	}
+
+	private func statTile(_ icon: String, _ title: String, _ value: String) -> some View {
+		VStack(alignment: .leading, spacing: 7) {
+			HStack(spacing: 6) {
 			Image(systemName: icon)
-				.frame(width: 26)
+				.frame(width: 18)
 				.foregroundStyle(.secondary)
-			Text(title)
-			Spacer()
+				Text(title)
+					.font(.caption)
+					.foregroundStyle(.secondary)
+			}
 			Text(value)
-				.foregroundStyle(.secondary)
-				.font(.callout.monospacedDigit())
+				.font(.headline.monospacedDigit())
+				.lineLimit(1)
+				.minimumScaleFactor(0.8)
 		}
+		.frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
+		.padding(12)
+		.background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 	}
 
 	private var trophyGrid: some View {
-		LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 12)], spacing: 14) {
+		LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
 			ForEach(KBStats.trophies) { trophy in
 				let earned = trophy.isEarned(stats)
 				VStack(spacing: 6) {
 					Image(systemName: trophy.symbol)
-						.font(.system(size: 26, weight: .semibold))
-						.frame(height: 32)
+						.font(.system(size: 22, weight: .semibold))
+						.frame(height: 28)
 						.foregroundStyle(earned ? Color.yellow.gradient : Color.gray.opacity(0.45).gradient)
 					Text(trophy.name)
 						.font(.caption.bold())
 						.multilineTextAlignment(.center)
-					Text(trophy.detail)
-						.font(.system(size: 10))
-						.foregroundStyle(.secondary)
-						.multilineTextAlignment(.center)
 				}
 				.frame(maxWidth: .infinity)
-				.padding(.vertical, 10)
+				.frame(height: 74)
 				.background(
 					RoundedRectangle(cornerRadius: 12, style: .continuous)
-						.fill(earned ? Color.yellow.opacity(0.12) : Color.gray.opacity(0.08))
+						.fill(Color(uiColor: .secondarySystemGroupedBackground))
 				)
 				.opacity(earned ? 1 : 0.75)
 			}

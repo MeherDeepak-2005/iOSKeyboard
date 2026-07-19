@@ -12,11 +12,19 @@ import CoreData
 struct keyboardApp: App {
     let persistenceController = PersistenceController.shared
 
-    init() { FontInstaller.registerBundledFonts() }
-
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                #if DEBUG
+                if let spec = DesignLabSpec.commandLine {
+                    DesignLabView(spec: spec)
+                } else {
+                    ContentView()
+                }
+                #else
+                ContentView()
+                #endif
+            }
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
     }

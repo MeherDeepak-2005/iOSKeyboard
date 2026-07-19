@@ -83,8 +83,7 @@ final class KeyButton: UIView {
 			lbl.text = spec.label
 			lbl.textColor = fg
 			let multi = (spec.label?.count ?? 0) > 1
-			// Single characters (the letters you type) honour the user's font choice.
-			// Multi-char functional labels (space, 123, go) stay on the system font.
+			// Key legends use Apple's system face for consistent metrics and alignment.
 			lbl.font = multi ? .systemFont(ofSize: 16, weight: .medium)
 							 : theme.font.uiFont(ofSize: 23)
 			content = lbl
@@ -146,4 +145,3 @@ final class KeyButton: UIView {
 		iconView?.image = UIImage(systemName: name, withConfiguration: Self.symbolConfig)
 	}
 }
-

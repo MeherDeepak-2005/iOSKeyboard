@@ -42,11 +42,15 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 	private let searchPill = UIButton(type: .system)
 	private let statusLabel = UILabel()
 	private let toast = UILabel()
+	private let topBar = UIView()
 	private let bottomBar = UIView()
+	private let abcButton = UIButton(type: .system)
+	private let creditLabel = UILabel()
+	private let globeButton = UIButton(type: .system)
 	private var tabButtons: [KlipyKind: UIButton] = [:]
 	private var link: CADisplayLink?
-	private let searchRowHeight: CGFloat = 42
-	private let barHeight: CGFloat = 42
+	private let topBarHeight: CGFloat = 42
+	private let footerHeight: CGFloat = 20
 	/// Longer-side pixel cap for cell frames — the panel's memory knob (see ledger).
 	static let cellMaxPixel = 256
 
@@ -60,7 +64,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		self.injectedItems = items
 		super.init(frame: .zero)
 
-		collection = UICollectionView(frame: .zero, collectionViewLayout: Self.makeLayout())
+		collection = UICollectionView(frame: .zero, collectionViewLayout: Self.makeLayout(kind: kind))
 		collection.backgroundColor = .clear
 		collection.dataSource = self
 		collection.delegate = self
@@ -74,10 +78,10 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		statusLabel.numberOfLines = 3
 		collection.backgroundView = statusLabel
 
-		buildSearchPill()
+		buildTopBar()
 		buildBottomBar()
 		buildToast()
-		addSubview(searchPill)
+		addSubview(topBar)
 		addSubview(bottomBar)
 		addSubview(toast)
 
@@ -92,14 +96,19 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
-	/// 2-column grid of fixed-height tiles — cheap to lay out, no waterfall math.
-	private static func makeLayout() -> UICollectionViewLayout {
+	/// GIFs favor larger two-column previews; transparent stickers fit a denser
+	/// three-column grid. Both use fixed rows so scrolling stays cheap and stable.
+	private static func makeLayout(kind: KlipyKind) -> UICollectionViewLayout {
+		let columns = kind == .stickers ? 3 : 2
 		let item = NSCollectionLayoutItem(layoutSize: .init(
-			widthDimension: .fractionalWidth(0.5), heightDimension: .fractionalHeight(1)))
+			widthDimension: .fractionalWidth(1.0 / CGFloat(columns)),
+			heightDimension: .fractionalHeight(1)))
 		item.contentInsets = NSDirectionalEdgeInsets(top: 3, leading: 3, bottom: 3, trailing: 3)
 		let row = NSCollectionLayoutGroup.horizontal(layoutSize: .init(
-			widthDimension: .fractionalWidth(1), heightDimension: .absolute(92)),
-			subitems: [item, item])
+			widthDimension: .fractionalWidth(1),
+			heightDimension: .absolute(kind == .stickers ? 96 : 112)),
+			repeatingSubitem: item,
+			count: columns)
 		let sec = NSCollectionLayoutSection(group: row)
 		sec.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 5, bottom: 6, trailing: 5)
 		return UICollectionViewCompositionalLayout(section: sec)
@@ -107,10 +116,12 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		searchPill.frame = CGRect(x: 8, y: 5, width: bounds.width - 16, height: searchRowHeight - 10)
-		bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
-		collection.frame = CGRect(x: 0, y: searchRowHeight, width: bounds.width,
-								  height: max(0, bounds.height - searchRowHeight - barHeight))
+		topBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topBarHeight)
+		layoutTopBar()
+		bottomBar.frame = CGRect(x: 0, y: bounds.height - footerHeight, width: bounds.width, height: footerHeight)
+		layoutFooter()
+		collection.frame = CGRect(x: 0, y: topBarHeight, width: bounds.width,
+								  height: max(0, bounds.height - topBarHeight - footerHeight))
 		toast.frame = CGRect(x: bounds.midX - 110, y: bounds.midY - 18, width: 220, height: 36)
 	}
 
@@ -198,17 +209,52 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 
 	// MARK: Chrome
 
-	private func buildSearchPill() {
+	private func buildTopBar() {
+		topBar.backgroundColor = theme.isDark
+			? UIColor(white: 1, alpha: 0.035)
+			: UIColor(white: 0, alpha: 0.025)
+		abcButton.setTitle("ABC", for: .normal)
+		abcButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+		abcButton.setTitleColor(theme.specialKeyText, for: .normal)
+		abcButton.addAction(UIAction { [weak self] _ in self?.onABC?() }, for: .touchUpInside)
+		topBar.addSubview(abcButton)
+
+		for k in [KlipyKind.gifs, .stickers] {
+			let button = barButton(title: k.displayName) { [weak self] in self?.switchKind(k) }
+			tabButtons[k] = button
+			topBar.addSubview(button)
+		}
+
 		updateSearchPill()
 		searchPill.contentHorizontalAlignment = .leading
 		searchPill.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 1, alpha: 0.55)
-		searchPill.layer.cornerRadius = (searchRowHeight - 10) / 2
+		searchPill.layer.cornerRadius = 10
 		searchPill.layer.cornerCurve = .continuous
 		// Added ONCE — updateSearchPill (re-run on tab switch) must not stack actions.
 		searchPill.addAction(UIAction { [weak self] _ in
 			guard let self else { return }
 			onSearch?(kind)
 		}, for: .touchUpInside)
+		topBar.addSubview(searchPill)
+		highlightTabs()
+	}
+
+	private func layoutTopBar() {
+		let y: CGFloat = 5
+		let h = max(0, topBar.bounds.height - 10)
+		let gap: CGFloat = 4
+		var x: CGFloat = 6
+		abcButton.frame = CGRect(x: x, y: y, width: 42, height: h)
+		x = abcButton.frame.maxX + gap
+		if let gifs = tabButtons[.gifs] {
+			gifs.frame = CGRect(x: x, y: y, width: 48, height: h)
+			x = gifs.frame.maxX + gap
+		}
+		if let stickers = tabButtons[.stickers] {
+			stickers.frame = CGRect(x: x, y: y, width: 66, height: h)
+			x = stickers.frame.maxX + gap
+		}
+		searchPill.frame = CGRect(x: x, y: y, width: max(0, topBar.bounds.width - x - 6), height: h)
 	}
 
 	/// Re-applied whenever the kind or query wording changes.
@@ -217,55 +263,41 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		cfg.image = UIImage(systemName: "magnifyingglass",
 							withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
 		cfg.imagePadding = 6
-		let title = query ?? "Search \(kind.displayName)"
+		let title = query ?? "Search"
 		cfg.attributedTitle = AttributedString(title, attributes: AttributeContainer([
 			.font: UIFont.systemFont(ofSize: 15),
 			.foregroundColor: theme.keyText.withAlphaComponent(query == nil ? 0.45 : 0.9)
 		]))
 		cfg.baseForegroundColor = theme.keyText.withAlphaComponent(0.45)
-		cfg.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
+		cfg.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 8)
 		searchPill.configuration = cfg
 	}
 
 	private func buildBottomBar() {
-		bottomBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
-		var views: [UIView] = [barButton(title: "ABC") { [weak self] in self?.onABC?() }]
-		if showsGlobe { views.append(barButton(symbol: "globe") { [weak self] in self?.onNextKeyboard?() }) }
-		for k in [KlipyKind.gifs, .stickers] {
-			let b = barButton(title: k.displayName) { [weak self] in self?.switchKind(k) }
-			tabButtons[k] = b
-			views.append(b)
-		}
-		// Attribution required by KLIPY's usage guidelines.
-		let credit = UILabel()
-		credit.text = "Powered by KLIPY"
-		credit.font = .systemFont(ofSize: 10, weight: .medium)
-		credit.textColor = theme.specialKeyText.withAlphaComponent(0.4)
-		credit.textAlignment = .right
-		views.append(credit)
+		bottomBar.backgroundColor = .clear
+		creditLabel.text = "Powered by KLIPY"
+		creditLabel.font = .systemFont(ofSize: 9, weight: .medium)
+		creditLabel.textColor = theme.specialKeyText.withAlphaComponent(0.38)
+		creditLabel.textAlignment = .right
+		bottomBar.addSubview(creditLabel)
+		guard showsGlobe else { return }
+		globeButton.setImage(UIImage(systemName: "globe",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .regular)), for: .normal)
+		globeButton.tintColor = theme.specialKeyText.withAlphaComponent(0.55)
+		globeButton.addAction(UIAction { [weak self] _ in self?.onNextKeyboard?() }, for: .touchUpInside)
+		bottomBar.addSubview(globeButton)
+	}
 
-		let stack = UIStackView(arrangedSubviews: views)
-		stack.axis = .horizontal
-		stack.spacing = 6
-		stack.alignment = .fill
-		credit.setContentHuggingPriority(.defaultLow, for: .horizontal)   // credit takes the slack
-		for case let b as UIButton in views {
-			b.setContentHuggingPriority(.required, for: .horizontal)
-			b.widthAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
-		}
-		stack.translatesAutoresizingMaskIntoConstraints = false
-		bottomBar.addSubview(stack)
-		// Sub-required trailing: bottomBar is frame-laid, so its width is 0 on the first
-		// Auto Layout pass — see ClipboardPanel.
-		let trailing = stack.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -10)
-		trailing.priority = .required - 1
-		NSLayoutConstraint.activate([
-			stack.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 6),
-			trailing,
-			stack.topAnchor.constraint(equalTo: bottomBar.topAnchor),
-			stack.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor)
-		])
-		highlightTabs()
+	private func layoutFooter() {
+		globeButton.frame = showsGlobe
+			? CGRect(x: 6, y: 0, width: 32, height: bottomBar.bounds.height)
+			: .zero
+		creditLabel.frame = CGRect(
+			x: showsGlobe ? 42 : 6,
+			y: 0,
+			width: max(0, bottomBar.bounds.width - (showsGlobe ? 48 : 12)),
+			height: bottomBar.bounds.height
+		)
 	}
 
 	private func switchKind(_ k: KlipyKind) {
@@ -273,6 +305,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		kind = k
 		highlightTabs()
 		updateSearchPill()                     // pill placeholder tracks the kind
+		collection.setCollectionViewLayout(Self.makeLayout(kind: k), animated: false)
 		if injectedItems == nil { loadFirstPage() }
 	}
 
@@ -329,11 +362,20 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 // MARK: - Cell: one downsampled frame at a time, advanced by the panel's clock
 
 private final class MediaCell: UICollectionViewCell {
+	private static let decodeQueue: OperationQueue = {
+		let queue = OperationQueue()
+		queue.name = "keyboard.media.preview-decode"
+		queue.qualityOfService = .userInitiated
+		queue.maxConcurrentOperationCount = 2
+		return queue
+	}()
+
 	private let imageView = UIImageView()
 	private var source: KBAnimatedSource?
 	private var frameIndex = 0
 	private var nextFrameAt: CFTimeInterval = 0
 	private var generation = 0
+	private var decoding = false
 
 	override init(frame: CGRect) {
 		super.init(frame: frame)
@@ -351,6 +393,7 @@ private final class MediaCell: UICollectionViewCell {
 		super.prepareForReuse()
 		generation += 1               // orphan any in-flight fetch
 		source = nil                  // the frame + mapped source free with the cell's reuse
+		decoding = false
 		imageView.image = nil
 	}
 
@@ -358,27 +401,52 @@ private final class MediaCell: UICollectionViewCell {
 		generation += 1
 		let gen = generation
 		source = nil
+		decoding = false
 		imageView.image = nil
 		imageView.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.07) : UIColor(white: 0, alpha: 0.06)
 		guard live else { return }    // tests: chrome only, no network
 		KBMediaCache.fetch(item.previewURL) { [weak self] file in
-			guard let self, gen == generation, let file,
-				  let src = KBAnimatedSource(fileURL: file) else { return }
-			source = src
-			frameIndex = 0
-			imageView.image = src.frame(at: 0, maxPixel: MediaPanelView.cellMaxPixel)
-			nextFrameAt = CACurrentMediaTime() + src.delay(at: 0)
+			guard let self, gen == generation, let file else { return }
+			decoding = true
+			Self.decodeQueue.addOperation { [weak self] in
+				guard let src = KBAnimatedSource(fileURL: file) else {
+					OperationQueue.main.addOperation {
+						guard let self, gen == self.generation else { return }
+						self.decoding = false
+					}
+					return
+				}
+				let frame = src.frame(at: 0, maxPixel: MediaPanelView.cellMaxPixel)
+				let delay = src.delay(at: 0)
+				OperationQueue.main.addOperation {
+					guard let self, gen == self.generation else { return }
+					self.source = src
+					self.frameIndex = 0
+					self.imageView.image = frame
+					self.nextFrameAt = CACurrentMediaTime() + delay
+					self.decoding = false
+				}
+			}
 		}
 	}
 
 	/// Advance to the next frame when its delay has elapsed. One ≤256 px decode per
 	/// call; the previous frame's bitmap is released by the image swap.
 	func tick(_ now: CFTimeInterval) {
-		guard let src = source, src.frameCount > 1, now >= nextFrameAt else { return }
-		frameIndex = (frameIndex + 1) % src.frameCount
-		if let img = src.frame(at: frameIndex, maxPixel: MediaPanelView.cellMaxPixel) {
-			imageView.image = img
+		guard !decoding, let src = source, src.frameCount > 1, now >= nextFrameAt else { return }
+		let next = (frameIndex + 1) % src.frameCount
+		let gen = generation
+		decoding = true
+		Self.decodeQueue.addOperation { [weak self] in
+			let image = src.frame(at: next, maxPixel: MediaPanelView.cellMaxPixel)
+			let delay = src.delay(at: next)
+			OperationQueue.main.addOperation {
+				guard let self, gen == self.generation else { return }
+				if let image { self.imageView.image = image }
+				self.frameIndex = next
+				self.nextFrameAt = CACurrentMediaTime() + delay
+				self.decoding = false
+			}
 		}
-		nextFrameAt = now + src.delay(at: frameIndex)
 	}
 }

@@ -58,8 +58,11 @@ __pycache__/
 *.pt
 *.bin
 !keyboard/emoji.bin
+!keyboard/tokenizer.bin
 *.kbguard
 *.mlpackage/
+!keyboard/rescorer.mlpackage/
+!keyboard/rescorer.mlpackage/**
 
 # JetBrains IDE
 .idea/

@@ -19,7 +19,7 @@ enum KBClipboard {
 	static let maxPins = 10
 	static let maxItemLength = 10_000         // clip pathological copies, keep the file small
 
-	private static var store: UserDefaults { UserDefaults(suiteName: KBSettings.appGroup) ?? .standard }
+	private static var store: UserDefaults { KBSettings.sharedDefaults }
 
 	/// `override` is for tests; production uses the App Group container.
 	static func fileURL(_ override: URL? = nil) -> URL {
