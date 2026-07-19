@@ -33,6 +33,33 @@ final class keyboardUITests: XCTestCase {
         // https://developer.apple.com/documentation/xcuiautomation
     }
 
+	@MainActor
+	func testPrimarySettingsFlows() throws {
+		let app = XCUIApplication()
+		app.launch()
+
+		let language = app.buttons["settings.language"]
+		XCTAssertTrue(language.waitForExistence(timeout: 5))
+		language.tap()
+		let english = app.buttons["language.english"]
+		XCTAssertTrue(english.waitForExistence(timeout: 3))
+		english.tap()
+
+		let appearance = app.buttons["settings.appearance"]
+		XCTAssertTrue(appearance.waitForExistence(timeout: 2))
+		appearance.tap()
+		XCTAssertTrue(app.navigationBars["Appearance"].waitForExistence(timeout: 2))
+		add(XCTAttachment(screenshot: app.screenshot()))
+		app.navigationBars["Appearance"].buttons.element(boundBy: 0).tap()
+
+		let achievements = app.buttons["achievements.banner"]
+		XCTAssertTrue(achievements.waitForExistence(timeout: 2))
+		achievements.tap()
+		XCTAssertTrue(app.navigationBars["Achievements"].waitForExistence(timeout: 2))
+		XCTAssertTrue(app.staticTexts["LAST 14 DAYS"].exists)
+		add(XCTAttachment(screenshot: app.screenshot()))
+	}
+
     @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.

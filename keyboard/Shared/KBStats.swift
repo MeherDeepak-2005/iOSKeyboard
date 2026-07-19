@@ -89,7 +89,7 @@ enum KBStats {
 	static let flushEvery = 10        // words buffered before one blob write
 	static let keepDays = 90
 	private static let key = "kb.stats"
-	private static var store: UserDefaults { UserDefaults(suiteName: KBSettings.appGroup) ?? .standard }
+	private static var store: UserDefaults { KBSettings.sharedDefaults }
 
 	// MARK: Storage
 

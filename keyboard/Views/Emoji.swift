@@ -12,7 +12,7 @@ import UIKit
 enum KBEmojiRecents {
 	private static let key = "kb.emoji.recents"
 	private static let cap = 30
-	private static var store: UserDefaults { UserDefaults(suiteName: KBSettings.appGroup) ?? .standard }
+	private static var store: UserDefaults { KBSettings.sharedDefaults }
 	static func all() -> [String] { store.stringArray(forKey: key) ?? [] }
 	static func add(_ e: String) {
 		var list = all().filter { $0 != e }

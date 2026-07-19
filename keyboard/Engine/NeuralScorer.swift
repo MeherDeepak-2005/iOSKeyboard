@@ -137,7 +137,7 @@ final class NeuralScorer {
 		}
 	}
 	static let contextLen = 32                        // must match export_coreml.py L
-	static let maxBatch = 16                          // must match export_coreml.py RangeDim(1, 16)
+	static let maxBatch = 16                          // fixed export batch; unused rows are masked
 	static let scoreSlots = 8                         // must match model.py/export_coreml.py K
 	/// Initial safety estimate. Unlike the old 90 MB threshold this represents the
 	/// model's measured incremental working set plus reserve, not the whole extension
@@ -178,9 +178,9 @@ final class NeuralScorer {
 		self.modelURL = modelURL
 		self.tokenizer = tokenizer
 		self.modeTag = tokenizer.id(of: language.modelTag)
-		beginLoading()
 		// Extensions die at ~60-70 MB dirty: drop the model under pressure and fall
-		// back to the n-gram prior; reload lazily on the next scoring request.
+		// back to the n-gram prior. The model is loaded by the first scoring request,
+		// after the host connection exists, rather than competing with extension startup.
 		let src = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical])
 		src.setEventHandler { [weak self] in
 			guard let self else { return }
@@ -253,9 +253,8 @@ final class NeuralScorer {
 	}
 
 	/// Batched log P(candidate | context). Candidates are scored in batches of at most
-	/// `maxBatch` (the model's exported Core ML batch limit) — over that, Core ML rejects
-	/// the input outright, so passing the whole candidate set in one array crashes. The
-	/// caller already caps to ~16, but chunking here makes the component safe for any N.
+	/// `maxBatch`. The W8A8 graph has a fixed batch so every request is zero-padded to
+	/// 16 rows; only the live output prefix is consumed. Chunking keeps this safe for N>16.
 	/// Returns nil when the model isn't resident (engine falls back to n-gram).
 	func scores(_ candidates: [String], context: [String]) -> [Double]? {
 		lock.lock()
@@ -281,9 +280,10 @@ final class NeuralScorer {
 		while start < candidates.count {
 			let end = min(start + Self.maxBatch, candidates.count)
 			let B = end - start
-			guard let tokens = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32)
+			guard let tokens = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: L)], dataType: .int32)
 			else { return nil }
-			let p = tokens.dataPointer.bindMemory(to: Int32.self, capacity: B * L)
+			let p = tokens.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch * L)
+			memset(tokens.dataPointer, 0, tokens.count * MemoryLayout<Int32>.size)
 			for b in 0..<B {
 				let row = ctx + candTokens[start + b]
 				for i in 0..<L { p[b * L + i] = i < row.count ? row[i] : 0 }   // pad: causally inert
@@ -291,15 +291,19 @@ final class NeuralScorer {
 			// Score in groups of K target positions. Unusually fragmented words remain
 			// exact; they cost an extra forward instead of being silently truncated.
 			for slotBase in stride(from: 0, to: maxCand, by: Self.scoreSlots) {
-				guard let positions = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
-					  let targets = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
-					  let mask = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .float32),
-					  let next = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: 1)], dataType: .int32)
+				guard let positions = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let targets = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let mask = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .float32),
+					  let next = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: 1)], dataType: .int32)
 				else { return nil }
-				let pp = positions.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
-				let tp = targets.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
-				let mp = mask.dataPointer.bindMemory(to: Float.self, capacity: B * Self.scoreSlots)
-				let np = next.dataPointer.bindMemory(to: Int32.self, capacity: B)
+				memset(positions.dataPointer, 0, positions.count * MemoryLayout<Int32>.size)
+				memset(targets.dataPointer, 0, targets.count * MemoryLayout<Int32>.size)
+				memset(mask.dataPointer, 0, mask.count * MemoryLayout<Float>.size)
+				memset(next.dataPointer, 0, next.count * MemoryLayout<Int32>.size)
+				let pp = positions.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch * Self.scoreSlots)
+				let tp = targets.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch * Self.scoreSlots)
+				let mp = mask.dataPointer.bindMemory(to: Float.self, capacity: Self.maxBatch * Self.scoreSlots)
+				let np = next.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch)
 				for b in 0..<B {
 					let candidate = candTokens[start + b]
 					np[b] = Int32(ctxCount + candidate.count - 1)
@@ -355,23 +359,28 @@ final class NeuralScorer {
 		while start < contexts.count {
 			let end = min(start + Self.maxBatch, contexts.count)
 			let B = end - start
-			guard let tokens = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32)
+			guard let tokens = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: L)], dataType: .int32)
 			else { return nil }
-			let p = tokens.dataPointer.bindMemory(to: Int32.self, capacity: B * L)
+			let p = tokens.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch * L)
+			memset(tokens.dataPointer, 0, tokens.count * MemoryLayout<Int32>.size)
 			for b in 0..<B {
 				let row = ctxRows[start + b] + candidate
 				for i in 0..<L { p[b * L + i] = i < row.count ? row[i] : 0 }   // pad: causally inert
 			}
 			for slotBase in stride(from: 0, to: candidate.count, by: Self.scoreSlots) {
-				guard let positions = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
-					  let targets = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
-					  let mask = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .float32),
-					  let next = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: 1)], dataType: .int32)
+				guard let positions = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let targets = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+					  let mask = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .float32),
+					  let next = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: 1)], dataType: .int32)
 				else { return nil }
-				let pp = positions.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
-				let tp = targets.dataPointer.bindMemory(to: Int32.self, capacity: B * Self.scoreSlots)
-				let mp = mask.dataPointer.bindMemory(to: Float.self, capacity: B * Self.scoreSlots)
-				let np = next.dataPointer.bindMemory(to: Int32.self, capacity: B)
+				memset(positions.dataPointer, 0, positions.count * MemoryLayout<Int32>.size)
+				memset(targets.dataPointer, 0, targets.count * MemoryLayout<Int32>.size)
+				memset(mask.dataPointer, 0, mask.count * MemoryLayout<Float>.size)
+				memset(next.dataPointer, 0, next.count * MemoryLayout<Int32>.size)
+				let pp = positions.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch * Self.scoreSlots)
+				let tp = targets.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch * Self.scoreSlots)
+				let mp = mask.dataPointer.bindMemory(to: Float.self, capacity: Self.maxBatch * Self.scoreSlots)
+				let np = next.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch)
 				for b in 0..<B {
 					let ctxCount = ctxRows[start + b].count            // per-row, unlike `scores`
 					np[b] = Int32(ctxCount + candidate.count - 1)
@@ -473,20 +482,22 @@ final class NeuralScorer {
 		let B = rows.count
 		guard B > 0, B <= Self.maxBatch,
 			  rows.allSatisfy({ !$0.isEmpty && $0.count <= L }) else { return nil }
-		guard let arr = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: L)], dataType: .int32),
-			  let positions = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
-			  let targets = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .int32),
-			  let mask = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: Self.scoreSlots)], dataType: .float32),
-			  let next = try? MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: 1)], dataType: .int32)
+		guard let arr = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: L)], dataType: .int32),
+			  let positions = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+			  let targets = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .int32),
+			  let mask = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: Self.scoreSlots)], dataType: .float32),
+			  let next = try? MLMultiArray(shape: [NSNumber(value: Self.maxBatch), NSNumber(value: 1)], dataType: .int32)
 		else { return nil }
-		let p = arr.dataPointer.bindMemory(to: Int32.self, capacity: B * L)
+		memset(arr.dataPointer, 0, arr.count * MemoryLayout<Int32>.size)
+		let p = arr.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch * L)
 		for b in 0..<B {
 			for i in 0..<L { p[b * L + i] = i < rows[b].count ? rows[b][i] : 0 }
 		}
 		memset(positions.dataPointer, 0, positions.count * MemoryLayout<Int32>.size)
 		memset(targets.dataPointer, 0, targets.count * MemoryLayout<Int32>.size)
 		memset(mask.dataPointer, 0, mask.count * MemoryLayout<Float>.size)
-		let np = next.dataPointer.bindMemory(to: Int32.self, capacity: B)
+		memset(next.dataPointer, 0, next.count * MemoryLayout<Int32>.size)
+		let np = next.dataPointer.bindMemory(to: Int32.self, capacity: Self.maxBatch)
 		for b in 0..<B { np[b] = Int32(rows[b].count - 1) }
 		guard let input = try? MLDictionaryFeatureProvider(dictionary: [
 				"tokens": arr, "score_positions": positions, "target_ids": targets,
@@ -494,7 +505,7 @@ final class NeuralScorer {
 			]),
 			  let out = try? m.prediction(from: input),
 			  let logits = out.featureValue(for: "next_logits")?.multiArrayValue,
-			  logits.shape.count == 2, logits.shape[0].intValue == B else { return nil }
+			  logits.shape.count == 2, logits.shape[0].intValue >= B else { return nil }
 		let V = logits.shape[1].intValue
 		guard V > 0 else { return nil }
 		let s0 = logits.strides[0].intValue
@@ -525,7 +536,7 @@ final class NeuralScorer {
 
 /// Read a rank-1 Core ML output without assuming FP16/FP32 or dense element size.
 private func readVector(_ array: MLMultiArray, count: Int) -> [Double]? {
-	guard array.shape.count == 1, array.shape[0].intValue == count else { return nil }
+	guard array.shape.count == 1, array.shape[0].intValue >= count else { return nil }
 	let stride = array.strides[0].intValue
 	var result = [Double](repeating: 0, count: count)
 	func copy<T: BinaryFloatingPoint>(_ values: UnsafeBufferPointer<T>) {

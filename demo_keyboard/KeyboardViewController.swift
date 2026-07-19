@@ -17,8 +17,27 @@ final class KeyboardViewController: UIInputViewController {
 	private var suggestWork: DispatchWorkItem?
 	private var suggestionModeResolved = false
 	private var suggestionsVisible = true
-	private var currentSuggestions: [String] = []
-	private var currentSuggestionPrefix: String?
+	private var hostConnectionReady = false
+	private var supplementaryLexiconRequested = false
+	private enum SuggestionPresentation {
+		case ranked(words: [String], prefix: String?)
+		case glide(winner: String, alternatives: [String])
+	}
+	private var suggestionPresentation = SuggestionPresentation.ranked(words: [], prefix: nil)
+	private struct GlidePreviewRequest {
+		let path: [CGPoint]
+		let times: [TimeInterval]
+		let layout: GlideLayout
+		let sequence: Int
+	}
+	private var pendingGlidePreview: GlidePreviewRequest?
+	private var glidePreviewInFlight = false
+	private var glidePreviewGeneration = 0
+	private var glidePreviewSequence = 0
+	private var activeGlideDocumentContext: String?
+	private var activeGlideContext: [String] = []
+	private var activeGlideAutoShift = false
+	private var glidePreviewEnabled = false
 
 	/// Records the most recent replacement (autocorrect on a boundary, or a picked
 	/// completion) so a single Backspace can undo it back to what the user typed —
@@ -56,30 +75,22 @@ final class KeyboardViewController: UIInputViewController {
 	/// the engine's per-user σ / gate tuning, then this clears.
 	private var pendingGlideAccept = false
 
-	/// Whether the host wants the input-mode-switch (globe) key. Read lazily from
-	/// `needsInputModeSwitchKey` only once the host connection exists (viewWillAppear),
-	/// never in viewDidLoad — doing so logs an inaccurate-result warning.
-	private var showsGlobe = true
-	private var globeConfigured = false
+	/// Resolved only after the host connection is live. Calling
+	/// `needsInputModeSwitchKey` during extension prewarming produces an inaccurate result
+	/// and a UIKit warning; until then, omit the key and rebuild once if iOS requires it.
+	private var showsGlobe = false
 
 	private let boundary = CharacterSet(charactersIn: " .,!?;:")
 
 	override func viewDidLoad() {
 		super.viewDidLoad()
-		FontInstaller.registerSelectedFont()   // extension renders one font — load only it
 		view.backgroundColor = .clear
 		buildKeyboard()
-		scheduleSuggestions()
-
-		// Contact names + text-replacement shortcuts: suggestable, never mangled.
-		requestSupplementaryLexicon { [weak self] lexicon in
-			self?.engine.importSupplementaryLexicon(lexicon.entries.map(\.documentText))
-		}
 
 		// Follow the host app's light/dark appearance and rebuild on changes.
 		registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
 			self.buildKeyboard()
-			self.scheduleSuggestions()
+			if self.hostConnectionReady { self.scheduleSuggestions() }
 		}
 	}
 
@@ -104,6 +115,11 @@ final class KeyboardViewController: UIInputViewController {
 		kb.onReturn         = { [weak self] in self?.handleReturn() }
 		kb.onNextKeyboard   = { [weak self] in self?.advanceToNextInputMode() }
 		kb.onPickSuggestion = { [weak self] in self?.handlePick($0) }
+		kb.onGlideBegan     = { [weak self] in self?.beginGlidePreview() }
+		kb.onGlidePreview   = { [weak self] path, times, layout in
+			self?.handleGlidePreview(path, times, layout)
+		}
+		kb.onGlideCancelled = { [weak self] in self?.cancelGlidePreview(clearStrip: true) }
 		kb.onGlide          = { [weak self] path, times, layout in self?.handleGlide(path, times, layout) }
 		kb.onClipboardPick  = { [weak self] in self?.handleClipboardPick($0) }
 		kb.onOpenClipboard  = { [weak self, weak kb] in
@@ -145,8 +161,8 @@ final class KeyboardViewController: UIInputViewController {
 			kb.setShowsSuggestions(suggestionsVisible)
 			h.constant = kb.keyboardHeight
 		}
-		updateActionKey()
-		kb.setSuggestions(currentSuggestions, typedPrefix: currentSuggestionPrefix)
+		if hostConnectionReady { updateActionKey() }
+		applySuggestionPresentation(to: kb)
 	}
 
 	// MARK: Contextual action key — mirrors the host field's Return key (go / search / send …)
@@ -156,28 +172,9 @@ final class KeyboardViewController: UIInputViewController {
 		resetEraseTracking()           // a new field/host — stale erase state is meaningless
 		wordTaps.removeAll(keepingCapacity: true)
 		pendingGlideAccept = false     // don't attribute a new field's first action to an old glide
-		// Strip is NOT resolved here: the field type is unreliable this early. It stays at its
-		// default (open) until viewDidAppear resolves it once — no premature toggling.
-		updateActionKey()
-		updateAutoShift()
+		// Host field properties are still unreliable here. The first text-input callback
+		// resolves the strip and globe after the extension-host connection is live.
 		keyboard?.prepareHaptics()     // prime the engine so the first tap isn't delayed
-	}
-
-	override func viewDidAppear(_ animated: Bool) {
-		super.viewDidAppear(animated)
-		// The text proxy's field type (URL / search / etc.) is only reliable once the host
-		// connection is established — same reason as the globe key below. This is the single
-		// point we resolve the strip: normal apps keep the strip that was already showing;
-		// suppressed fields (Safari address bar & friends) disable it once, for good.
-		resolveSuggestionModeIfNeeded()
-		// `needsInputModeSwitchKey` is only accurate once the host connection exists;
-		// reading it earlier (viewDidLoad / viewWillAppear) logs an inaccurate-result
-		// warning. By viewDidAppear the connection is established. Rebuild only if the
-		// globe requirement differs from our default (usually it doesn't → no rebuild).
-		guard !globeConfigured else { return }
-		globeConfigured = true
-		let needsGlobe = needsInputModeSwitchKey
-		if needsGlobe != showsGlobe { showsGlobe = needsGlobe; buildKeyboard() }
 	}
 
 	override func viewWillDisappear(_ animated: Bool) {
@@ -187,7 +184,8 @@ final class KeyboardViewController: UIInputViewController {
 
 	override func textDidChange(_ textInput: UITextInput?) {
 		super.textDidChange(textInput)
-		// Deliberately NOT re-evaluating the strip here: it is resolved once (viewDidAppear)
+		hostConnectionDidBecomeAvailable()
+		// Deliberately NOT re-evaluating the strip here: it is resolved once after connection
 		// and stays fixed, so it never flickers open/closed while typing. Only the action
 		// key and shift state track the cursor.
 		updateActionKey()
@@ -197,7 +195,33 @@ final class KeyboardViewController: UIInputViewController {
 
 	override func selectionDidChange(_ textInput: UITextInput?) {
 		super.selectionDidChange(textInput)
+		hostConnectionDidBecomeAvailable()
 		snapBackFromOverlaysIfUserTouched()
+	}
+
+	/// UIInputViewController can be prewarmed without a live host connection, so proxy
+	/// reads and prediction work start only after the host invokes an input callback.
+	private func hostConnectionDidBecomeAvailable() {
+		guard !hostConnectionReady else { return }
+		hostConnectionReady = true
+		KBSettings.hasUsedKeyboard = true
+		KBSettings.lastFullAccess = hasFullAccess
+		let requiresSwitchKey = needsInputModeSwitchKey
+		if showsGlobe != requiresSwitchKey {
+			showsGlobe = requiresSwitchKey
+			buildKeyboard()
+		}
+		resolveSuggestionModeIfNeeded()
+
+		if !supplementaryLexiconRequested {
+			supplementaryLexiconRequested = true
+			requestSupplementaryLexicon { [weak self] lexicon in
+				self?.engine.importSupplementaryLexicon(lexicon.entries.map(\.documentText))
+			}
+		}
+		updateActionKey()
+		updateAutoShift()
+		scheduleSuggestions()
 	}
 
 	/// Tapping the input field (or otherwise moving the cursor by hand) while the emoji
@@ -265,7 +289,7 @@ final class KeyboardViewController: UIInputViewController {
 
 	/// Resolve the strip's visibility ONCE per keyboard presentation, then leave it fixed.
 	/// The strip starts open (normal apps: on from the first frame). The first time the
-	/// host field type is reliably readable (viewDidAppear) we disable it for suppressed
+	/// host field type is reliably readable (the first input callback) we disable it for suppressed
 	/// fields — after that it never changes, so there is no per-keystroke flicker.
 	private func resolveSuggestionModeIfNeeded() {
 		guard !suggestionModeResolved else { return }
@@ -590,17 +614,23 @@ final class KeyboardViewController: UIInputViewController {
 			// #37: the picked alternative is the TRUE word — feed its shape cost as the
 			// correct sample so the decoder learns to rank the user's real intent higher.
 			if pendingGlideAccept { pendingGlideAccept = false; engine.glideCorrected(to: s) }
+			let oldAlternatives: [String]
+			if case .glide(_, let alternatives) = suggestionPresentation {
+				oldAlternatives = alternatives
+			} else {
+				oldAlternatives = []
+			}
 			for _ in 0..<(committed.count + 1) { textDocumentProxy.deleteBackward() }
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
-			var replacement = s
-			if shouldAutoShift(textDocumentProxy.documentContextBeforeInput) {
-				replacement = replacement.prefix(1).uppercased() + replacement.dropFirst()
-			}
+			let replacement = KBWordCase.sentenceDisplay(
+				s, capitalized: shouldAutoShift(textDocumentProxy.documentContextBeforeInput))
 			textDocumentProxy.insertText(replacement + " ")
 			engine.learn(context: ctx, word: s)
 			if committed.lowercased() != s.lowercased() { engine.wordReplaced(original: committed, with: s) }
 			lastCorrection = Correction(original: "", corrected: replacement, trailing: " ", fromAutocorrect: false)
 			mode = .glided(replacement)          // further swaps keep working
+			let alternatives = uniqueWords([committed] + oldAlternatives, excluding: replacement)
+			setGlideSuggestionBar(winner: replacement, alternatives: alternatives)
 			updateAutoShift()
 			return                               // keep the alternatives on the bar
 		}
@@ -634,39 +664,129 @@ final class KeyboardViewController: UIInputViewController {
 	/// runner-up shapes on the bar as one-tap swaps. A single Backspace removes the whole
 	/// glided word (`Correction` with empty original). Nothing commits on a rejected swipe.
 	private func handleGlide(_ path: [CGPoint], _ times: [TimeInterval], _ layout: GlideLayout) {
+		let liftAt = ProcessInfo.processInfo.systemUptime
+		// Context cannot change while this finger is down. Reuse the one snapshot taken
+		// when Glide began instead of making another host XPC read on lift. Never inspect
+		// document text for a secure field.
+		let secure = isSecureField
+		let before = secure ? "" : activeGlideDocumentContext ?? textDocumentProxy.documentContextBeforeInput ?? ""
+		let context = activeGlideDocumentContext == nil ? contextWords(before, max: 8) : activeGlideContext
+		cancelGlidePreview(clearStrip: false)
 		// Cancel the debounced suggestion pass the start-letter triggered: without
 		// this, it fires 60 ms into the swipe and queues engine work the glide
 		// decode then has to wait behind. The engine also bumps suggestGen to
 		// invalidate any pass that already reached the engine queue.
-		suggestWork?.cancel()
+		invalidateSuggestionRequests(cancelEngineWork: true)
 		resetEraseTracking()
 		wordTaps.removeAll(keepingCapacity: true)
-		guard !isSecureField else { return }             // no gliding passwords
+		guard !secure else { return }                    // no gliding passwords
 		resolveCorrectionAsAccepted()
 		resolveGlideAccepted()                           // a prior glided word stood — record it
-		let before = textDocumentProxy.documentContextBeforeInput ?? ""
-		let context = contextWords(before, max: 8)
 		engine.glide(path: path, times: times, layout: layout, context: context) { [weak self] word, alternatives in
 			guard let self else { return }
 			guard let word else { self.scheduleSuggestions(); return }
-			self.noteProxyEdit()
-			let ctx = self.textDocumentProxy.documentContextBeforeInput ?? ""
-			var display = word
-			if self.shouldAutoShift(ctx) { display = display.prefix(1).uppercased() + display.dropFirst() }
-			var text = display + " "
-			if let last = ctx.last, self.isWordChar(last) { text = " " + text }   // auto-space after letters
-			self.textDocumentProxy.insertText(text)
-			self.engine.learn(context: context, word: word)
-			KBStats.note(glided: true)
-			self.lastCorrection = Correction(original: "", corrected: display, trailing: " ", fromAutocorrect: false)
-			self.mode = .glided(display)
-			self.pendingGlideAccept = true               // #37: awaiting the user's verdict on this word
-			// Alternatives stay on the bar until the next input (no scheduleSuggestions here,
-			// or the debounced pass would wipe them 60 ms later).
-			self.keyboard?.setSuggestions(alternatives)
-			self.updateAutoShift()
-			self.maybeRescorePreviousWord()      // n-1 rescue: the glided word is now committed
+			self.commitGlidedWord(word, alternatives: alternatives, context: context,
+							   documentContext: before, liftAt: liftAt)
 		}
+	}
+
+	private func commitGlidedWord(_ word: String, alternatives: [String], context: [String]? = nil,
+							   documentContext: String? = nil, liftAt: TimeInterval) {
+		noteProxyEdit()
+		let ctx = documentContext ?? textDocumentProxy.documentContextBeforeInput ?? ""
+		let autoShift = shouldAutoShift(ctx)
+		let display = KBWordCase.sentenceDisplay(word, capitalized: autoShift)
+		var text = display + " "
+		if let last = ctx.last, isWordChar(last) { text = " " + text }
+		textDocumentProxy.insertText(text)
+		KBDiagnostics.logGlideCommit(ms: (ProcessInfo.processInfo.systemUptime - liftAt) * 1_000)
+
+		// Everything below is bookkeeping after the visible insertion.
+		engine.learn(context: context ?? contextWords(ctx, max: 8), word: word)
+		KBStats.note(glided: true)
+		lastCorrection = Correction(original: "", corrected: display, trailing: " ", fromAutocorrect: false)
+		mode = .glided(display)
+		pendingGlideAccept = true
+		let displayedAlternatives = alternatives.map {
+			KBWordCase.sentenceDisplay($0, capitalized: autoShift)
+		}
+		setGlideSuggestionBar(winner: display, alternatives: displayedAlternatives)
+		updateAutoShift()
+		maybeRescorePreviousWord()
+	}
+
+	private func beginGlidePreview() {
+		// Starting another deliberate gesture means the previous glided word stood. Apply
+		// that supervised profile update before the first preview so sigma/gate remain
+		// unchanged between this gesture's live rankings and its release-time ranking.
+		resolveGlideAccepted()
+		invalidateSuggestionRequests(cancelEngineWork: true)
+		glidePreviewGeneration &+= 1
+		pendingGlidePreview = nil
+		engine.cancelGlidePreviews()
+		guard hostConnectionReady, !isSecureField else {
+			glidePreviewEnabled = false
+			activeGlideDocumentContext = nil
+			activeGlideContext.removeAll(keepingCapacity: true)
+			activeGlideAutoShift = false
+			keyboard?.setGlidePreview(nil)
+			return
+		}
+		glidePreviewEnabled = true
+		let before = textDocumentProxy.documentContextBeforeInput ?? ""
+		activeGlideDocumentContext = before
+		activeGlideContext = contextWords(before, max: 8)
+		activeGlideAutoShift = shouldAutoShift(before)
+	}
+
+	private func handleGlidePreview(_ path: [CGPoint], _ times: [TimeInterval], _ layout: GlideLayout) {
+		guard glidePreviewEnabled else { return }
+		glidePreviewSequence &+= 1
+		pendingGlidePreview = GlidePreviewRequest(
+			path: path,
+			times: times,
+			layout: layout,
+			sequence: glidePreviewSequence
+		)
+		startNextGlidePreviewIfNeeded()
+	}
+
+	private func startNextGlidePreviewIfNeeded() {
+		guard !glidePreviewInFlight, let request = pendingGlidePreview else { return }
+		pendingGlidePreview = nil
+		glidePreviewInFlight = true
+		let generation = glidePreviewGeneration
+		let capitalize = activeGlideAutoShift
+		engine.glidePreview(path: request.path, times: request.times, layout: request.layout,
+							context: activeGlideContext) { [weak self] prediction in
+			guard let self else { return }
+			self.glidePreviewInFlight = false
+			guard generation == self.glidePreviewGeneration else {
+				self.startNextGlidePreviewIfNeeded()
+				return
+			}
+			// A newer path snapshot may have arrived while this decode was running.
+			// Never flash the older winner; move directly to the newest queued path.
+			if request.sequence == self.glidePreviewSequence, let prediction {
+				let word = KBWordCase.sentenceDisplay(prediction.word, capitalized: capitalize)
+				self.keyboard?.setGlidePreview(word)
+			} else if request.sequence == self.glidePreviewSequence {
+				self.keyboard?.setGlidePreview(nil)
+			}
+			self.startNextGlidePreviewIfNeeded()
+		}
+	}
+
+	private func cancelGlidePreview(clearStrip: Bool) {
+		glidePreviewGeneration &+= 1
+		glidePreviewSequence &+= 1
+		pendingGlidePreview = nil
+		engine.cancelGlidePreviews()
+		activeGlideDocumentContext = nil
+		activeGlideContext.removeAll(keepingCapacity: true)
+		activeGlideAutoShift = false
+		glidePreviewEnabled = false
+		if clearStrip { keyboard?.setGlidePreview(nil) }
 	}
 
 	// MARK: Manual-fix detection (backspace-erase → retype, no one-tap undo involved)
@@ -727,15 +847,26 @@ final class KeyboardViewController: UIInputViewController {
 
 	private func scheduleSuggestions() {
 		suggestWork?.cancel()
-		let work = DispatchWorkItem { [weak self] in self?.refreshSuggestions() }
+		generation &+= 1
+		let requestGeneration = generation
+		let work = DispatchWorkItem { [weak self] in
+			self?.refreshSuggestions(requestGeneration: requestGeneration)
+		}
 		suggestWork = work
 		DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
 	}
 
-	private func refreshSuggestions() {
+	private func invalidateSuggestionRequests(cancelEngineWork: Bool = false) {
+		suggestWork?.cancel()
+		suggestWork = nil
+		generation &+= 1
+		if cancelEngineWork { engine.cancelSuggestions() }
+	}
+
+	private func refreshSuggestions(requestGeneration: Int) {
+		guard requestGeneration == generation else { return }
 		guard suggestionsAllowed else { setSuggestionBar([]); return }
-		generation += 1
-		let gen = generation
+		let gen = requestGeneration
 		let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 		let current = trailingWord(ctx)
 		let revert = (lastCorrection?.fromAutocorrect == true) ? lastCorrection?.original : nil
@@ -766,9 +897,27 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func setSuggestionBar(_ suggestions: [String], typedPrefix: String? = nil) {
-		currentSuggestions = suggestions
-		currentSuggestionPrefix = typedPrefix
+		suggestionPresentation = .ranked(words: suggestions, prefix: typedPrefix)
 		keyboard?.setSuggestions(suggestions, typedPrefix: typedPrefix)
+	}
+
+	private func setGlideSuggestionBar(winner: String, alternatives: [String]) {
+		suggestionPresentation = .glide(winner: winner, alternatives: alternatives)
+		keyboard?.setGlideResult(winner, alternatives: alternatives)
+	}
+
+	private func applySuggestionPresentation(to keyboard: KeyboardView) {
+		switch suggestionPresentation {
+		case .ranked(let words, let prefix):
+			keyboard.setSuggestions(words, typedPrefix: prefix)
+		case .glide(let winner, let alternatives):
+			keyboard.setGlideResult(winner, alternatives: alternatives)
+		}
+	}
+
+	private func uniqueWords(_ words: [String], excluding excluded: String) -> [String] {
+		var seen = Set([excluded.lowercased()])
+		return words.filter { seen.insert($0.lowercased()).inserted }
 	}
 
 	// MARK: Word parsing on the text before the cursor

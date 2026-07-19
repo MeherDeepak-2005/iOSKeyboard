@@ -12,6 +12,10 @@ final class NgramScorer: LanguageScorer {
 	/// Σ corpus freq + V (add-one smoothing mass), for the unigram backoff. 1 until
 	/// attach() so the pre-attach fallback stays a finite constant, never log(0).
 	private var corpusTotal = 1.0
+	/// Personal evidence is deliberately a bounded tie-breaker. A one-off use must not
+	/// turn into a near-certain unigram or context prediction.
+	private let minPersonalEvidence = 3
+	private let minNovelPredictionEvidence = 5
 
 	init(user: UserModel) { self.user = user }
 	var isReady: Bool { true }        // mmap opens with the engine's init barrier
@@ -45,39 +49,34 @@ final class NgramScorer: LanguageScorer {
 	private func logProb(_ w: String, context: [String]) -> Double {
 		let wid = resolveID(w)
 		let n = context.count
+		var triPersonal = 0
 		if n >= 2 {
 			let key = context[n - 2] + " " + context[n - 1]
-			var (c, t) = user.triLookup(key, w)
+			triPersonal = user.triLookup(key, w).count
 			if let wid, let a = resolveID(context[n - 2]), let b = resolveID(context[n - 1]),
 			   let hit = data?.trigrams(after: a, b) {
-				t += hit.total
-				c += hit.entries.first(where: { $0.word == wid })?.count ?? 0
+				let c = hit.entries.first(where: { $0.word == wid })?.count ?? 0
+				if c > 0, hit.total > 0 {
+					return log(Double(c) / Double(hit.total)) + personalBoost(triPersonal, weight: 0.28)
+				}
 			}
-			if c > 0, t > 0 { return log(Double(c) / Double(t)) }
 		}
+		var biPersonal = 0
 		if n >= 1 {
 			let p = context[n - 1]
-			var (c, t) = user.biLookup(p, w)
+			biPersonal = user.biLookup(p, w).count
 			if let wid, let a = resolveID(p), let hit = data?.bigrams(after: a) {
-				t += hit.total
-				c += hit.entries.first(where: { $0.word == wid })?.count ?? 0
+				let c = hit.entries.first(where: { $0.word == wid })?.count ?? 0
+				if c > 0, hit.total > 0 {
+					return log(0.4 * Double(c) / Double(hit.total))
+						+ personalBoost(biPersonal, weight: 0.22)
+						+ personalBoost(triPersonal, weight: 0.28)
+				}
 			}
-			if c > 0, t > 0 { return log(0.4 * Double(c) / Double(t)) }       // backoff weight
 		}
-		let (uc, total, distinct) = user.uniBackoff(w)
-		// OOV words (not in the corpus lexicon) must not accumulate a score from repeated
-		// misspellings: "teh" typed 50 times should never outscore "the". Zero the personal
-		// count for strings outside the lexicon so only corpus words get a user boost here.
-		// Adopted words (dynamic trie) do pass contains() and keep their earned counts.
-		let effectiveUC = (lexicon?.contains(w) == true) ? uc : 0
-		// Unigram backoff = the BEST of a personal estimate and a corpus estimate.
-		// The old form, 0.16·(uc+1)/(total+distinct+1), floored at 0.16 on a FRESH
-		// install (empty user model) — ABOVE every real bigram hit — so unseen words
-		// outscored seen ones and real-word autocorrect was inert until the personal
-		// model filled in ("what's thus" kept "thus"). The personal term now carries
-		// no +1 (it is zero until the user actually types the word), and the corpus
-		// term is frequency-differentiated the way the eval harness always assumed.
-		let pUser = Double(effectiveUC) / Double(total + distinct + 1)
+		// The corpus unigram remains the base probability. Personal usage adds only a
+		// small logarithmic lift after repeated evidence; it never replaces the corpus
+		// estimate with uc/userTotal, which made one-off words dominate the strip.
 		let pCorpus: Double
 		if let wid, let data {
 			pCorpus = (Double(data.freq(Int(wid))) + 1) / corpusTotal
@@ -86,7 +85,16 @@ final class NgramScorer: LanguageScorer {
 		} else {
 			pCorpus = 0.5 / corpusTotal       // true OOV: below every real word
 		}
-		return log(0.16 * max(pUser, pCorpus))
+		let unigramPersonal = lexicon?.contains(w) == true ? user.uniCount(w) : 0
+		return log(0.16 * pCorpus)
+			+ personalBoost(unigramPersonal, weight: 0.10)
+			+ personalBoost(biPersonal, weight: 0.22)
+			+ personalBoost(triPersonal, weight: 0.28)
+	}
+
+	private func personalBoost(_ count: Int, weight: Double) -> Double {
+		guard count >= minPersonalEvidence else { return 0 }
+		return weight * log1p(Double(count - minPersonalEvidence + 1))
 	}
 
 	/// Next-word predictions from the combined counts (trigram first, then bigram).
@@ -94,20 +102,23 @@ final class NgramScorer: LanguageScorer {
 	func nextWords(context: [String], limit: Int) -> [String] {
 		let ctx = context.map { $0.lowercased() }
 		let n = ctx.count
+		var out: [String] = []
+		func appendUnique(_ words: [String]) {
+			for word in words where !out.contains(word) {
+				out.append(word)
+				if out.count == limit { return }
+			}
+		}
 		if n >= 2 {
 			let base = (resolveID(ctx[n - 2]), resolveID(ctx[n - 1]))
 			let hit = (base.0 != nil && base.1 != nil) ? data?.trigrams(after: base.0!, base.1!) : nil
-			let top = merged(hit?.entries, user.triDist(ctx[n - 2] + " " + ctx[n - 1])).prefix(limit)
-			if !top.isEmpty { return Array(top) }
+			appendUnique(merged(hit?.entries, user.triDist(ctx[n - 2] + " " + ctx[n - 1])))
 		}
-		if n >= 1 {
+		if n >= 1, out.count < limit {
 			let hit = resolveID(ctx[n - 1]).flatMap { data?.bigrams(after: $0) }
-			let top = merged(hit?.entries, user.biDist(ctx[n - 1])).prefix(limit)
-			if !top.isEmpty { return Array(top) }
+			appendUnique(merged(hit?.entries, user.biDist(ctx[n - 1])))
 		}
-		// Filter to corpus words — same guarantee as merged(): OOV strings stay out of
-		// next-word predictions even in the context-free fallback path.
-		return Array(user.topUnigrams(limit * 3).filter { lexicon?.isStaticWord($0) == true }.prefix(limit))
+		return Array(out.prefix(limit))
 	}
 	private func merged(_ base: [(word: Int32, count: Int)]?, _ userCounts: [String: Int]) -> [String] {
 		// Corpus entries are the foundation; user counts only BOOST corpus words.
@@ -115,9 +126,14 @@ final class NgramScorer: LanguageScorer {
 		// not surface in next-word predictions just because the user typed them recently.
 		var m: [String: Int] = [:]
 		for e in base ?? [] { m[data?.word(Int(e.word)) ?? "", default: 0] += e.count }
-		for (w, c) in userCounts where lexicon?.isStaticWord(w) == true { m[w, default: 0] += c }
+		for (w, c) in userCounts where lexicon?.isStaticWord(w) == true {
+			if m[w] != nil, c >= minPersonalEvidence {
+				m[w, default: 0] += min(c - minPersonalEvidence + 1, 8)
+			} else if c >= minNovelPredictionEvidence {
+				m[w] = min(c - minNovelPredictionEvidence + 1, 8)
+			}
+		}
 		m[""] = nil
 		return m.sorted { $0.value > $1.value }.map(\.key)
 	}
 }
-

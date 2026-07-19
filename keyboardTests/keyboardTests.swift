@@ -122,6 +122,25 @@ struct KeyboardTests {
         #expect(o[0] > o[1])
     }
 
+    @Test func oneOffPersonalUseDoesNotHijackThePrior() throws {
+        let ld = try #require(LangData(url: langdataURL()))
+        let user = UserModel()
+        let ng = NgramScorer(user: user)
+        ng.attach(data: ld, resolveID: { ld.trieWordID($0) }, lexicon: Lexicon())
+        let context = ["private-context"]
+        let baseline = ng.logProbs(["might"], context: context)[0]
+
+        user.learn(context: context, word: "might")
+        let oneUse = ng.logProbs(["might"], context: context)[0]
+        #expect(abs(oneUse - baseline) < 1e-12)
+
+        user.learn(context: context, word: "might")
+        user.learn(context: context, word: "might")
+        let repeated = ng.logProbs(["might"], context: context)[0]
+        #expect(repeated > oneUse)
+        #expect(repeated - oneUse < 0.5) // personalization remains a tie-breaker
+    }
+
     // OOV contractions ("when's" is not in the 60k vocab) must be recognized as
     // valid forms so autocorrect never flattens them to their base word.
     @Test func oovContractionsAreProtectedForms() {
@@ -186,13 +205,14 @@ struct KeyboardTests {
         try writePNG(of: empty, name: "clipboard_panel_empty")
     }
 
-    // KLIPY response parsing: preview picks the smallest animated variant (webp
-    // before gif), send picks the biggest gif — the two ends of the memory ledger.
+    // KLIPY response parsing: preview picks the smallest animated variant that can
+    // fill the 256 px decoder target; send still picks the biggest GIF.
     @Test func klipyParsePicksLeanPreviewAndFullSend() throws {
         let json: [String: Any] = ["result": true, "data": ["has_next": true, "data": [[
             "id": 42, "slug": "hello-wave", "title": "Hello",
             "file": [
                 "hd": ["gif": ["url": "https://x.test/hd.gif", "width": 480, "height": 360, "size": 2_400_000]],
+                "md": ["webp": ["url": "https://x.test/md.webp", "width": 320, "height": 240, "size": 180_000]],
                 "sm": ["gif": ["url": "https://x.test/sm.gif", "width": 200, "height": 150, "size": 300_000]],
                 "xs": ["webp": ["url": "https://x.test/xs.webp", "width": 120, "height": 90, "size": 60_000],
                        "gif":  ["url": "https://x.test/xs.gif",  "width": 120, "height": 90, "size": 150_000]],
@@ -203,7 +223,7 @@ struct KeyboardTests {
         #expect(hasNext)
         let item = try #require(items.first)
         #expect(item.id == "42")
-        #expect(item.previewURL.absoluteString == "https://x.test/xs.webp")   // smallest, webp first
+        #expect(item.previewURL.absoluteString == "https://x.test/md.webp")   // first source at decoder target
         #expect(item.sendURL.absoluteString == "https://x.test/hd.gif")       // biggest gif
         // Garbage in → empty out, never a crash.
         #expect(KlipyClient.parse(Data("nonsense".utf8)).0.isEmpty)
@@ -229,6 +249,83 @@ struct KeyboardTests {
         bar.setSuggestions(["hello", "help", "hell"], typedPrefix: "hel")
         bar.layoutIfNeeded()
         try writePNG(of: bar, name: "suggestion_bar_plain")
+    }
+
+    @MainActor @Test func glideSuggestionPresentationStaysSynchronized() throws {
+        let bar = SuggestionBar(theme: .system(dark: true))
+        bar.frame = CGRect(x: 0, y: 0, width: 390, height: 34)
+        bar.setSuggestions(["this", "thus", "might"])
+        bar.setGlideResult("Might", alternatives: ["Night", "Right", "Light"])
+
+        let left = try #require(suggestionButton("suggestion.left", in: bar))
+        let primary = try #require(suggestionButton("suggestion.primary", in: bar))
+        let right = try #require(suggestionButton("suggestion.right", in: bar))
+        #expect(left.title(for: .normal) == "Night")
+        #expect(primary.title(for: .normal) == "Might")
+        #expect(right.title(for: .normal) == "Right")
+        #expect(!primary.isEnabled)
+
+        bar.setGlidePreview("More")
+        #expect(primary.title(for: .normal) == "More")
+        bar.setGlidePreview(nil)
+        #expect(left.title(for: .normal) == "Night")
+        #expect(primary.title(for: .normal) == "Might")
+        #expect(right.title(for: .normal) == "Right")
+    }
+
+    @Test func glideDisplayCaseCapitalizesOnlyWhenRequested() {
+        #expect(KBWordCase.sentenceDisplay("might", capitalized: true) == "Might")
+        #expect(KBWordCase.sentenceDisplay("might", capitalized: false) == "might")
+        #expect(KBWordCase.sentenceDisplay("i'm", capitalized: true) == "I'm")
+        #expect(KBWordCase.sentenceDisplay("", capitalized: true).isEmpty)
+    }
+
+    @MainActor @Test func exactGlidePreviewCommitsSynchronouslyWithSameWinner() async throws {
+        let centers: [(letter: Character, point: CGPoint)] =
+            "qwertyuiopasdfghjklzxcvbnm".compactMap { character in
+                KB.grid(for: character).map { (character, CGPoint(x: $0.0, y: $0.1)) }
+            }
+        let layout = GlideLayout(centers: centers, xPitch: 1, yPitch: 1)
+		let captureURL = URL(fileURLWithPath: #filePath)
+			.deletingLastPathComponent()
+			.deletingLastPathComponent()
+			.appendingPathComponent("tools/glide_capture.jsonl")
+		let firstLine = try #require(try String(contentsOf: captureURL, encoding: .utf8).split(separator: "\n").first)
+		let record = try #require(try JSONSerialization.jsonObject(with: Data(firstLine.utf8)) as? [String: Any])
+		let coordinates = try #require(record["path"] as? [[Double]])
+		let path = coordinates.compactMap { point -> CGPoint? in
+			guard point.count == 2 else { return nil }
+			return CGPoint(x: point[0], y: point[1])
+		}
+		#expect(path.count == coordinates.count)
+		let times: [TimeInterval] = []
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), loadsNeuralModel: false)
+        let preview = await withCheckedContinuation { continuation in
+            engine.glidePreview(path: path, times: times, layout: layout, context: []) {
+                continuation.resume(returning: $0)
+            }
+        }
+        let live = try #require(preview)
+
+        var methodReturned = false
+        var deliveredInline = false
+        var finalWord: String?
+        engine.glide(path: path, times: times, layout: layout, context: []) { word, _ in
+            deliveredInline = !methodReturned
+            finalWord = word
+        }
+        methodReturned = true
+
+        #expect(deliveredInline)
+        #expect(finalWord == live.word)
+    }
+
+    @MainActor private func suggestionButton(_ id: String, in bar: SuggestionBar) -> UIButton? {
+        bar.subviews
+            .compactMap { $0 as? UIStackView }
+            .flatMap(\.arrangedSubviews)
+            .compactMap { $0 as? UIButton }
+            .first { $0.accessibilityIdentifier == id }
     }
 
     // The browsing overlays (emoji grid, GIF/sticker panel) get extra height; the

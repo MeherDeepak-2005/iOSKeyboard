@@ -30,8 +30,9 @@ enum KBDiagnostics {
 	}
 
 	static let key = "kb.diag"
-	static var store: UserDefaults { UserDefaults(suiteName: KBSettings.appGroup) ?? .standard }
+	static var store: UserDefaults { KBSettings.sharedDefaults }
 	private static let log = Logger(subsystem: KBSettings.appGroup, category: "diag")
+	private static let glideCaptureQueue = DispatchQueue(label: "keyboard.glide.capture", qos: .utility)
 
 	// MARK: App side — read + reset
 
@@ -105,6 +106,13 @@ enum KBDiagnostics {
 		rankLog.info("[glide] \(points) pts, \(pivots) pivots\(m, privacy: .public) → \(letters, privacy: .public)")
 	}
 
+	/// End-to-end device latency from finger lift through the host `insertText` call.
+	/// Emitted after insertion, so diagnostics can never delay the visible commit.
+	static func logGlideCommit(ms: Double) {
+		guard verbose else { return }
+		rankLog.info("[glide-commit] lift-to-insert \(String(format: "%.2f", ms), privacy: .public) ms")
+	}
+
 	/// Per-user glide adaptation (#37): the supervised sample just observed and the σ / gate
 	/// it produced, so the runtime tuning is watchable in the same log stream as ranking.
 	static func logGlideAdapt(kind: String, cost: Double, profile: GlideProfile) {
@@ -130,18 +138,20 @@ enum KBDiagnostics {
 	static func captureGlide(path: [(Double, Double)], times: [Double], dwell: [Character],
 							 candidates: [String], committed: String?, margin: Double) {
 		guard KBSettings.glideCapture, let url = glideCaptureURL else { return }
-		let pts = path.map { "[\(String(format: "%.3f", $0.0)),\(String(format: "%.3f", $0.1))]" }.joined(separator: ",")
-		let ts = times.map { String(format: "%.4f", $0) }.joined(separator: ",")
-		let cands = candidates.map { "\"\($0)\"" }.joined(separator: ",")
-		let dwellStr = dwell.map { "\"\($0)\"" }.joined(separator: ",")
-		let line = "{\"path\":[\(pts)],\"times\":[\(ts)],\"dwell\":[\(dwellStr)],\"cands\":[\(cands)]," +
-				   "\"word\":\(committed.map { "\"\($0)\"" } ?? "null"),\"margin\":\(String(format: "%.3f", margin))}\n"
-		guard let data = line.data(using: .utf8) else { return }
-		if let h = try? FileHandle(forWritingTo: url) {
-			defer { try? h.close() }
-			_ = try? h.seekToEnd(); try? h.write(contentsOf: data)
-		} else {
-			try? data.write(to: url, options: .atomic)
+		glideCaptureQueue.async {
+			let pts = path.map { "[\(String(format: "%.3f", $0.0)),\(String(format: "%.3f", $0.1))]" }.joined(separator: ",")
+			let ts = times.map { String(format: "%.4f", $0) }.joined(separator: ",")
+			let cands = candidates.map { "\"\($0)\"" }.joined(separator: ",")
+			let dwellStr = dwell.map { "\"\($0)\"" }.joined(separator: ",")
+			let line = "{\"path\":[\(pts)],\"times\":[\(ts)],\"dwell\":[\(dwellStr)],\"cands\":[\(cands)]," +
+						   "\"word\":\(committed.map { "\"\($0)\"" } ?? "null"),\"margin\":\(String(format: "%.3f", margin))}\n"
+			guard let data = line.data(using: .utf8) else { return }
+			if let h = try? FileHandle(forWritingTo: url) {
+				defer { try? h.close() }
+				_ = try? h.seekToEnd(); try? h.write(contentsOf: data)
+			} else {
+				try? data.write(to: url, options: .atomic)
+			}
 		}
 	}
 

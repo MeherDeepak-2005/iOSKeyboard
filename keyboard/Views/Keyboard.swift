@@ -87,6 +87,10 @@ final class KeyboardView: UIView {
 	/// the key layout, so the engine can map the path into grid space and decode it. No
 	/// letter is ever committed for a glide (lift-commit) — the decoder just gets the path.
 	var onGlide: (([CGPoint], [TimeInterval], GlideLayout) -> Void)?
+	/// Throttled trajectory snapshots for the background live-winner decoder.
+	var onGlideBegan: (() -> Void)?
+	var onGlidePreview: (([CGPoint], [TimeInterval], GlideLayout) -> Void)?
+	var onGlideCancelled: (() -> Void)?
 
 	/// Letter-key centers + pitches for the decoder's view→grid mapping.
 	private func glideLayout() -> GlideLayout {
@@ -108,6 +112,9 @@ final class KeyboardView: UIView {
 	private var glideTouch: UITouch?            // the single finger tracked for a glide
 	private var glide: GlideTrack?
 	private let trailLayer = CAShapeLayer()
+	private let trailHeadLayer = CAShapeLayer()
+	private var lastGlidePreviewTime: TimeInterval = 0
+	private let glidePreviewInterval: TimeInterval = 0.06
 	/// A stroke becomes a glide once it travels this far AND crosses into a second key —
 	/// enough to tell a deliberate swipe from a jittery tap. Tuned for real hands in P5.
 	private var glideThreshold: CGFloat { unitPitch * 0.85 }
@@ -142,7 +149,7 @@ final class KeyboardView: UIView {
 	/// those pages — the clipboard list and the letter deck stay at normal height —
 	/// and snaps back the moment the overlay closes (every show*/hide* fires
 	/// onHeightChange, and the controller re-reads `keyboardHeight`).
-	private let overlayExpansion: CGFloat = 80
+	private let overlayExpansion: CGFloat = 96
 	private var expansionSpace: CGFloat { (page == .emoji || page == .media) ? overlayExpansion : 0 }
 
 	var keyboardHeight: CGFloat { headerSpace + expansionSpace + topPad + rowHeight*4 + rowSpacing*3 + botPad }
@@ -167,11 +174,15 @@ final class KeyboardView: UIView {
 			layer.insertSublayer(photoLayer, above: deckLayer)
 		}
 		trailLayer.fillColor = nil
-		trailLayer.lineWidth = 9
+		trailLayer.lineWidth = 7.5
 		trailLayer.lineCap = .round
 		trailLayer.lineJoin = .round
-		trailLayer.strokeColor = theme.accentStart.withAlphaComponent(0.30).cgColor
+		trailLayer.strokeColor = theme.accentStart.withAlphaComponent(0.38).cgColor
+		trailHeadLayer.fillColor = theme.accentStart.withAlphaComponent(0.46).cgColor
+		trailHeadLayer.strokeColor = UIColor.white.withAlphaComponent(0.16).cgColor
+		trailHeadLayer.lineWidth = 1
 		layer.addSublayer(trailLayer)
+		layer.addSublayer(trailHeadLayer)
 		isMultipleTouchEnabled = true            // <-- fast typists / overlapping fingers
 		addSubview(suggestionBar)
 		suggestionBar.isHidden = !showsSuggestions    // start collapsed until the host is known
@@ -184,6 +195,14 @@ final class KeyboardView: UIView {
 
 	func setSuggestions(_ s: [String], typedPrefix: String? = nil) {
 		suggestionBar.setSuggestions(s, typedPrefix: typedPrefix)
+	}
+
+	func setGlidePreview(_ word: String?) {
+		suggestionBar.setGlidePreview(word)
+	}
+
+	func setGlideResult(_ word: String, alternatives: [String]) {
+		suggestionBar.setGlideResult(word, alternatives: alternatives)
 	}
 
 	/// Show or hide the predictive strip. Hiding it shortens the keyboard; the controller
@@ -758,6 +777,7 @@ final class KeyboardView: UIView {
 				   !isEmojiSearching, !isMediaSearching,   // search queries are tapped, not glided
 				   key.letterBase != nil {
 					glideTouch = touch
+					lastGlidePreviewTime = 0
 					glide = GlideTrack(startKey: key, points: [p], times: [touch.timestamp],
 									   keys: [ObjectIdentifier(key)])
 				}
@@ -814,7 +834,7 @@ final class KeyboardView: UIView {
 				let pts = glide?.points ?? []
 				let times = glide?.times ?? []
 				let layout = glideLayout()
-				glideTouch = nil; glide = nil; clearTrail()
+				glideTouch = nil; glide = nil; lastGlidePreviewTime = 0; clearTrail()
 				pendingCommit.remove(touch)
 				clearRegisteredKey(for: touch)
 				onGlide?(pts, times, layout)
@@ -830,7 +850,11 @@ final class KeyboardView: UIView {
 	}
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
-			if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }
+			if touch == glideTouch {
+				glideTouch = nil; glide = nil; lastGlidePreviewTime = 0; clearTrail()
+				suggestionBar.setGlidePreview(nil)
+				onGlideCancelled?()
+			}
 			pendingCommit.remove(touch)                        // cancelled: never commit
 			if touch == repeatTouch { endRepeat() }
 			clearRegisteredKey(for: touch)
@@ -865,6 +889,7 @@ final class KeyboardView: UIView {
 	/// it from `pendingCommit` (nothing was inserted, so the swipe decodes on lift instead).
 	private func trackGlide(_ touch: UITouch) {
 		guard var glide = glide else { return }
+		let wasGlide = glide.isGlide
 
 		let point = touch.location(in: self)
 
@@ -891,12 +916,17 @@ final class KeyboardView: UIView {
 
 			clearRegisteredKey(for: touch)
 			pendingCommit.remove(touch)
+			onGlideBegan?()
 		}
 
 		self.glide = glide
 
 		if glide.isGlide {
 			updateTrail(glide.points)
+			if !wasGlide || touch.timestamp - lastGlidePreviewTime >= glidePreviewInterval {
+				lastGlidePreviewTime = touch.timestamp
+				onGlidePreview?(glide.points, glide.times, glideLayout())
+			}
 		}
 	}
 	private func updateTrail(_ points: [CGPoint]) {
@@ -904,13 +934,21 @@ final class KeyboardView: UIView {
 		let path = UIBezierPath()
 		path.move(to: points[0])
 		for p in points.dropFirst() { path.addLine(to: p) }
+		let point = points[points.count - 1]
+		let headDiameter: CGFloat = 18
+		let head = CGRect(x: point.x - headDiameter / 2,
+						  y: point.y - headDiameter / 2,
+						  width: headDiameter,
+						  height: headDiameter)
 		CATransaction.begin(); CATransaction.setDisableActions(true)
 		trailLayer.path = path.cgPath
+		trailHeadLayer.path = UIBezierPath(ovalIn: head).cgPath
 		CATransaction.commit()
 	}
 	private func clearTrail() {
 		CATransaction.begin(); CATransaction.setDisableActions(true)
 		trailLayer.path = nil
+		trailHeadLayer.path = nil
 		CATransaction.commit()
 	}
 
@@ -955,7 +993,8 @@ final class KeyboardView: UIView {
 		shiftKey = all.first { $0.isShift }
 		bringSubviewToFront(suggestionBar)
 		touchPopups.values.forEach { bringSubviewToFront($0) }   // page-reload mid-press
-		layer.addSublayer(trailLayer)          // keep the glide trail above the freshly-added keys
+		layer.addSublayer(trailLayer)          // keep the glide feedback above freshly-added keys
+		layer.addSublayer(trailHeadLayer)
 		setNeedsLayout()
 	}
 

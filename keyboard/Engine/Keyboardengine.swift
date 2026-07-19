@@ -1,5 +1,12 @@
 import Foundation
 
+struct GlidePrediction {
+	let word: String
+	let alternatives: [String]
+	let shapeCostByWord: [String: Double]
+	let margin: Double
+}
+
 // Noisy-channel engine, v3 — restructured for the neural rescorer (Phase A).
 //
 // Pipeline:   Lexicon (trie = channel model) generates an N-best candidate list
@@ -30,6 +37,21 @@ final class KeyboardEngine {
 	/// forward SIMULTANEOUSLY, exploding CPU/threads inside the jetsam-limited extension.
 	/// Nothing on the KEYSTROKE path ever waits on this queue (see `autocorrection`).
 	private let queue = DispatchQueue(label: "keyboard.engine")
+	/// Glide must not wait behind a 15-50 ms neural suggestion pass. Final decodes and
+	/// live previews use separate queues; the final queue has interactive priority and
+	/// stale preview work cooperatively exits when the finger lifts.
+	private let glideQueue = DispatchQueue(label: "keyboard.engine.glide", qos: .userInteractive)
+	private let glidePreviewQueue = DispatchQueue(label: "keyboard.engine.glide.preview", qos: .userInitiated)
+	private let initializationGroup = DispatchGroup()
+	private let glidePreviewLock = NSLock()
+	private var glidePreviewGeneration = 0
+	private let glidePreviewCacheLock = NSLock()
+	private struct GlidePreviewCache {
+		let key: UInt64
+		let createdAt: TimeInterval
+		let prediction: GlidePrediction
+	}
+	private var glidePreviewCache: GlidePreviewCache?
 	private let lexicon = Lexicon()
 	private let user = UserModel()
 	/// Eager `let`, NOT lazy: the main thread's fast-autocorrect path touches it, and a
@@ -69,7 +91,7 @@ final class KeyboardEngine {
 	/// Commits before a non-dictionary word enters the trie (and so becomes
 	/// suggestable + immune to autocorrect). 5, not 3: a word you were only testing
 	/// or typo'd repeatedly shouldn't graduate into the dictionary.
-	private let adoptAfter = 5
+	private let adoptAfter = 8
 	/// Candidates that survive to rescoring. Deliberately wider than the 3 shown:
 	/// a neural rescorer's value is promoting words the crude score ranked 4th–12th.
 	private let nBest = 12
@@ -144,19 +166,24 @@ final class KeyboardEngine {
 	/// one model, and lets learning persist across the controller churn.
 	static let shared = KeyboardEngine()
 
-	init() {
+	init(languageDataURL: URL? = nil, loadsNeuralModel: Bool = true) {
 		let ng = NgramScorer(user: user)
 		ngram = ng
 		scorer = ng
+		initializationGroup.enter()
+		let ready = initializationGroup
 		queue.async { [weak self] in
+			defer { ready.leave() }
 			guard let self else { return }
-			self.lexicon.loadFromBundle()
-			self.ngram.attach(data: self.lexicon.langData,
+			if let languageDataURL { self.lexicon.load(from: languageDataURL) }
+			else { self.lexicon.loadFromBundle() }
+			let languageData = self.lexicon.languageDataSnapshot()
+			self.ngram.attach(data: languageData,
 							  resolveID: { [lexicon = self.lexicon] in lexicon.wordID($0) },
 							  lexicon: self.lexicon)
 			self.user.load()
 			self.glideProfile.load()          // #37: restore this user's adapted glide σ / gate
-			self.lexicon.langData?.warmGlideAnchorIndex()   // Phase 2: prebuild the endpoint index off the first-glide path
+			languageData?.warmGlideAnchorIndex()   // Phase 2: prebuild the endpoint index off the first-glide path
 			self.applyLearned()
 			// Tiered scorer — two levels, each overriding the previous on this serial queue.
 			//
@@ -168,7 +195,7 @@ final class KeyboardEngine {
 			// Tier 3 (BlendedScorer + full transformer): always create the lightweight
 			//   handle when resources exist. NeuralScorer owns the memory gate and can
 			//   retry after transiently low headroom; Tier 1 answers until it is resident.
-			if KBSettings.neuralRescorer {
+			if loadsNeuralModel && KBSettings.neuralRescorer {
 				if let tok = SPTokenizer.fromBundle() {
 					self.scorer = UnigramScorer(tokenizer: tok, ngram: self.ngram)
 				}
@@ -405,7 +432,8 @@ final class KeyboardEngine {
 	/// Phase 2 endpoint-anchor augmentation. Fetch words whose first/last letter sit within
 	/// `glideAnchorRadius` grid units of the swipe's start/end (up to `glideAnchorEnds` letters
 	/// each end), `glideAnchorPerBucket` most-frequent per (first,last) pair, then shape-score them.
-	/// glide_eval sweet spot: recovers the beam's skip-case misses (recall 89→93, top-1 87→90) for
+	/// glide_eval sweet spot: recovers the 48-wide beam's skip-case misses (recall 89→93,
+	/// top-1 87→90) for
 	/// ~2 surviving candidates/word; larger values just add candidates the gate then rejects.
 	private let glideAnchorRadius: CGFloat = 1.3
 	private let glideAnchorEnds = 3
@@ -422,87 +450,215 @@ final class KeyboardEngine {
 	/// them per user from their own accepted swipes. See `GlideProfile`.
 	private let glideProfile = GlideProfile()
 
+	private func currentGlidePreviewGeneration() -> Int {
+		glidePreviewLock.lock(); defer { glidePreviewLock.unlock() }
+		return glidePreviewGeneration
+	}
+
+	private func isCurrentGlidePreview(_ generation: Int) -> Bool {
+		glidePreviewLock.lock(); defer { glidePreviewLock.unlock() }
+		return generation == glidePreviewGeneration
+	}
+
+	/// Called at gesture start, cancellation, and lift. A decoder already running checks
+	/// this ticket once per trie depth and exits instead of competing with the final pass.
+	func cancelGlidePreviews() {
+		glidePreviewLock.lock()
+		glidePreviewGeneration &+= 1
+		glidePreviewLock.unlock()
+	}
+
+	/// In-progress decode for UI feedback. It runs the exact production candidate and
+	/// ranking pipeline used on release. The controller keeps this single-flight, so
+	/// preview work can never occupy the final decoder or suggestion queue.
+	func glidePreview(path: [CGPoint], times: [TimeInterval] = [], layout: GlideLayout,
+					  context: [String], completion: @escaping (GlidePrediction?) -> Void) {
+		let generation = currentGlidePreviewGeneration()
+		let cacheKey = glideCacheKey(path: path, times: times, layout: layout, context: context)
+		glidePreviewQueue.async { [weak self] in
+			func deliver(_ prediction: GlidePrediction?) {
+				DispatchQueue.main.async { completion(prediction) }
+			}
+			guard let self else { return deliver(nil) }
+			self.initializationGroup.wait()
+			guard self.isCurrentGlidePreview(generation),
+				  let ld = self.lexicon.languageDataSnapshot(),
+				  let g = GlidePreprocess.run(path, layout: layout, times: times.isEmpty ? nil : times)
+			else { return deliver(nil) }
+			let isCancelled = { [weak self] in self?.isCurrentGlidePreview(generation) != true }
+			guard let result = self.decodeGlide(g, lang: ld, context: context,
+											 shouldCancel: isCancelled) else { return deliver(nil) }
+			let scored = result.scored
+			guard let winner = scored.first?.word else { return deliver(nil) }
+			let margin = scored.count > 1 ? scored[0].s - scored[1].s : Double.greatestFiniteMagnitude
+			let prediction = GlidePrediction(
+				word: winner,
+				alternatives: scored.dropFirst().prefix(3).map(\.word),
+				shapeCostByWord: Dictionary(result.candidates.map { ($0.word, $0.cost) }, uniquingKeysWith: min),
+				margin: margin)
+			self.storeGlidePreview(prediction, key: cacheKey)
+			deliver(prediction)
+		}
+	}
+
+	private func storeGlidePreview(_ prediction: GlidePrediction, key: UInt64) {
+		glidePreviewCacheLock.lock()
+		glidePreviewCache = GlidePreviewCache(
+			key: key,
+			createdAt: ProcessInfo.processInfo.systemUptime,
+			prediction: prediction
+		)
+		glidePreviewCacheLock.unlock()
+	}
+
+	private func recentGlidePreview(key: UInt64) -> GlidePrediction? {
+		glidePreviewCacheLock.lock(); defer { glidePreviewCacheLock.unlock() }
+		guard let cached = glidePreviewCache,
+			  cached.key == key,
+			  ProcessInfo.processInfo.systemUptime - cached.createdAt <= 0.35
+		else { return nil }
+		return cached.prediction
+	}
+
+	/// Stable FNV-1a fingerprint of the exact raw path, timing samples, layout scale,
+	/// and language context. A cache hit therefore means preview and commit consumed
+	/// identical evidence, not merely a similar endpoint.
+	private func glideCacheKey(path: [CGPoint], times: [TimeInterval], layout: GlideLayout,
+							   context: [String]) -> UInt64 {
+		var hash: UInt64 = 0xcbf29ce484222325
+		func mix(_ value: UInt64) {
+			hash = (hash ^ value) &* 0x100000001b3
+		}
+		mix(UInt64(path.count))
+		for point in path {
+			mix(Double(point.x).bitPattern)
+			mix(Double(point.y).bitPattern)
+		}
+		mix(UInt64(times.count))
+		for time in times { mix(time.bitPattern) }
+		mix(Double(layout.xPitch).bitPattern)
+		mix(Double(layout.yPitch).bitPattern)
+		for word in context {
+			for byte in word.utf8 { mix(UInt64(byte)) }
+			mix(0xff)
+		}
+		return hash
+	}
+
+	private func scoreGlideCandidates(_ candidates: [(word: String, cost: Double)],
+									  glide: ProcessedGlide, context: [String]) -> [(word: String, s: Double)] {
+		let sigma = glideProfile.sigma
+		let dwell = Set(glide.dwellKeys)
+		let priors = ngram.logProbs(candidates.map(\.word), context: context)
+		return candidates.enumerated().map { i, candidate in
+			let frequency = lexicon.logFreq(of: candidate.word) ?? 0
+			let dwellBonus = dwell.isEmpty
+				? 0
+				: glideDoubleBonus * Double(dwelledDoubles(candidate.word, dwell))
+			return (candidate.word, -candidate.cost / sigma
+				+ glideLMWeight * priors[i]
+				+ glideFreqWeight * frequency
+				+ dwellBonus)
+		}
+		.sorted { $0.s > $1.s }
+	}
+
+	private struct GlideDecodeResult {
+		let candidates: [(word: String, cost: Double)]
+		let scored: [(word: String, s: Double)]
+	}
+
+	/// The single production Glide pipeline used by both live feedback and final commit.
+	/// Keeping candidate generation, recovery, gating, and ranking here prevents the preview
+	/// from promising a word that a different release-time decoder would immediately replace.
+	private func decodeGlide(_ glide: ProcessedGlide, lang: LangData, context: [String],
+								 shouldCancel: (() -> Bool)? = nil) -> GlideDecodeResult? {
+		guard shouldCancel?() != true else { return nil }
+		let gate = glideProfile.gate
+		var candidates = GlideDecoder.decode(
+			glide, lang: lang, limit: glideCandidates, shouldCancel: shouldCancel
+		).filter { !lexicon.isProfane($0.word) }
+		guard shouldCancel?() != true,
+			  let bestShape = candidates.first?.cost,
+			  bestShape <= gate else { return nil }
+		var knownWords = Set(candidates.map(\.word))
+
+		if !context.isEmpty {
+			for word in ngram.nextWords(context: context, limit: glideContextAugment)
+			where !knownWords.contains(word) && word.count >= 2 && !lexicon.isProfane(word) {
+				guard shouldCancel?() != true else { return nil }
+				if let cost = GlideDecoder.shapeCost(of: word, glide), cost <= gate {
+					candidates.append((word: word, cost: cost))
+					knownWords.insert(word)
+				}
+			}
+		}
+
+		if let start = glide.points.first, let end = glide.points.last {
+			let firsts = GlidePreprocess.lettersNear(start, radius: glideAnchorRadius, maxN: glideAnchorEnds)
+			let lasts = GlidePreprocess.lettersNear(end, radius: glideAnchorRadius, maxN: glideAnchorEnds)
+			for word in lang.glideAnchorWords(first: firsts, last: lasts, perBucket: glideAnchorPerBucket)
+			where !knownWords.contains(word) && word.count >= 2 && !lexicon.isProfane(word) {
+				guard shouldCancel?() != true else { return nil }
+				if let cost = GlideDecoder.shapeCost(of: word, glide), cost <= gate {
+					candidates.append((word: word, cost: cost))
+					knownWords.insert(word)
+				}
+			}
+		}
+
+		guard shouldCancel?() != true else { return nil }
+		let scored = scoreGlideCandidates(candidates, glide: glide, context: context)
+		return scored.isEmpty ? nil : GlideDecodeResult(candidates: candidates, scored: scored)
+	}
+
 	/// Decode a swipe into a word: preprocess (P2) → shape-match against the trie (P3) →
 	/// rerank with the language prior + frequency and gate (P4). Delivers the winner and
 	/// up to 3 alternatives for the suggestion bar (swap targets) on the MAIN queue;
 	/// (nil, []) when the swipe matched nothing well enough to commit.
 	func glide(path: [CGPoint], times: [TimeInterval] = [], layout: GlideLayout, context: [String],
-			   completion: @escaping (String?, [String]) -> Void) {
+				   completion: @escaping (String?, [String]) -> Void) {
+		cancelGlidePreviews()
 		// Invalidate any suggestion pass already dispatched to the engine queue.
 		// A queued pass that hasn't started yet bails at its isLatest() check;
 		// a pass mid-execution still completes, but any further queued ones skip.
 		// The controller also cancels the debounced work item before calling here.
-		genLock.lock(); suggestGen &+= 1; genLock.unlock()
-		// Serial engine queue: one decode at a time, behind at most the passes already in
-		// flight. Nothing on the keystroke path waits for this — the commit arrives via the
-		// main-queue completion; learning happens later on the controller's `learn` call.
-		queue.async { [weak self] in
+		cancelSuggestions()
+		let cacheKey = glideCacheKey(path: path, times: times, layout: layout, context: context)
+		if let cached = recentGlidePreview(key: cacheKey) {
+			noteGlideCommit(winner: cached.word, shapeCostByWord: cached.shapeCostByWord)
+			// `glide` is invoked from touchesEnded on main. Deliver inline so an exact
+			// preview hit inserts before the next display frame.
+			completion(cached.word, cached.alternatives)
+			glideQueue.async { [weak self] in
+				guard let self,
+					  let processed = GlidePreprocess.run(path, layout: layout, times: times.isEmpty ? nil : times)
+				else { return }
+				self.logCachedGlide(cached, path: path, times: times, layout: layout, processed: processed)
+			}
+			return
+		}
+		// Dedicated interactive queue: the full-path decision never waits behind neural
+		// suggestions or a live-preview decode.
+		glideQueue.async { [weak self] in
 			func deliver(_ w: String?, _ alts: [String]) { DispatchQueue.main.async { completion(w, alts) } }
-			guard let self, let ld = self.lexicon.langData,
+			guard let self else { return deliver(nil, []) }
+			self.initializationGroup.wait()
+			guard let ld = self.lexicon.languageDataSnapshot(),
 				  let g = GlidePreprocess.run(path, layout: layout, times: times.isEmpty ? nil : times)
 			else { return deliver(nil, []) }
-			var cands = GlideDecoder.decode(g, lang: ld, limit: self.glideCandidates)
-				.filter { !self.lexicon.isProfane($0.word) }
-			// Gate on the best SHAPE fit (decoder output is shape-sorted): the question is
-			// "did this swipe trace anything?", which the LM must not be able to overrule.
-			// The gate is per-user (#37): a sloppy glider's correct swipes sit higher, so
-			// their gate rises to let those through; a precise glider's gate tightens.
-			let gate = self.glideProfile.gate
-			guard let bestShape = cands.first?.cost, bestShape <= gate else {
+			guard let result = self.decodeGlide(g, lang: ld, context: context) else {
+				deliver(nil, [])
 				KBDiagnostics.logGlide(points: g.points.count, pivots: g.pivots.count, letters: "rejected")
-				return deliver(nil, [])
-			}
-			// #4 CONTEXT-RECALL AUGMENTATION. The recall ceiling — the true word never entering the
-			// candidate set — is what caps glide top-1 (glide_eval: recall ≈ beam-bound, not rerank).
-			// Fold in the words the CONTEXT predicts that the beam missed, but only when each one's
-			// OWN shape still fits this swipe (cost ≤ gate). So context can rescue a word the finger
-			// clearly traced yet the beam dropped, and can never conjure a word the finger didn't.
-			if !context.isEmpty {
-				let have = Set(cands.map(\.word))
-				for w in self.ngram.nextWords(context: context, limit: self.glideContextAugment)
-				where !have.contains(w) && w.count >= 2 && !self.lexicon.isProfane(w) {
-					if let sc = GlideDecoder.shapeCost(of: w, g), sc <= gate {
-						cands.append((word: w, cost: sc))
-					}
-				}
-			}
-			// PHASE 2 ENDPOINT-ANCHOR AUGMENTATION. The start and end keys are a glide’s two most
-			// reliable points; fetch words whose first/last letter match them and shape-score them
-			// directly. Recovers a word the beam dropped because a MIDDLE letter was skipped (the
-			// greedy prune misaligns and prunes it) without ever traversing that middle. Same gate
-			// bound. glide_eval: recall 89‒93, top-1 87‒90 for ~2 extra candidates/word.
-			if let s = g.points.first, let e = g.points.last {
-				let firsts = GlidePreprocess.lettersNear(s, radius: self.glideAnchorRadius, maxN: self.glideAnchorEnds)
-				let lasts  = GlidePreprocess.lettersNear(e, radius: self.glideAnchorRadius, maxN: self.glideAnchorEnds)
-				let have = Set(cands.map(\.word))
-				for w in ld.glideAnchorWords(first: firsts, last: lasts, perBucket: self.glideAnchorPerBucket)
-				where !have.contains(w) && w.count >= 2 && !self.lexicon.isProfane(w) {
-					if let sc = GlideDecoder.shapeCost(of: w, g), sc <= gate {
-						cands.append((word: w, cost: sc))
-					}
-				}
+				return
 			}
 			// N-GRAM prior only — never the neural model. A glide commits the instant the
 			// finger lifts, so it must not block on a synchronous Core ML forward pass; the
 			// n-gram (with personalization) already ranks shape candidates well (glide_eval
 			// top-1 ~84% on shape+freq alone). Neural's contextual value is applied AFTER the
 			// commit, asynchronously, via the previous-word rescue (see `rescorePreviousWord`).
-			let sigma = self.glideProfile.sigma           // per-user rerank temperature (#37)
-			let dwell = Set(g.dwellKeys)                  // #5: letters the finger lingered on
-			let priors = self.ngram.logProbs(cands.map(\.word), context: context)
-			var scored: [(word: String, s: Double)] = []
-			scored.reserveCapacity(cands.count)
-			for (i, c) in cands.enumerated() {
-				let lf = self.lexicon.logFreq(of: c.word) ?? 0
-				// #5: reward a doubled letter that the hand dwelled on — the positive evidence
-				// a swipe otherwise can't give for "hello" vs "helo". 0 when no timestamps.
-				let db = dwell.isEmpty ? 0 : self.glideDoubleBonus * Double(self.dwelledDoubles(c.word, dwell))
-				scored.append((c.word, -c.cost / sigma
-									   + self.glideLMWeight * priors[i]
-									   + self.glideFreqWeight * lf
-									   + db))
-			}
-			scored.sort { $0.s > $1.s }
+			let cands = result.candidates
+			let scored = result.scored
 			let winner = scored[0].word
 			let alts = scored.dropFirst().prefix(3).map(\.word)
 			// #6 COMMIT CONFIDENCE = the reranked top-1/top-2 margin. A tiny margin means the two
@@ -514,6 +670,9 @@ final class KeyboardEngine {
 			// winner / swapped-to alternative / undone) can supervise the per-user adaptation.
 			self.noteGlideCommit(winner: winner, shapeCostByWord: Dictionary(cands.map { ($0.word, $0.cost) },
 																			  uniquingKeysWith: min))
+			// Queue the visible insertion before diagnostics and optional capture formatting.
+			// Those facilities must never add lift-to-insert latency.
+			deliver(winner, Array(alts))
 			KBDiagnostics.logGlide(points: g.points.count, pivots: g.pivots.count,
 								   letters: ([winner] + alts).joined(separator: ","), margin: margin)
 			// Offline calibration capture (debug flag): RAW grid path + timestamps so the fitter
@@ -523,8 +682,21 @@ final class KeyboardEngine {
 			}
 			KBDiagnostics.captureGlide(path: rawGrid, times: times.map { Double($0) }, dwell: g.dwellKeys,
 									   candidates: scored.prefix(3).map(\.word), committed: winner, margin: margin)
-			deliver(winner, Array(alts))
 		}
+	}
+
+	private func logCachedGlide(_ prediction: GlidePrediction, path: [CGPoint], times: [TimeInterval],
+							layout: GlideLayout, processed: ProcessedGlide) {
+		let displayed = [prediction.word] + prediction.alternatives
+		KBDiagnostics.logGlide(points: processed.points.count, pivots: processed.pivots.count,
+							   letters: displayed.joined(separator: ","), margin: prediction.margin)
+		let rawGrid = path.map { point -> (Double, Double) in
+			let grid = GlidePreprocess.toGrid(point, layout: layout)
+			return (Double(grid.x), Double(grid.y))
+		}
+		KBDiagnostics.captureGlide(path: rawGrid, times: times.map { Double($0) },
+								   dwell: processed.dwellKeys, candidates: Array(displayed.prefix(3)),
+								   committed: prediction.word, margin: prediction.margin)
 	}
 
 	/// #5 helper: how many of a word's DOUBLED letters the finger dwelled on. "hello" with a
@@ -647,6 +819,7 @@ final class KeyboardEngine {
 	private let genLock = NSLock()
 	private var suggestGen = 0
 	private func isLatest(_ gen: Int) -> Bool { genLock.lock(); defer { genLock.unlock() }; return gen == suggestGen }
+	func cancelSuggestions() { genLock.lock(); suggestGen &+= 1; genLock.unlock() }
 
 	/// The exact-match word→emoji table riding in emoji.bin (nil when not bundled).
 	private let emojiStore = EmojiStore.bundled
@@ -975,7 +1148,11 @@ final class KeyboardEngine {
 		let beamCount = out.count
 		for w in ngram.nextWords(context: context, limit: 8)
 			where w != last && !out.contains(w) && !lexicon.isProfane(w) { out.append(w) }
-		if out.isEmpty { out = lexicon.topWords }   // fresh install, no context: top dictionary words
+		// Sparse personal or corpus contexts should not monopolize the bar. Fill any
+		// remaining slots from the shipped sentence-start list, never personal unigrams.
+		for w in lexicon.topWords where out.count < 3 && w.lowercased() != last && !out.contains(w) {
+			out.append(w)
+		}
 		let final = Array(out.prefix(3).map(displayCase))
 		KBDiagnostics.logPredict(context: context, words: final, beam: beamCount, ngram: out.count - beamCount)
 		return final
@@ -1043,7 +1220,7 @@ final class GlideProfile {
 	private let lock = NSLock()
 
 	private static let key = "kb.glideprofile"
-	private static var store: UserDefaults { UserDefaults(suiteName: KBSettings.appGroup) ?? .standard }
+	private static var store: UserDefaults { KBSettings.sharedDefaults }
 	private static let io = DispatchQueue(label: "keyboard.glideprofile.io", qos: .utility)
 
 	// Adaptation constants.
