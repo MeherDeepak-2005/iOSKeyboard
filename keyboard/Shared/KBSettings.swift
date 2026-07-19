@@ -1,96 +1,12 @@
 import UIKit
+import Darwin
 
 // Shared settings + theming model (App Group) — extracted from Keyboard.swift.
-
-enum KBLanguage: String, CaseIterable {
-	case english  = "English"
-	case tenglish = "Tenglish"
-	case telugu   = "Telugu"
-
-	var subtitle: String {
-		switch self {
-		case .english:  return "QWERTY"
-		case .tenglish: return "Type in English, get Telugu"
-		case .telugu:   return "Telugu script"
-		}
-	}
-	/// User-defined SentencePiece token prepended to every model context.
-	var modelTag: String {
-		switch self {
-		case .english:  return "<en>"
-		case .tenglish: return "<xlit>"
-		case .telugu:   return "<te>"
-		}
-	}
-	/// Only English is wired up today; the others are visible but inert.
-	var isAvailable: Bool { self == .english }
-}
 
 enum KBWordCase {
 	static func sentenceDisplay(_ word: String, capitalized: Bool) -> String {
 		guard capitalized, !word.isEmpty else { return word }
 		return word.prefix(1).uppercased() + word.dropFirst()
-	}
-}
-
-enum KBFont: String, CaseIterable {
-	case system   = "System"
-	case rounded  = "Rounded"
-	case serif    = "Serif"
-	case mono     = "Monospaced"
-	// Custom families need a bundled .ttf/.otf in the EXTENSION target. Until the file
-	// is added these fall back to System (see FontInstaller.register / customFamily).
-	case jetBrains = "JetBrains Mono"
-	case hack      = "Hack"
-
-	var subtitle: String {
-		switch self {
-		case .system:    return "San Francisco"
-		case .rounded:   return "SF Rounded"
-		case .serif:     return "New York"
-		case .mono:      return "SF Mono"
-		case .jetBrains: return "Nerd Font · needs file"
-		case .hack:      return "Nerd Font · needs file"
-		}
-	}
-
-	private var systemDesign: UIFontDescriptor.SystemDesign? {
-		switch self {
-		case .system:  return .default
-		case .rounded: return .rounded
-		case .serif:   return .serif
-		case .mono:    return .monospaced
-		default:       return nil
-		}
-	}
-	/// PostScript name of the bundled custom font, if any. Update these to match the
-	/// real names of the files you drop in (see the Fonts guide).
-	var customFamily: String? {
-		switch self {
-		case .jetBrains: return "JetBrainsMonoNFM-Regular"
-		case .hack:      return "HackNFM-Regular"
-		default:         return nil
-		}
-	}
-
-	/// Substring identifying this font's file(s) in the bundle, for selective
-	/// registration in the extension (see FontInstaller.registerSelectedFont). nil for
-	/// system-design fonts, which ship no files.
-	var fileToken: String? {
-		switch self {
-		case .jetBrains: return "JetBrains"
-		case .hack:      return "Hack"
-		default:         return nil
-		}
-	}
-
-	func uiFont(ofSize size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
-		if let family = customFamily, let custom = UIFont(name: family, size: size) { return custom }
-		let base = UIFont.systemFont(ofSize: size, weight: weight)
-		if let design = systemDesign, let d = base.fontDescriptor.withDesign(design) {
-			return UIFont(descriptor: d, size: size)
-		}
-		return base
 	}
 }
 
@@ -190,8 +106,7 @@ enum KBPalette {
 /// Theme Studio custom theme — ROLE-based colors (letters / special keys / action
 /// key / text / background), not per-individual-key: that maps 1:1 onto KeyRole,
 /// reads coherently, and keeps the blob a few dozen bytes. Background is a vertical
-/// gradient (set start == end for a solid) or a photo (downscaled by the APP at
-/// save time — the extension only ever decodes a keyboard-sized image).
+/// gradient (set start == end for a solid).
 struct KBCustomTheme: Codable, Equatable {
 	var keys: UInt32        = 0xFFFFFF   // letter-key fill
 	var special: UInt32     = 0xDDE1EA   // shift / delete / 123 / globe fill
@@ -201,7 +116,31 @@ struct KBCustomTheme: Codable, Equatable {
 	var bgStart: UInt32     = 0xF2F0F4   // background gradient (top → bottom)
 	var bgEnd: UInt32       = 0xE4E1E9
 	var dark = false                     // dark-surface treatment (popups, highlights)
-	var usesPhoto = false                // kb_theme_bg.jpg in the App Group backs the deck
+}
+
+struct KBCustomThemePair: Codable, Equatable {
+	var light: KBCustomTheme
+	var dark: KBCustomTheme
+
+	static func defaults(accent: KBAccent) -> KBCustomThemePair {
+		let lightGradient = accent.gradient(dark: false)
+		let darkGradient = accent.gradient(dark: true)
+		var light = KBCustomTheme()
+		light.accentStart = lightGradient.start
+		light.accentEnd = lightGradient.end
+		var dark = KBCustomTheme(
+			keys: 0x343439,
+			special: 0x29292E,
+			accentStart: darkGradient.start,
+			accentEnd: darkGradient.end,
+			text: 0xF2F2F4,
+			bgStart: 0x242428,
+			bgEnd: 0x1B1B1F,
+			dark: true
+		)
+		dark.dark = true
+		return KBCustomThemePair(light: light, dark: dark)
+	}
 }
 
 enum KBSettings {
@@ -211,53 +150,32 @@ enum KBSettings {
 	/// and can repeat Apple's `kCFPreferencesAnyUser` diagnostic.
 	nonisolated(unsafe) static let sharedDefaults = UserDefaults(suiteName: appGroup) ?? .standard
 	private static var store: UserDefaults { sharedDefaults }
+	private static let configurationNotification = CFNotificationName(
+		"com.swiftuimasterclass.keyboard.configuration-changed" as CFString
+	)
 
 	private enum Key {
-		static let language = "kb.language"
 		static let accent   = "kb.accent"
-		static let font     = "kb.font"
 		static let haptics  = "kb.haptics"
-		static let neural   = "kb.neural"
 		static let glideCap = "kb.glidecapture"
 		static let hasUsed  = "kb.hasused"
+		static let lastSeen = "kb.keyboard.lastSeen"
 		static let fullAccess = "kb.fullaccess"
+		static let fullAccessObservedAt = "kb.fullaccess.observedAt"
 	}
 
-	static var language: KBLanguage {
-		get { KBLanguage(rawValue: store.string(forKey: Key.language) ?? "") ?? .english }
-		set { store.set(newValue.rawValue, forKey: Key.language) }
-	}
 	static var accentID: String {
 		get { store.string(forKey: Key.accent) ?? KBPalette.default.id }
 		set { store.set(newValue, forKey: Key.accent) }
 	}
 	static var accent: KBAccent { KBPalette.accent(id: accentID) }
-	/// KLIPY API key (klipy.com/developers). App Group first (host app can set it);
-	/// falls back to an optional "KlipyAPIKey" Info.plist entry. Empty = GIF/sticker
-	/// panel shows its "add key" hint and makes no network calls.
-	static var klipyAPIKey: String {
-		get {
-			if let k = store.string(forKey: "kb.klipy.key"), !k.isEmpty { return k }
-			return (Bundle.main.object(forInfoDictionaryKey: "KlipyAPIKey") as? String) ?? ""
-		}
-		set { store.set(newValue, forKey: "kb.klipy.key") }
-	}
-	/// Stable ANONYMOUS id KLIPY scopes per-user recents/ads to. Random UUID minted
-	/// once — never derived from anything personal.
-	static var klipyCustomerID: String {
-		if let id = store.string(forKey: "kb.klipy.customer") { return id }
-		let id = UUID().uuidString
-		store.set(id, forKey: "kb.klipy.customer")
-		return id
-	}
-	static var font: KBFont {
-		get { KBFont(rawValue: store.string(forKey: Key.font) ?? "") ?? .system }
-		set { store.set(newValue.rawValue, forKey: Key.font) }
-	}
 	/// Haptic tap on each key press. Default on. Requires keyboard Full Access to fire.
 	static var haptics: Bool {
 		get { store.object(forKey: Key.haptics) as? Bool ?? true }
-		set { store.set(newValue, forKey: Key.haptics) }
+		set {
+			store.set(newValue, forKey: Key.haptics)
+			postConfigurationChange()
+		}
 	}
 	/// Set by the extension after it is presented at least once. iOS does not expose a
 	/// reliable API for checking whether this specific third-party keyboard is enabled.
@@ -265,19 +183,29 @@ enum KBSettings {
 		get { store.bool(forKey: Key.hasUsed) }
 		set { store.set(newValue, forKey: Key.hasUsed) }
 	}
+	static var keyboardLastSeenAt: Date? {
+		let value = store.double(forKey: Key.lastSeen)
+		return value > 0 ? Date(timeIntervalSince1970: value) : nil
+	}
+	static func markKeyboardObserved(fullAccess: Bool) {
+		let now = Date().timeIntervalSince1970
+		store.set(true, forKey: Key.hasUsed)
+		store.set(now, forKey: Key.lastSeen)
+		store.set(fullAccess, forKey: Key.fullAccess)
+		store.set(now, forKey: Key.fullAccessObservedAt)
+	}
 	/// Last Full Access state observed by the extension after a real host connection.
 	/// The containing app cannot query this directly, so it presents this cached state.
 	static var lastFullAccess: Bool {
 		get { store.bool(forKey: Key.fullAccess) }
-		set { store.set(newValue, forKey: Key.fullAccess) }
+		set {
+			store.set(newValue, forKey: Key.fullAccess)
+			store.set(Date().timeIntervalSince1970, forKey: Key.fullAccessObservedAt)
+		}
 	}
-	/// Load the on-device neural rescorer. Default ON — it earns its ~20-30 MB working
-	/// set with better ranking, and it already sheds that memory when the OS signals
-	/// pressure (NeuralScorer's pressure source) and only loads with real headroom
-	/// (minAvailableMBToLoad). Active while it helps, dropped when the budget is tight.
-	static var neuralRescorer: Bool {
-		get { store.object(forKey: Key.neural) as? Bool ?? true }
-		set { store.set(newValue, forKey: Key.neural) }
+	static var lastFullAccessObservedAt: Date? {
+		let value = store.double(forKey: Key.fullAccessObservedAt)
+		return value > 0 ? Date(timeIntervalSince1970: value) : nil
 	}
 	/// DEBUG capture: append each glide's grid path + decoded words to a JSONL file in the
 	/// App Group, so tools/glide_eval/calibrate.py can fit the harness noise model to real
@@ -290,18 +218,25 @@ enum KBSettings {
 	/// URL of the on-device personalisation model in the shared App Group container.
 	/// Both the app and the extension resolve to the same file, so the app can delete it directly.
 	static var userModelURL: URL? {
-		FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
-			.appendingPathComponent("kb_model.json")
+		KBPersonalData.modelURL(for: KBPersonalData.currentEpoch)
 	}
 
 	// MARK: Theme Studio
 
 	/// The saved custom theme (nil = never designed one). Enabling is a SEPARATE
 	/// flag so switching back to a stock accent keeps the design for later.
-	static var customTheme: KBCustomTheme? {
+	static var customThemes: KBCustomThemePair? {
 		get {
 			guard let data = store.data(forKey: "kb.customtheme") else { return nil }
-			return try? JSONDecoder().decode(KBCustomTheme.self, from: data)
+			if let pair = try? JSONDecoder().decode(KBCustomThemePair.self, from: data) {
+				return pair
+			}
+			// One-time migration from the old single-appearance editor. Preserve the
+			// authored side and provide a contrast-safe counterpart for system switching.
+			guard let legacy = try? JSONDecoder().decode(KBCustomTheme.self, from: data) else { return nil }
+			var pair = KBCustomThemePair.defaults(accent: accent)
+			if legacy.dark { pair.dark = legacy } else { pair.light = legacy }
+			return pair
 		}
 		set {
 			if let newValue, let data = try? JSONEncoder().encode(newValue) {
@@ -311,13 +246,74 @@ enum KBSettings {
 			}
 		}
 	}
+	static func customTheme(dark: Bool) -> KBCustomTheme? {
+		guard let themes = customThemes else { return nil }
+		return dark ? themes.dark : themes.light
+	}
 	static var customThemeEnabled: Bool {
 		get { store.bool(forKey: "kb.customtheme.on") }
 		set { store.set(newValue, forKey: "kb.customtheme.on") }
 	}
-	/// The custom background photo, pre-downscaled by the app (see ThemeStudioView).
-	static var themePhotoURL: URL? {
-		FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
-			.appendingPathComponent("kb_theme_bg.jpg")
+	/// Atomic user-facing appearance commit. The extension observes the Darwin
+	/// notification and rebuilds once, rather than seeing a half-written group of keys.
+	static func applyAppearance(accentID: String, customThemes: KBCustomThemePair?, enabled: Bool) {
+		store.set(accentID, forKey: Key.accent)
+		if let customThemes, let data = try? JSONEncoder().encode(customThemes) {
+			store.set(data, forKey: "kb.customtheme")
+		} else {
+			store.removeObject(forKey: "kb.customtheme")
+		}
+		store.set(enabled, forKey: "kb.customtheme.on")
+		postConfigurationChange()
 	}
+
+	private static func postConfigurationChange() {
+		store.set(store.integer(forKey: "kb.configuration.revision") + 1,
+				  forKey: "kb.configuration.revision")
+		store.synchronize()
+		CFNotificationCenterPostNotification(
+			CFNotificationCenterGetDarwinNotifyCenter(),
+			configurationNotification,
+			nil,
+			nil,
+			true
+		)
+	}
+
+	fileprivate static func addConfigurationObserver(_ observer: UnsafeRawPointer) {
+		CFNotificationCenterAddObserver(
+			CFNotificationCenterGetDarwinNotifyCenter(),
+			observer,
+			{ _, rawObserver, _, _, _ in
+				guard let rawObserver else { return }
+				Unmanaged<KBConfigurationObserver>.fromOpaque(rawObserver)
+					.takeUnretainedValue().receiveChange()
+			},
+			configurationNotification.rawValue,
+			nil,
+			.deliverImmediately
+		)
+	}
+
+	fileprivate static func removeConfigurationObserver(_ observer: UnsafeRawPointer) {
+		CFNotificationCenterRemoveObserver(
+			CFNotificationCenterGetDarwinNotifyCenter(), observer,
+			configurationNotification, nil
+		)
+	}
+}
+
+final class KBConfigurationObserver {
+	private let handler: () -> Void
+
+	init(handler: @escaping () -> Void) {
+		self.handler = handler
+		KBSettings.addConfigurationObserver(Unmanaged.passUnretained(self).toOpaque())
+	}
+
+	deinit {
+		KBSettings.removeConfigurationObserver(Unmanaged.passUnretained(self).toOpaque())
+	}
+
+	fileprivate func receiveChange() { handler() }
 }

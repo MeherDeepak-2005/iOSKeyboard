@@ -4,54 +4,51 @@ import UIKit
 
 final class SuggestionBar: UIView {
 	var onPick: ((String) -> Void)?
-	/// Tap on the leading clipboard icon — opens the history panel. The panel is the
-	/// ONLY clipboard surface: copies are captured when it opens, never surfaced here
-	/// (a strip chip meant reading UIPasteboard on the type path, which stalled layout
-	/// and fired iOS's paste banner on every copy).
-	var onOpenClipboard: (() -> Void)?
 
 	private var buttons: [UIButton] = []
-	private let clipButton = UIButton(type: .system)
-	private let stack = UIStackView()
+	private let primaryBackground = UIView()
 	private let sep1 = UIView(), sep2 = UIView()
 	private let textColor: UIColor
 	private let dimColor: UIColor
 	private let primaryFill: UIColor
-	private static let clipWidth: CGFloat = 34
+	private let primaryBorder: UIColor
 
 	private var rankedSuggestions: [String] = []
 	private var currentPrefix: String?
+	private var highlightsPrimary = false
 	private var stableGlideResult: (winner: String, alternatives: [String])?
 
 	init(theme: KeyboardTheme) {
 		self.textColor = theme.keyText
 		self.dimColor = theme.keyText.withAlphaComponent(0.45)
-		self.primaryFill = UIColor.white.withAlphaComponent(theme.isDark ? 0.26 : 0.74)
+		self.primaryFill = theme.suggestionHighlight
+		self.primaryBorder = theme.suggestionHighlightBorder
 		super.init(frame: .zero)
 		backgroundColor = .clear
+		isOpaque = false
 
-		clipButton.setImage(UIImage(systemName: "doc.on.clipboard",
-			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)), for: .normal)
-		clipButton.tintColor = theme.specialKeyText.withAlphaComponent(0.55)
-		clipButton.addAction(UIAction { [weak self] _ in self?.onOpenClipboard?() }, for: .touchUpInside)
-		addSubview(clipButton)
-
-		stack.axis = .horizontal
-		stack.distribution = .fillEqually
-		addSubview(stack)
+		primaryBackground.isUserInteractionEnabled = false
+		primaryBackground.backgroundColor = primaryFill
+		primaryBackground.layer.cornerCurve = .continuous
+		primaryBackground.layer.borderWidth = 0.75
+		primaryBackground.layer.borderColor = primaryBorder.cgColor
+		primaryBackground.isHidden = true
+		addSubview(primaryBackground)
 		for i in 0..<3 {
 			let b = UIButton(type: .custom)
-			b.titleLabel?.font = .systemFont(ofSize: 17, weight: i == 1 ? .medium : .regular)
+			let base = UIFont.systemFont(ofSize: 17,
+				weight: i == 1 || UIAccessibility.isBoldTextEnabled ? .semibold : .regular)
+			b.titleLabel?.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: base,
+				maximumPointSize: 21)
 			b.titleLabel?.adjustsFontSizeToFitWidth = true
 			b.titleLabel?.minimumScaleFactor = 0.8
 			b.setTitleColor(theme.keyText, for: .normal)
-			b.layer.cornerRadius = 17
-			b.layer.cornerCurve = .continuous
 			b.tag = i
 			b.accessibilityIdentifier = ["suggestion.left", "suggestion.primary", "suggestion.right"][i]
+			b.accessibilityHint = i == 1 ? "Top suggestion" : "Alternative suggestion"
 			b.addTarget(self, action: #selector(tap(_:)), for: .touchUpInside)
 			buttons.append(b)
-			stack.addArrangedSubview(b)
+			addSubview(b)
 		}
 		for s in [sep1, sep2] {
 			s.backgroundColor = theme.keyText.withAlphaComponent(0.12)
@@ -62,31 +59,40 @@ final class SuggestionBar: UIView {
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		let clipWidth = min(Self.clipWidth, bounds.width)
-		let suggestionsWidth = max(0, bounds.width - clipWidth)
-		clipButton.frame = CGRect(x: 0, y: 0, width: clipWidth, height: bounds.height)
-		stack.frame = CGRect(x: clipWidth, y: 0, width: suggestionsWidth, height: bounds.height)
-		let w = suggestionsWidth / 3
-		let inset: CGFloat = 10
+		let w = bounds.width / 3
+		for (index, button) in buttons.enumerated() {
+			button.frame = CGRect(x: CGFloat(index) * w, y: 0,
+							  width: w, height: bounds.height)
+		}
+		let highlightInset: CGFloat = 4
+		primaryBackground.frame = CGRect(
+			x: w + highlightInset,
+			y: highlightInset,
+			width: max(0, w - highlightInset * 2),
+			height: max(0, bounds.height - highlightInset * 2)
+		)
+		primaryBackground.layer.cornerRadius = max(0, min(15, primaryBackground.bounds.height / 2))
+		let inset: CGFloat = 12
 		let separatorHeight = max(0, bounds.height - inset * 2)
-		sep1.frame = CGRect(x: clipWidth + w, y: inset, width: 0.5, height: separatorHeight)
-		sep2.frame = CGRect(x: clipWidth + w * 2, y: inset, width: 0.5, height: separatorHeight)
+		sep1.frame = CGRect(x: w, y: inset, width: 0.5, height: separatorHeight)
+		sep2.frame = CGRect(x: w * 2, y: inset, width: 0.5, height: separatorHeight)
 	}
 
 	/// `typedPrefix` (the word the user is mid-typing) turns completions into ghost
 	/// text: the part the user already typed renders solid, the completion remainder
 	/// dims — the closest an iOS keyboard extension can get to in-field grey preview
 	/// (the host text field is off-limits to us).
-	func setSuggestions(_ s: [String], typedPrefix: String? = nil) {
+	func setSuggestions(_ s: [String], typedPrefix: String? = nil, highlightPrimary: Bool = false) {
 		stableGlideResult = nil
 		rankedSuggestions = s
 		currentPrefix = typedPrefix
+		highlightsPrimary = highlightPrimary
 		renderSuggestions()
 	}
 
 	/// Immediate, zero-decoder-cost feedback while a glide is in progress. The path's
 	/// crossed letters occupy the primary (middle) slot until decoding replaces them.
-	func setGlidePreview(_ preview: String?) {
+	func setGlidePreview(_ preview: String?, confident: Bool = true) {
 		guard let preview, !preview.isEmpty else {
 			renderStablePresentation()
 			return
@@ -95,8 +101,9 @@ final class SuggestionBar: UIView {
 			b.setAttributedTitle(nil, for: .normal)
 			b.setTitle(i == 1 ? preview : "", for: .normal)
 			b.isEnabled = false
-			b.backgroundColor = i == 1 ? primaryFill : .clear
+			b.backgroundColor = .clear
 		}
+		setPrimaryHighlighted(confident)
 	}
 
 	/// Keep the word that was actually committed in the shaded middle slot. The two
@@ -115,8 +122,9 @@ final class SuggestionBar: UIView {
 			button.setAttributedTitle(nil, for: .normal)
 			button.setTitle(title, for: .normal)
 			button.isEnabled = index != 1 && !title.isEmpty
-			button.backgroundColor = index == 1 ? primaryFill : .clear
+			button.backgroundColor = .clear
 		}
+		setPrimaryHighlighted(true)
 	}
 
 	private func renderStablePresentation() {
@@ -136,7 +144,7 @@ final class SuggestionBar: UIView {
 		for (i, b) in buttons.enumerated() {
 			let t = displayed[i]
 			b.isEnabled = !t.isEmpty
-			b.backgroundColor = (i == 1 && shouldHighlightPrimary(top)) ? primaryFill : .clear
+			b.backgroundColor = .clear
 			guard !t.isEmpty else { b.setTitle("", for: .normal); b.setAttributedTitle(nil, for: .normal); continue }
 			if let p = currentPrefix, !p.isEmpty, t.count > p.count,
 			   t.lowercased().hasPrefix(p.lowercased()) {
@@ -152,15 +160,14 @@ final class SuggestionBar: UIView {
 				b.setTitle(t, for: .normal)
 			}
 		}
+		setPrimaryHighlighted(highlightsPrimary && !top.isEmpty)
 	}
 
-	private func shouldHighlightPrimary(_ candidate: String) -> Bool {
-		guard let prefix = currentPrefix, prefix.count >= 2, !candidate.isEmpty else { return false }
-		let p = prefix.lowercased()
-		let c = candidate.lowercased()
-		if p == c { return true }
-		if c.hasPrefix(p) { return c.count - p.count <= 2 }
-		return abs(c.count - p.count) <= 2
+	private func setPrimaryHighlighted(_ on: Bool) {
+		primaryBackground.isHidden = !on
+		buttons.indices.forEach { index in
+			buttons[index].accessibilityTraits = index == 1 && on ? [.button, .selected] : .button
+		}
 	}
 
 	@objc private func tap(_ sender: UIButton) {

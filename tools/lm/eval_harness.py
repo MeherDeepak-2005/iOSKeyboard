@@ -56,7 +56,7 @@ def cost_budget(length):
     return 3.6
 
 ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
-OFFS = [0.0, 0.25, 0.75]
+OFFS = [0.0, 0.5, 1.5]
 POS = {ch: (c + OFFS[r], float(r)) for r, row in enumerate(ROWS) for c, ch in enumerate(row)}
 
 

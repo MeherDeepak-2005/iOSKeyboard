@@ -23,14 +23,17 @@ extension KBAccent {
 // MARK: - Settings store (publishes the shared App Group values to SwiftUI)
 
 final class SettingsStore: ObservableObject {
-	@Published var language: KBLanguage { didSet { KBSettings.language = language } }
 	@Published var accentID: String     { didSet { KBSettings.accentID = accentID } }
 	@Published var haptics:  Bool       { didSet { KBSettings.haptics = haptics } }
 
 	init() {
-		language = KBSettings.language
 		accentID = KBSettings.accentID
 		haptics  = KBSettings.haptics
+	}
+
+	func reload() {
+		accentID = KBSettings.accentID
+		haptics = KBSettings.haptics
 	}
 
 	var accent: KBAccent { KBPalette.accent(id: accentID) }
@@ -41,29 +44,31 @@ final class SettingsStore: ObservableObject {
 struct ContentView: View {
 	@StateObject private var store = SettingsStore()
 	@Environment(\.colorScheme) private var scheme
-	@Environment(\.displayScale) private var displayScale
 	@Environment(\.scenePhase) private var scenePhase
 	@State private var showResetConfirm = false
+	@State private var showDeleteAllConfirm = false
 	@State private var hasUsedKeyboard = KBSettings.hasUsedKeyboard
-	@State private var hasFullAccess = KBSettings.lastFullAccess
-	@State private var showLanguagePicker = false
 
 	var body: some View {
 		NavigationStack {
 			List {
-				AchievementBanner()
-					.frame(height: 78)
-					.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 4, trailing: 16))
-					.listRowBackground(Color.clear)
-
 				if !hasUsedKeyboard {
 					Section {
 						EnableKeyboardRow()
 					}
 				}
+				Section("Status") {
+					NavigationLink {
+						SetupSupportView()
+					} label: {
+						SettingRow(icon: "keyboard",
+								   tint: Color(uiColor: .systemBlue),
+								   title: "Setup & Support",
+								   value: keyboardStatusValue)
+					}
+				}
 
 				Section {
-					languageRow
 					NavigationLink {
 						ThemeStudioView()
 					} label: {
@@ -82,9 +87,7 @@ struct ContentView: View {
 				} header: {
 					Text("Keyboard")
 				} footer: {
-					if hasUsedKeyboard && !hasFullAccess {
-						Text("Haptic feedback requires Full Access for third-party keyboards.")
-					}
+					Text("Haptics require a physical iPhone and may require Full Access. The status page shows the last state observed by the keyboard.")
 				}
 
 				Section("Personalization") {
@@ -93,7 +96,29 @@ struct ContentView: View {
 					} label: {
 						iconLabel("trash.fill", tint: .red, title: "Reset learned words")
 					}
+					Button(role: .destructive) {
+						showDeleteAllConfirm = true
+					} label: {
+						iconLabel("externaldrive.badge.xmark", tint: .red, title: "Delete all keyboard data")
+					}
 				}
+
+			Section("Privacy") {
+				NavigationLink {
+					PrivacyDataView()
+					} label: {
+						SettingRow(icon: "hand.raised.fill",
+								   tint: Color(uiColor: .systemIndigo),
+								   title: "Privacy & Data")
+				}
+				NavigationLink {
+					ThirdPartyNoticesView()
+				} label: {
+					SettingRow(icon: "doc.text.fill",
+							   tint: Color(uiColor: .systemGray),
+							   title: "Third-Party Notices")
+				}
+			}
 
 				#if DEBUG
 				Section("Developer") {
@@ -102,8 +127,7 @@ struct ContentView: View {
 					} label: {
 						SettingRow(icon: "waveform.path.ecg",
 								   tint: Color(uiColor: .systemGray),
-								   title: "Keyboard health",
-								   value: KBDiagnostics.read().modelActive ? "Active" : nil)
+								   title: "Keyboard health")
 					}
 				}
 				#endif
@@ -114,22 +138,9 @@ struct ContentView: View {
 		}
 		.environmentObject(store)
 		.tint(Color(uiColor: .systemBlue))
-		.task {
-			// Pre-rasterize the emoji atlas for the extension (one-off per emoji set /
-			// display scale / iOS major). The keyboard falls back to live text glyphs —
-			// and their CoreText memory cost — until this has run once.
-			let scale = displayScale
-			Task.detached(priority: .utility) { EmojiAtlas.generateIfNeeded(scale: scale) }
-		}
 		.onAppear { refreshInstallState() }
 		.onChange(of: scenePhase) { _, phase in
 			if phase == .active { refreshInstallState() }
-		}
-		.sheet(isPresented: $showLanguagePicker) {
-			LanguagePickerSheet()
-				.environmentObject(store)
-				.presentationDetents([.height(280)])
-				.presentationDragIndicator(.visible)
 		}
 		.alert("Reset learned words?", isPresented: $showResetConfirm) {
 			Button("Reset", role: .destructive, action: resetUserData)
@@ -137,83 +148,163 @@ struct ContentView: View {
 		} message: {
 			Text("Clears all words you have typed, autocorrect history, and swipe-style adaptations. The base dictionary and other settings are not affected.")
 		}
+		.alert("Delete all keyboard data?", isPresented: $showDeleteAllConfirm) {
+			Button("Delete All", role: .destructive, action: deleteAllData)
+			Button("Cancel", role: .cancel) { }
+		} message: {
+			Text("Deletes learned language data, Glide adaptation, emoji recents, diagnostics, and custom appearance data. This cannot be undone.")
+		}
 	}
 
 	private func refreshInstallState() {
 		hasUsedKeyboard = KBSettings.hasUsedKeyboard
-		hasFullAccess = KBSettings.lastFullAccess
+	}
+
+	private var keyboardStatusValue: String {
+		guard let seen = KBSettings.keyboardLastSeenAt else { return "Not opened" }
+		return Date().timeIntervalSince(seen) < 7 * 24 * 60 * 60 ? "Seen recently" : "Check status"
 	}
 
 	private func resetUserData() {
-		if let url = KBSettings.userModelURL { try? FileManager.default.removeItem(at: url) }
-		KBSettings.sharedDefaults.removeObject(forKey: "kb.glideprofile")
+		KBPersonalData.resetLearning()
 	}
 
-	// Only English is wired up today; the sheet keeps future languages discoverable
-	// without pretending disabled choices are working settings.
-	private var languageRow: some View {
-		Button { showLanguagePicker = true } label: {
-			SettingRow(icon: "globe",
-					   tint: Color(uiColor: .systemBlue),
-					   title: "Language",
-					   value: store.language.rawValue)
-				.frame(maxWidth: .infinity, alignment: .leading)
-				.contentShape(Rectangle())
+	private func deleteAllData() {
+		KBPersonalData.resetAll()
+		store.reload()
+	}
+
+}
+
+private struct SetupSupportView: View {
+	@State private var access = KBSettings.lastFullAccess
+	@State private var observedAt = KBSettings.lastFullAccessObservedAt
+	@State private var lastSeen = KBSettings.keyboardLastSeenAt
+	@State private var resetStatus = KBPersonalData.resetStatus
+
+	var body: some View {
+		List {
+			Section("Keyboard") {
+				statusRow("Last opened", value: lastSeen?.formatted(date: .abbreviated, time: .shortened) ?? "Not yet")
+				statusRow("Full Access", value: access ? "On" : "Off or unknown")
+				if let observedAt {
+					statusRow("Last checked", value: observedAt.formatted(date: .abbreviated, time: .shortened))
+				}
+				if resetStatus.requested > 0 {
+					let value = resetStatus.failure != nil
+						? "Storage cleanup failed"
+						: (resetStatus.acknowledged >= resetStatus.requested
+							? "Confirmed" : "Open the keyboard to finish")
+					statusRow("Data reset", value: value)
+				}
+			}
+			Section("Setup") {
+				Button(action: openSettings) {
+					Label("Open Keyboard Settings", systemImage: "gear")
+				}
+				Text("Add Glyph under Keyboards, then switch to it with the input-mode key. Open Glyph once in any text field to refresh the status above.")
+					.font(.footnote)
+					.foregroundStyle(.secondary)
+			}
+			Section("Troubleshooting") {
+				troubleshooting("Glyph is missing", "Confirm it remains enabled in Keyboard Settings, then reopen the host app.")
+				troubleshooting("iOS switches keyboards", "Secure fields and some managed apps can require the system keyboard. This is controlled by iOS.")
+				troubleshooting("No haptic feedback", "Confirm Haptic Feedback is on, then test on a physical iPhone. iOS controls whether third-party keyboard feedback is available.")
+			}
+			Section("About") {
+				statusRow("Version", value: version)
+			}
 		}
-		.buttonStyle(.plain)
-		.accessibilityIdentifier("settings.language")
+		.navigationTitle("Setup & Support")
+		.navigationBarTitleDisplayMode(.inline)
+		.onAppear(perform: refresh)
+	}
+
+	private func refresh() {
+		access = KBSettings.lastFullAccess
+		observedAt = KBSettings.lastFullAccessObservedAt
+		lastSeen = KBSettings.keyboardLastSeenAt
+		resetStatus = KBPersonalData.resetStatus
+	}
+
+	private func openSettings() {
+		guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+		UIApplication.shared.open(url)
+	}
+
+	private var version: String {
+		let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+		let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+		return "\(short) (\(build))"
+	}
+
+	private func statusRow(_ title: String, value: String) -> some View {
+		HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
+	}
+
+	private func troubleshooting(_ title: String, _ detail: String) -> some View {
+		VStack(alignment: .leading, spacing: 3) {
+			Text(title).font(.subheadline.weight(.semibold))
+			Text(detail).font(.footnote).foregroundStyle(.secondary)
+		}
+		.padding(.vertical, 2)
 	}
 }
 
-private struct LanguagePickerSheet: View {
-	@EnvironmentObject private var store: SettingsStore
-	@Environment(\.dismiss) private var dismiss
+private struct PrivacyDataView: View {
+	var body: some View {
+		List {
+			Section("Typing") {
+				Text("Typing, autocorrect, suggestions, and Glide are processed on your device. Glyph does not transmit the text you type to a server.")
+			}
+			Section("On-device storage") {
+				privacyRow("Personalization", "Word and context counts used to improve suggestions. Stored in the shared app container until reset.")
+				privacyRow("Appearance", "Theme choices remain on this device until changed or deleted.")
+				privacyRow("Diagnostics", "Release builds store only aggregate latency, memory, and storage-health counters. Typed text is never included.")
+			}
+			Section("Full Access") {
+				Text("The keyboard remains usable without Full Access. Full Access enables shared settings, on-device learning persistence, and haptics. It does not enable remote processing of typed text.")
+			}
+			Section("Control") {
+				Text("Use Reset learned words to remove language personalization, or Delete all keyboard data to remove all user-generated data in the shared container. You can revoke Full Access at any time in iOS Settings.")
+			}
+			Section {
+				Text("Effective July 19, 2026")
+					.foregroundStyle(.secondary)
+			}
+		}
+		.navigationTitle("Privacy & Data")
+		.navigationBarTitleDisplayMode(.inline)
+	}
+
+	private func privacyRow(_ title: String, _ detail: String) -> some View {
+		VStack(alignment: .leading, spacing: 4) {
+			Text(title).font(.subheadline.weight(.semibold))
+			Text(detail).font(.footnote).foregroundStyle(.secondary)
+		}
+		.padding(.vertical, 3)
+	}
+}
+
+private struct ThirdPartyNoticesView: View {
+	private let notices: String = {
+		guard let url = Bundle.main.url(forResource: "ThirdPartyNotices", withExtension: "txt"),
+			  let value = try? String(contentsOf: url, encoding: .utf8) else {
+			return "Third-party notices are unavailable in this build."
+		}
+		return value
+	}()
 
 	var body: some View {
-		VStack(alignment: .leading, spacing: 0) {
-			Text("Language")
-				.font(.headline)
-				.padding(.horizontal, 20)
-				.padding(.top, 16)
-				.padding(.bottom, 8)
-			ForEach(KBLanguage.allCases, id: \.self) { language in
-				Button {
-					guard language.isAvailable else { return }
-					store.language = language
-					dismiss()
-				} label: {
-					HStack(spacing: 12) {
-						VStack(alignment: .leading, spacing: 2) {
-							Text(language.rawValue)
-							Text(language.subtitle)
-								.font(.caption)
-								.foregroundStyle(.secondary)
-						}
-						Spacer()
-						if !language.isAvailable {
-							Text("Coming soon")
-								.font(.caption2.weight(.medium))
-								.foregroundStyle(.secondary)
-								.padding(.horizontal, 8)
-								.padding(.vertical, 4)
-								.background(.quaternary, in: Capsule())
-						} else if store.language == language {
-							Image(systemName: "checkmark")
-								.fontWeight(.semibold)
-								.foregroundStyle(.tint)
-						}
-					}
-					.padding(.horizontal, 20)
-					.frame(height: 58)
-					.contentShape(Rectangle())
-				}
-				.buttonStyle(.plain)
-				.accessibilityIdentifier("language.\(language.rawValue.lowercased())")
-				.disabled(!language.isAvailable)
-				if language != KBLanguage.allCases.last { Divider().padding(.leading, 20) }
-			}
-			Spacer(minLength: 0)
+		ScrollView {
+			Text(notices)
+				.font(.footnote)
+				.frame(maxWidth: .infinity, alignment: .leading)
+				.textSelection(.enabled)
+				.padding(20)
 		}
+		.navigationTitle("Notices")
+		.navigationBarTitleDisplayMode(.inline)
 	}
 }
 
@@ -223,34 +314,10 @@ struct DiagnosticsView: View {
 	@State private var snap = KBDiagnostics.read()
 	@State private var verbose = KBDiagnostics.verbose
 	@State private var glideCapture = KBSettings.glideCapture
-	@State private var neural = KBSettings.neuralRescorer
 	private let log = Logger(subsystem: KBSettings.appGroup, category: "diag-app")
 
 	var body: some View {
 		List {
-			Section {
-				row("Neural model", snap.modelState ?? (snap.modelActive ? "active" : "inactive"))
-				if let available = snap.lastGateAvailableMB {
-					row("Headroom at last gate", mb(available))
-				}
-				if let error = snap.lastModelError {
-					Text(error)
-						.font(.footnote)
-						.foregroundStyle(.red)
-						.textSelection(.enabled)
-				}
-				row("Times loaded", "\(snap.loadCount)")
-				row("Times dropped", "\(snap.dropCount)")
-				row("Active for", duration(snap.activeSeconds))
-				row("Last load", snap.lastLoadMs > 0 ? "\(Int(snap.lastLoadMs)) ms" : "—")
-				row("Ranking passes scored", "\(snap.neuralRankPasses)")
-				row("Changed the top pick", helpfulRate)
-			} header: {
-				Text("Neural model")
-			} footer: {
-				Text("Measured inside the keyboard extension during your last typing session, not live. \"Changed the top pick\" counts passes where blending the neural score reordered the winner vs the n-gram alone — the model's live helpfulness rate.")
-			}
-
 			Section {
 				row("Peak footprint", mb(snap.peakFootprintMB))
 				row("Lowest headroom", snap.minAvailableMB > 0 ? mb(snap.minAvailableMB) : "—")
@@ -260,7 +327,15 @@ struct DiagnosticsView: View {
 			} header: {
 				Text("Memory (jetsam)")
 			} footer: {
-				Text("iOS kills the extension near the inferred limit. The model is dropped on pressure and reloaded later.")
+				Text("iOS can terminate a keyboard extension under memory pressure. These counters contain no typed text.")
+			}
+
+			Section("Latency histograms") {
+				row("Host insert p95", latency(snap.hostInsertLatencyBins, 0.95))
+				row("Tap decode p95", latency(snap.tapDecodeLatencyBins, 0.95))
+				row("Glide preview p95", latency(snap.glidePreviewLatencyBins, 0.95))
+				row("Glide final p95", latency(snap.glideFinalLatencyBins, 0.95))
+				row("Lift to insert p95", latency(snap.glideCommitLatencyBins, 0.95))
 			}
 
 			Section {
@@ -269,13 +344,11 @@ struct DiagnosticsView: View {
 			} header: {
 				Text("Live logging")
 			} footer: {
-				Text("Logs every candidate's neural vs n-gram score as you type. Watch it live in Console.app (pick your device) or run:\nlog stream --predicate 'subsystem == \"group.com.swiftuimasterclass.keyboard\"' --level info")
+				Text("Debug builds can log private candidate ranking locally. This facility is compiled out of Release builds.")
 					.textSelection(.enabled)
 			}
 
 			Section {
-				Toggle("Neural rescorer", isOn: $neural)
-					.onChange(of: neural) { _, on in KBSettings.neuralRescorer = on }
 				Toggle("Glide capture (debug)", isOn: $glideCapture)
 					.onChange(of: glideCapture) { _, on in KBSettings.glideCapture = on }
 				if let url = KBDiagnostics.glideCaptureURL,
@@ -291,7 +364,7 @@ struct DiagnosticsView: View {
 			} header: {
 				Text("Advanced")
 			} footer: {
-				Text("The neural rescorer loads only with measured headroom and is dropped under memory pressure. Check the Memory section for its actual device footprint. Glide capture records your real swipes to glide_capture.jsonl in the App Group container for offline calibration (tools/glide_eval/calibrate.py) — on-device only, never uploaded. Restart the keyboard after changing these.")
+				Text("Glide capture records swipes to glide_capture.jsonl in the App Group container for offline calibration — on-device only and never uploaded. Restart the keyboard after changing this setting.")
 					.textSelection(.enabled)
 			}
 
@@ -311,29 +384,22 @@ struct DiagnosticsView: View {
 		.onAppear(perform: reload)
 	}
 
-	private var helpfulRate: String {
-		guard snap.neuralRankPasses > 0 else { return "—" }
-		let pct = 100.0 * Double(snap.neuralTop1Changed) / Double(snap.neuralRankPasses)
-		return "\(snap.neuralTop1Changed) (\(String(format: "%.0f", pct))%)"
-	}
-
 	private func reload() {
 		snap = KBDiagnostics.read()
-		log.notice("diag active=\(snap.modelActive) loads=\(snap.loadCount) drops=\(snap.dropCount) activeSec=\(Int(snap.activeSeconds)) peakMB=\(Int(snap.peakFootprintMB)) limitMB=\(Int(snap.limitMB)) warn=\(snap.warningCount) crit=\(snap.criticalCount)")
+		log.notice("diag peakMB=\(Int(snap.peakFootprintMB)) limitMB=\(Int(snap.limitMB)) warn=\(snap.warningCount) crit=\(snap.criticalCount)")
 	}
 	private func row(_ title: String, _ value: String) -> some View {
 		HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
 	}
 	private func mb(_ v: Double) -> String { String(format: "%.1f MB", v) }
+	private func latency(_ bins: [Int]?, _ fraction: Double) -> String {
+		KBDiagnostics.percentile(bins, fraction: fraction) ?? "—"
+	}
 	/// Human-readable size of the glide capture file, or nil if it doesn't exist / is empty.
 	private func glideCaptureSize(_ url: URL) -> String? {
 		guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
 			  let bytes = attrs[.size] as? Int, bytes > 0 else { return nil }
 		return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-	}
-	private func duration(_ s: Double) -> String {
-		if s <= 0 { return "—" }
-		return s < 60 ? "\(Int(s)) s" : String(format: "%.1f min", s / 60)
 	}
 }
 

@@ -60,35 +60,26 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				emoji.bin,
+				Engine/DecodeContract.swift,
 				Engine/GlidePath.swift,
 				Engine/Keyboardengine.swift,
 				Engine/LangData.swift,
-				Engine/LanguageScorer.swift,
 				Engine/Lexicon.swift,
-				Engine/NeuralScorer.swift,
 				Engine/NgramScorer.swift,
 				Engine/SpatialModel.swift,
 				Engine/Trie.swift,
 				Engine/UserModel.swift,
 				langdata.bin,
-				rescorer.mlpackage,
 				safety.kbguard,
-				Shared/FontInstaller.swift,
-				Shared/KBClipboard.swift,
 				Shared/KBDiagnostics.swift,
-				Shared/KBKlipy.swift,
-				Shared/KBMediaCache.swift,
+				Shared/KBPersonalData.swift,
 				Shared/KBSafetyLexicon.swift,
 				Shared/KBSettings.swift,
-				Shared/KBStats.swift,
 				"Shared/UIColor+Hex.swift",
-				tokenizer.bin,
-				Views/ClipboardPanel.swift,
 				Views/Emoji.swift,
 				Views/Keyboard.swift,
 				Views/KeyboardTheme.swift,
 				Views/KeyButton.swift,
-				Views/MediaPanel.swift,
 				Views/SuggestionBar.swift,
 			);
 			target = 83C6F3052FE821180014EA39 /* demo_keyboard */;
@@ -96,10 +87,9 @@
 		837F01AF2FEE99820033ED99 /* Exceptions for "keyboard" folder in "keyboard" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				emoji.bin,
 				langdata.bin,
-				rescorer.mlpackage,
 				safety.kbguard,
-				tokenizer.bin,
 			);
 			target = 83C6F2B82FE7B47E0014EA39 /* keyboard */;
 		};
@@ -552,6 +542,7 @@
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -586,6 +577,7 @@
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -616,7 +608,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -637,7 +629,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -657,7 +649,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -677,7 +669,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -700,7 +692,7 @@
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = demo_keyboard;
+				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -730,7 +722,7 @@
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = demo_keyboard;
+				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

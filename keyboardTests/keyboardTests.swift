@@ -3,6 +3,7 @@ import Testing
 import UIKit
 @testable import keyboard
 
+@MainActor
 struct KeyboardTests {
     @Test func emojiBinaryContainsSearchAliases() throws {
         let store = try #require(EmojiStore(url: emojiBinaryURL()))
@@ -167,84 +168,10 @@ struct KeyboardTests {
         #expect(Lexicon.syntheticContraction(of: "wasnt") == nil)       // corpus word → trie's job
     }
 
-    @Test func clipboardStoreRoundTrip() throws {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("clip-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: url) }
-        KBClipboard.add("hello", at: url)
-        KBClipboard.add("world", at: url)
-        KBClipboard.add("hello", at: url)              // dedupe → resurfaces to front
-        #expect(KBClipboard.all(at: url).map(\.text) == ["hello", "world"])
-        KBClipboard.togglePin("world", at: url)
-        KBClipboard.clearUnpinned(at: url)             // pins survive the broom
-        let items = KBClipboard.all(at: url)
-        #expect(items.map(\.text) == ["world"] && items[0].pinned)
-        KBClipboard.remove("world", at: url)
-        #expect(KBClipboard.all(at: url).isEmpty)
-        KBClipboard.add("  \n ", at: url)              // whitespace-only never saves
-        #expect(KBClipboard.all(at: url).isEmpty)
-    }
-
-    @MainActor @Test func renderClipboardPanel() throws {
-        let items = [
-            KBClipboardItem(text: "hello@example.com", pinned: true, date: Date()),
-            KBClipboardItem(text: "The quick brown fox jumps over the lazy dog — a longer clip that should truncate at two lines in the panel row.", pinned: false, date: Date()),
-            KBClipboardItem(text: "4021 7789", pinned: false, date: Date()),
-        ]
-        let v = ClipboardPanelView(theme: .system(dark: false), showsGlobe: true,
-                                   hasFullAccess: true, items: items)
-        v.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
-        v.backgroundColor = UIColor(hex: 0xE8E6EC)
-        v.layoutIfNeeded()
-        try writePNG(of: v, name: "clipboard_panel")
-
-        let empty = ClipboardPanelView(theme: .system(dark: false), showsGlobe: true,
-                                       hasFullAccess: false, items: [])
-        empty.frame = v.frame
-        empty.backgroundColor = v.backgroundColor
-        empty.layoutIfNeeded()
-        try writePNG(of: empty, name: "clipboard_panel_empty")
-    }
-
-    // KLIPY response parsing: preview picks the smallest animated variant that can
-    // fill the 256 px decoder target; send still picks the biggest GIF.
-    @Test func klipyParsePicksLeanPreviewAndFullSend() throws {
-        let json: [String: Any] = ["result": true, "data": ["has_next": true, "data": [[
-            "id": 42, "slug": "hello-wave", "title": "Hello",
-            "file": [
-                "hd": ["gif": ["url": "https://x.test/hd.gif", "width": 480, "height": 360, "size": 2_400_000]],
-                "md": ["webp": ["url": "https://x.test/md.webp", "width": 320, "height": 240, "size": 180_000]],
-                "sm": ["gif": ["url": "https://x.test/sm.gif", "width": 200, "height": 150, "size": 300_000]],
-                "xs": ["webp": ["url": "https://x.test/xs.webp", "width": 120, "height": 90, "size": 60_000],
-                       "gif":  ["url": "https://x.test/xs.gif",  "width": 120, "height": 90, "size": 150_000]],
-            ],
-        ]]]]
-        let data = try JSONSerialization.data(withJSONObject: json)
-        let (items, hasNext) = KlipyClient.parse(data)
-        #expect(hasNext)
-        let item = try #require(items.first)
-        #expect(item.id == "42")
-        #expect(item.previewURL.absoluteString == "https://x.test/md.webp")   // first source at decoder target
-        #expect(item.sendURL.absoluteString == "https://x.test/hd.gif")       // biggest gif
-        // Garbage in → empty out, never a crash.
-        #expect(KlipyClient.parse(Data("nonsense".utf8)).0.isEmpty)
-    }
-
-    @MainActor @Test func renderMediaPanelHintState() throws {
-        // No injected items + no API key → the panel must show its key hint and
-        // make zero network calls (deterministic offline render).
-        let v = MediaPanelView(theme: .system(dark: false), showsGlobe: true,
-                               hasFullAccess: true, kind: .gifs)
-        v.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
-        v.backgroundColor = UIColor(hex: 0xE8E6EC)
-        v.layoutIfNeeded()
-        try writePNG(of: v, name: "media_panel_hint")
-    }
-
-    // The strip is ONLY suggestions + the clipboard icon: no paste chip ever takes a
-    // suggestion slot (clipboard content lives in the panel).
+	// Suggestions always divide the full strip into three stable targets.
     @MainActor @Test func renderSuggestionBar() throws {
-        let bar = SuggestionBar(theme: .system(dark: false))
-        bar.frame = CGRect(x: 0, y: 0, width: 390, height: 34)
+		let bar = SuggestionBar(theme: .system(dark: false))
+		bar.frame = CGRect(x: 0, y: 0, width: 390, height: 44)
         bar.backgroundColor = UIColor(hex: 0xE8E6EC)
         bar.setSuggestions(["hello", "help", "hell"], typedPrefix: "hel")
         bar.layoutIfNeeded()
@@ -252,8 +179,8 @@ struct KeyboardTests {
     }
 
     @MainActor @Test func glideSuggestionPresentationStaysSynchronized() throws {
-        let bar = SuggestionBar(theme: .system(dark: true))
-        bar.frame = CGRect(x: 0, y: 0, width: 390, height: 34)
+		let bar = SuggestionBar(theme: .system(dark: true))
+		bar.frame = CGRect(x: 0, y: 0, width: 390, height: 44)
         bar.setSuggestions(["this", "thus", "might"])
         bar.setGlideResult("Might", alternatives: ["Night", "Right", "Light"])
 
@@ -299,7 +226,7 @@ struct KeyboardTests {
 		}
 		#expect(path.count == coordinates.count)
 		let times: [TimeInterval] = []
-		let engine = KeyboardEngine(languageDataURL: langdataURL(), loadsNeuralModel: false)
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
         let preview = await withCheckedContinuation { continuation in
             engine.glidePreview(path: path, times: times, layout: layout, context: []) {
                 continuation.resume(returning: $0)
@@ -320,75 +247,216 @@ struct KeyboardTests {
         #expect(finalWord == live.word)
     }
 
-    @MainActor private func suggestionButton(_ id: String, in bar: SuggestionBar) -> UIButton? {
-        bar.subviews
-            .compactMap { $0 as? UIStackView }
-            .flatMap(\.arrangedSubviews)
-            .compactMap { $0 as? UIButton }
-            .first { $0.accessibilityIdentifier == id }
-    }
+	@MainActor private func suggestionButton(_ id: String, in bar: SuggestionBar) -> UIButton? {
+		bar.subviews
+			.compactMap { $0 as? UIButton }
+			.first { $0.accessibilityIdentifier == id }
+	}
 
-    // The browsing overlays (emoji grid, GIF/sticker panel) get extra height; the
-    // typing deck and the clipboard list must stay at the normal height — an
-    // expansion leaking into .letters is what puts empty space under the keys.
-    @MainActor @Test func onlyBrowsingOverlaysExpandHeight() throws {
-        let kb = KeyboardView(theme: .system(dark: false), showsGlobe: true)
-        let base = kb.keyboardHeight
-        #expect(base > 200 && base < 300)          // sane letters-deck height
-        kb.showClipboard(hasFullAccess: true)
-        #expect(kb.keyboardHeight == base)         // list panel: no expansion
-        kb.dismissOverlaysIfActive()
-        #expect(kb.keyboardHeight == base)         // and it returns cleanly
-    }
+	@MainActor @Test func visualLetterCentersMatchSpatialModel() throws {
+		let keyboard = KeyboardView(theme: .system(dark: false), showsGlobe: false)
+		keyboard.frame = CGRect(x: 0, y: 0, width: 390, height: keyboard.keyboardHeight)
+		keyboard.layoutIfNeeded()
+		let q = try #require(keyboard.letterCenter(for: "q"))
+		let w = try #require(keyboard.letterCenter(for: "w"))
+		let a = try #require(keyboard.letterCenter(for: "a"))
+		let z = try #require(keyboard.letterCenter(for: "z"))
+		let pitch = w.x - q.x
+		#expect(abs((a.x - q.x) / pitch - CGFloat(KB.rowOffset[1])) < 0.001)
+		#expect(abs((z.x - q.x) / pitch - CGFloat(KB.rowOffset[2])) < 0.001)
+	}
 
-    // Gamification math: streaks, leagues, trophies, pruning — pure KBStats.apply.
-    @Test func statsStreaksLeaguesAndTrophies() throws {
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        var comps = DateComponents(year: 2026, month: 7, day: 10, hour: 12)
-        comps.timeZone = cal.timeZone
-        let day1 = cal.date(from: comps)!
-        let day2 = cal.date(byAdding: .day, value: 1, to: day1)!
-        let day4 = cal.date(byAdding: .day, value: 3, to: day1)!   // gap breaks the streak
+	@Test func layoutProfilesCoverSupportedFormFactors() {
+		#expect(KeyboardLayoutMetrics.resolve(width: 320, idiom: .phone).profile == .compactPhone)
+		#expect(KeyboardLayoutMetrics.resolve(width: 390, idiom: .phone).profile == .phone)
+		#expect(KeyboardLayoutMetrics.resolve(width: 440, idiom: .phone).profile == .largePhone)
+		#expect(KeyboardLayoutMetrics.resolve(width: 700, idiom: .phone).profile == .landscapePhone)
+		#expect(KeyboardLayoutMetrics.resolve(width: 700, idiom: .pad).profile == .pad)
+	}
 
-        var s = KBStatsData()
-        KBStats.apply(words: 60, glided: false, on: &s, date: day1, calendar: cal)
-        KBStats.apply(words: 40, glided: true, on: &s, date: day1, calendar: cal)
-        #expect(s.total == 100 && s.totalGlided == 40 && s.bestDay == 100)
-        #expect(s.currentStreak == 1)
+	@MainActor @Test func fieldSpecificLayoutsExposeExpectedKeys() {
+		let keyboard = KeyboardView(theme: .system(dark: false), showsGlobe: false)
+		keyboard.frame = CGRect(x: 0, y: 0, width: 390, height: keyboard.keyboardHeight)
+		keyboard.layoutIfNeeded()
 
-        KBStats.apply(words: 10, glided: false, on: &s, date: day2, calendar: cal)
-        #expect(s.currentStreak == 2 && s.bestStreak == 2)         // consecutive day
+		keyboard.setInputKind(.email)
+		let email = Set(keyboard.keyAccessibilityLabels())
+		#expect(email.contains("@") && email.contains("."))
 
-        KBStats.apply(words: 10, glided: false, on: &s, date: day4, calendar: cal)
-        #expect(s.currentStreak == 1 && s.bestStreak == 2)         // gap → reset, best kept
+		keyboard.setInputKind(.url)
+		let url = Set(keyboard.keyAccessibilityLabels())
+		#expect(url.contains("/") && url.contains("."))
 
-        // Leagues: floors and progress.
-        #expect(KBLeague.league(for: 0) == .bronze)
-        #expect(KBLeague.league(for: 5_000) == .silver)
-        #expect(KBLeague.league(for: 99_999) == .gold)
-        #expect(KBLeague.league(for: 100_000) == .diamond)
-        #expect(KBLeague.progress(for: 100_000) == 1)
+		keyboard.setInputKind(.numberPad)
+		let numeric = Set(keyboard.keyAccessibilityLabels())
+		#expect(numeric.contains("0") && numeric.contains("9"))
+		#expect(!numeric.contains("Q"))
+	}
 
-        // Trophies: 120 total words earns First Steps; glide + streak ones track.
-        let earned = Set(KBStats.trophies.filter { $0.isEarned(s) }.map(\.id))
-        #expect(earned.contains("first-steps"))
-        #expect(earned.contains("lift-off"))                       // 40 glided ≥ 10
-        #expect(!earned.contains("chatterbox"))                    // 120 < 1,000
-        #expect(!earned.contains("warming-up"))                    // best streak 2 < 3
+	@Test func decodeIdentityRejectsEveryStaleRevision() {
+		func request(field: UInt64 = 1, document: UInt64 = 2, word: UInt64 = 3,
+					 generation: UInt64 = 4, layout: UInt64 = 5,
+					 current: String = "might", context: [String] = ["they"]) -> DecodeRequest {
+			DecodeRequest(fieldRevision: field, documentRevision: document,
+				wordSessionID: word, generation: generation, layoutRevision: layout,
+				currentWord: current, context: context, taps: nil)
+		}
+		let base = request()
+		let snapshot = DecodeSnapshot(request: base, suggestions: ["might"], candidates: [],
+			correction: nil, confidence: 0, nextCharacterPriors: [:], modelTier: .ngram,
+			completedAtUptime: 1)
+		#expect(snapshot.isValid(for: base))
+		#expect(!snapshot.isValid(for: request(field: 2)))
+		#expect(!snapshot.isValid(for: request(document: 3)))
+		#expect(!snapshot.isValid(for: request(word: 4)))
+		#expect(!snapshot.isValid(for: request(generation: 5)))
+		#expect(!snapshot.isValid(for: request(layout: 6)))
+		#expect(!snapshot.isValid(for: request(current: "night")))
+		#expect(!snapshot.isValid(for: request(context: ["at"])))
+	}
 
-        // Day map prunes to keepDays without touching lifetime totals.
-        var big = KBStatsData()
-        for i in 0..<(KBStats.keepDays + 20) {
-            let d = cal.date(byAdding: .day, value: i, to: day1)!
-            KBStats.apply(words: 1, glided: false, on: &big, date: d, calendar: cal)
-        }
-        #expect(big.days.count == KBStats.keepDays)
-        #expect(big.total == KBStats.keepDays + 20)
-        #expect(big.currentStreak == KBStats.keepDays + 20)
-    }
+	@Test func firstLetterProtectionPreventsMightToNightCandidate() throws {
+		let data = try #require(LangData(url: langdataURL()))
+		let hits = data.trieSearch("might", maxCost: 2.8)
+		#expect(hits.first(where: { $0.word == "might" })?.cost == 0)
+		#expect(!hits.contains(where: { $0.word == "night" }))
+		#expect(Trie.firstLetterPenaltyPolicy(typedLength: 5,
+			candidateFirst: UInt8(ascii: "n"), typedFirst: UInt8(ascii: "m")) == 2.5)
+	}
 
-    // MARK: Visual render checks — write PNGs of the emoji UI for eyeballing.
+	@Test func broadOracleCanRecoverSevereDeviation() throws {
+		let data = try #require(LangData(url: langdataURL()))
+		let hits = data.trieSearch("coeevitjkn", maxCost: 7.2)
+		#expect(hits.contains(where: { $0.word == "correction" }))
+	}
+
+	@Test func shippedVocabularyCoversContractionsAndCurrentRegister() throws {
+		let data = try #require(LangData(url: langdataURL()))
+		#expect(data.wordCount >= 60_000)
+		for word in ["should've", "shouldn't've", "might've", "prolly", "idk",
+					 "rizz", "doomscrolling", "situationship"] {
+			#expect(data.trieContains(word), "\(word) is missing from langdata.bin")
+		}
+	}
+
+	@Test func suggestionPrimaryAndCorrectionShareOneDecision() async throws {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		for (typed, context) in [("might", ["they"]), ("whats", ["you", "know"]),
+								   ("teh", ["in"]), ("prolly", ["i"])] {
+			let snapshot = await decode(engine, word: typed, context: context)
+			if let correction = snapshot.correction {
+				#expect(snapshot.suggestions.first?.caseInsensitiveCompare(correction) == .orderedSame)
+			}
+			#expect(snapshot.correction?.lowercased() != "night" || typed != "might")
+		}
+	}
+
+	@Test func personalizationRollbackReversesExactContext() {
+		let user = UserModel()
+		user.learn(context: ["they", "really"], word: "might")
+		#expect(user.uniCount("might") == 1)
+		#expect(user.biLookup("really", "might").count == 1)
+		#expect(user.triLookup("they really", "might").count == 1)
+		user.demote("might")
+		#expect(user.uniCount("might") == 0)
+		#expect(user.biLookup("really", "might").count == 0)
+		#expect(user.triLookup("they really", "might").count == 0)
+	}
+
+	@Test func personalWordsRequireExplicitAdoptionEvidence() throws {
+		let lexicon = Lexicon()
+		lexicon.load(from: langdataURL())
+		let spelling = "qzvaxon"
+		#expect(!lexicon.contains(spelling))
+		lexicon.noteUse(of: spelling, timesUsed: 20, adoptAfter: 8, allowAdoption: false)
+		#expect(!lexicon.contains(spelling))
+		lexicon.noteUse(of: spelling, timesUsed: 8, adoptAfter: 8, allowAdoption: true)
+		#expect(lexicon.contains(spelling))
+	}
+
+	@Test func userModelPersistsAndRecoversFromCorruption() throws {
+		let root = FileManager.default.temporaryDirectory
+		let validURL = root.appendingPathComponent("user-model-\(UUID().uuidString).json")
+		let corruptURL = root.appendingPathComponent("user-model-\(UUID().uuidString).json")
+		defer {
+			try? FileManager.default.removeItem(at: validURL)
+			try? FileManager.default.removeItem(at: corruptURL)
+		}
+		let writer = UserModel(storageURL: validURL)
+		writer.learn(context: ["they"], word: "might")
+		writer.save()
+		writer.waitForPendingIO()
+		let reader = UserModel(storageURL: validURL)
+		reader.load()
+		#expect(reader.uniCount("might") == 1)
+
+		try Data("not-json".utf8).write(to: corruptURL)
+		let corrupt = UserModel(storageURL: corruptURL)
+		corrupt.load()
+		#expect(corrupt.uniCount("might") == 0)
+		#expect(!FileManager.default.fileExists(atPath: corruptURL.path))
+	}
+
+	@Test func glideTransformIsAffineAcrossRows() throws {
+		let pitchX: CGFloat = 31
+		let pitchY: CGFloat = 43
+		let origin = CGPoint(x: 17, y: 9)
+		let centers: [(letter: Character, point: CGPoint)] = KB.rows.joined().compactMap { letter in
+			guard let grid = KB.grid(for: letter) else { return nil }
+			return (letter, CGPoint(x: origin.x + CGFloat(grid.0) * pitchX,
+				y: origin.y + CGFloat(grid.1) * pitchY))
+		}
+		let layout = GlideLayout(centers: centers, xPitch: pitchX, yPitch: pitchY)
+		for sample in centers {
+			let mapped = GlidePreprocess.toGrid(sample.point, layout: layout)
+			let expected = try #require(KB.grid(for: sample.letter))
+			#expect(abs(Double(mapped.x) - expected.0) < 1e-6)
+			#expect(abs(Double(mapped.y) - expected.1) < 1e-6)
+		}
+		let a = GlidePreprocess.toGrid(CGPoint(x: 100, y: 80), layout: layout)
+		let b = GlidePreprocess.toGrid(CGPoint(x: 100.1, y: 80.1), layout: layout)
+		#expect(abs(b.x - a.x) < 0.01 && abs(b.y - a.y) < 0.01)
+	}
+
+	@Test func approvedAccentRolesMeetTextContrast() {
+		for accent in KBPalette.all {
+			let pair = KBCustomThemePair.defaults(accent: accent)
+			for custom in [pair.light, pair.dark] {
+				let theme = KeyboardTheme.custom(custom)
+				#expect(KeyboardTheme.contrastRatio(theme.accentKeyText, theme.accentStart) >= 4.5)
+				#expect(KeyboardTheme.contrastRatio(theme.accentKeyText, theme.accentEnd) >= 4.5)
+			}
+		}
+	}
+
+	@Test func emojiSkinToneVariantsUseUnicodeModifiers() {
+		let variants = KBEmojiVariants.skinToneVariants(of: "👍")
+		#expect(variants.count == 5)
+		#expect(variants.allSatisfy { $0 != "👍" })
+		#expect(KBEmojiVariants.skinToneVariants(of: "👍🏽").isEmpty)
+		#expect(KBEmojiVariants.skinToneVariants(of: "🚗").isEmpty)
+	}
+
+	@Test func safetyArtifactUsesExactNormalizedMatches() throws {
+		let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+			.deletingLastPathComponent().appendingPathComponent("keyboard/safety.kbguard")
+		let safety = try #require(KBSafetyLexicon(url: url))
+		#expect(safety.isBlocked("FUCK"))
+		#expect(!safety.isBlocked("class"))
+		#expect(KBSafetyLexicon.normalize("  It’s   Fine ") == "it's fine")
+	}
+
+	private func decode(_ engine: KeyboardEngine, word: String,
+						context: [String]) async -> DecodeSnapshot {
+		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
+			wordSessionID: 1, generation: 1, layoutRevision: 1,
+			currentWord: word, context: context, taps: nil)
+		return await withCheckedContinuation { continuation in
+			engine.decode(request) { continuation.resume(returning: $0) }
+		}
+	}
+
+	// MARK: Visual render checks — write PNGs of the emoji UI for eyeballing.
     // (The app target doesn't bundle emoji.bin, so the store is injected from the
     // repo file. PNGs land in keyboardTests/renders/, which is disposable.)
 
@@ -402,37 +470,6 @@ struct KeyboardTests {
             v.layoutIfNeeded()
             try writePNG(of: v, name: dark ? "emoji_palette_dark" : "emoji_palette_light")
         }
-    }
-
-    // Atlas round trip: generate raw RGBA tiles the way the HOST APP does, map them
-    // back the way the EXTENSION does, and render the grid from tiles. The PNG doubles
-    // as the eyeball check for orientation/format bugs in the raw-pixel pipeline.
-    @MainActor @Test func emojiAtlasRoundTripAndRender() throws {
-        let store = try #require(EmojiStore(url: emojiBinaryURL()))
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("emoji-atlas-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-
-        let url = try #require(EmojiAtlas.generateIfNeeded(store: store, scale: 2, in: dir))
-        // Pure-pixel file: whole tiles only (scale 2 → 72 px tiles).
-        let bytes = try #require((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize)
-        #expect(bytes > 0 && bytes % (72 * 72 * 4) == 0)
-        // Second call is the fast path: same URL, no rewrite.
-        #expect(EmojiAtlas.generateIfNeeded(store: store, scale: 2, in: dir) == url)
-
-        let atlas = try #require(EmojiAtlas.load(store: store, scale: 2, in: dir))
-        #expect(atlas.image(for: store.emoji(0, 0)) != nil)
-        #expect(atlas.image(for: "not an emoji") == nil)
-        // A mismatched scale must fail closed (falls back to text), never mis-map.
-        #expect(EmojiAtlas.load(store: store, scale: 3, in: dir) == nil)
-
-        let v = EmojiKeyboardView(theme: .system(dark: false), showsGlobe: true,
-                                  store: store, atlas: atlas)
-        v.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
-        v.backgroundColor = UIColor(hex: 0xE8E6EC)
-        v.layoutIfNeeded()
-        try writePNG(of: v, name: "emoji_palette_atlas")
     }
 
     @MainActor @Test func renderEmojiSearchHeader() throws {

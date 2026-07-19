@@ -2,7 +2,7 @@ import Foundation
 
 // NgramScorer: the shipped n-gram prior — extracted from Keyboardengine.swift.
 
-final class NgramScorer: LanguageScorer {
+final class NgramScorer {
 	private let user: UserModel
 	private var data: LangData?
 	private var resolveID: (String) -> Int32? = { _ in nil }
@@ -18,9 +18,6 @@ final class NgramScorer: LanguageScorer {
 	private let minNovelPredictionEvidence = 5
 
 	init(user: UserModel) { self.user = user }
-	var isReady: Bool { true }        // mmap opens with the engine's init barrier
-	var scoresArbitraryWords: Bool { false }
-
 	func attach(data: LangData?, resolveID: @escaping (String) -> Int32?, lexicon: Lexicon) {
 		self.data = data
 		self.resolveID = resolveID
@@ -34,7 +31,7 @@ final class NgramScorer: LanguageScorer {
 
 	func logProbs(_ candidates: [String], context: [String]) -> [Double] {
 		let ctx = context.map { $0.lowercased() }
-		return candidates.map { logProb($0.lowercased(), context: ctx) }
+		return score(candidates.map { $0.lowercased() }, context: ctx)
 	}
 
 	/// log P(a | ctx) + log P(b | ctx + a) — the two-word prior a split correction
@@ -43,53 +40,65 @@ final class NgramScorer: LanguageScorer {
 	func pairLogProb(_ a: String, _ b: String, context: [String]) -> Double {
 		let ctx = context.map { $0.lowercased() }
 		let la = a.lowercased()
-		return logProb(la, context: ctx) + logProb(b.lowercased(), context: ctx + [la])
+		return score([la], context: ctx)[0]
+			+ score([b.lowercased()], context: ctx + [la])[0]
 	}
 
-	private func logProb(_ w: String, context: [String]) -> Double {
-		let wid = resolveID(w)
+	private func score(_ words: [String], context: [String]) -> [Double] {
+		let ids = words.map(resolveID)
+		let requestedIDs = ids.compactMap { $0 }
 		let n = context.count
-		var triPersonal = 0
-		if n >= 2 {
-			let key = context[n - 2] + " " + context[n - 1]
-			triPersonal = user.triLookup(key, w).count
-			if let wid, let a = resolveID(context[n - 2]), let b = resolveID(context[n - 1]),
-			   let hit = data?.trigrams(after: a, b) {
-				let c = hit.entries.first(where: { $0.word == wid })?.count ?? 0
-				if c > 0, hit.total > 0 {
-					return log(Double(c) / Double(hit.total)) + personalBoost(triPersonal, weight: 0.28)
-				}
+		let biStats = n >= 1
+			? resolveID(context[n - 1]).flatMap { data?.bigramCounts(after: $0, words: requestedIDs) }
+			: nil
+		let triStats: (total: Int, types: Int, counts: [Int32: Int])? = {
+			guard n >= 2, let first = resolveID(context[n - 2]),
+				  let second = resolveID(context[n - 1]) else { return nil }
+			return data?.trigramCounts(after: first, second, words: requestedIDs)
+		}()
+
+		// Witten-Bell interpolation. Every order contributes continuously instead of
+		// the old 1.0/0.4/0.16 branch constants abruptly discarding the backoff model.
+		// With complete successor tables, T is the true number of observed types.
+		return words.enumerated().map { index, word in
+			let id = ids[index]
+			let unigram: Double
+			if let id, let data {
+				unigram = (Double(data.freq(Int(id))) + 1) / corpusTotal
+			} else if lexicon?.contains(word) == true {
+				unigram = 50.0 / corpusTotal
+			} else {
+				unigram = 0.5 / corpusTotal
 			}
-		}
-		var biPersonal = 0
-		if n >= 1 {
-			let p = context[n - 1]
-			biPersonal = user.biLookup(p, w).count
-			if let wid, let a = resolveID(p), let hit = data?.bigrams(after: a) {
-				let c = hit.entries.first(where: { $0.word == wid })?.count ?? 0
-				if c > 0, hit.total > 0 {
-					return log(0.4 * Double(c) / Double(hit.total))
-						+ personalBoost(biPersonal, weight: 0.22)
-						+ personalBoost(triPersonal, weight: 0.28)
-				}
+			var probability = unigram
+			if let id, let biStats {
+				probability = interpolate(total: biStats.total, types: biStats.types,
+					count: biStats.counts[id] ?? 0, backoff: probability)
 			}
+			if let id, let triStats {
+				probability = interpolate(total: triStats.total, types: triStats.types,
+					count: triStats.counts[id] ?? 0, backoff: probability)
+			}
+			let unigramPersonal = lexicon?.contains(word) == true ? user.uniCount(word) : 0
+			let biPersonal = n >= 1 ? user.biLookup(context[n - 1], word).count : 0
+			let triPersonal = n >= 2
+				? user.triLookup(context[n - 2] + " " + context[n - 1], word).count
+				: 0
+			return log(max(probability, Double.leastNonzeroMagnitude))
+				+ personalBoost(unigramPersonal, weight: 0.10)
+				+ personalBoost(biPersonal, weight: 0.22)
+				+ personalBoost(triPersonal, weight: 0.28)
 		}
-		// The corpus unigram remains the base probability. Personal usage adds only a
-		// small logarithmic lift after repeated evidence; it never replaces the corpus
-		// estimate with uc/userTotal, which made one-off words dominate the strip.
-		let pCorpus: Double
-		if let wid, let data {
-			pCorpus = (Double(data.freq(Int(wid))) + 1) / corpusTotal
-		} else if lexicon?.contains(w) == true {
-			pCorpus = 50.0 / corpusTotal      // adopted/contact word: importSupplementaryLexicon's freq
-		} else {
-			pCorpus = 0.5 / corpusTotal       // true OOV: below every real word
-		}
-		let unigramPersonal = lexicon?.contains(w) == true ? user.uniCount(w) : 0
-		return log(0.16 * pCorpus)
-			+ personalBoost(unigramPersonal, weight: 0.10)
-			+ personalBoost(biPersonal, weight: 0.22)
-			+ personalBoost(triPersonal, weight: 0.28)
+	}
+
+	private func interpolate(total rawTotal: Int, types rawTypes: Int,
+							 count rawCount: Int, backoff: Double) -> Double {
+		let total = Double(rawTotal)
+		let types = Double(rawTypes)
+		guard total > 0, types > 0 else { return backoff }
+		let count = Double(rawCount)
+		let observedWeight = total / (total + types)
+		return observedWeight * (count / total) + (1 - observedWeight) * backoff
 	}
 
 	private func personalBoost(_ count: Int, weight: Double) -> Double {
@@ -111,11 +120,14 @@ final class NgramScorer: LanguageScorer {
 		}
 		if n >= 2 {
 			let base = (resolveID(ctx[n - 2]), resolveID(ctx[n - 1]))
-			let hit = (base.0 != nil && base.1 != nil) ? data?.trigrams(after: base.0!, base.1!) : nil
+			let hit = (base.0 != nil && base.1 != nil)
+				? data?.trigrams(after: base.0!, base.1!, limit: max(64, limit * 4)) : nil
 			appendUnique(merged(hit?.entries, user.triDist(ctx[n - 2] + " " + ctx[n - 1])))
 		}
 		if n >= 1, out.count < limit {
-			let hit = resolveID(ctx[n - 1]).flatMap { data?.bigrams(after: $0) }
+			let hit = resolveID(ctx[n - 1]).flatMap {
+				data?.bigrams(after: $0, limit: max(64, limit * 4))
+			}
 			appendUnique(merged(hit?.entries, user.biDist(ctx[n - 1])))
 		}
 		return Array(out.prefix(limit))

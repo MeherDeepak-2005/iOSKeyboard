@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Build keyboard/safety.kbguard — the memory-mapped profanity blocklist the
-extension reads via KBSafetyLexicon (Keyboard.swift).
+"""Build keyboard/safety.kbguard from the project's reviewed safety policy.
 
-Merges:
-  - the Google profanity list (Shidouuu/Google-profanity-words, ~451 en words)
-  - every term already in the current safety.kbguard (preserves the LDNOOBW set
-    and the Telugu entries, and their curated demote/suppress actions)
+The input is tools/data/safety_terms.tsv. It is intentionally project-authored:
+the previous generator copied mutable third-party lists with no pinned revision or
+documented license. The keyboard never blocks what a user types; these exact terms
+are only removed from automatic suggestions and corrections.
 
 Storing the list as one packed binary (24 B/entry + UTF-8 blob) instead of Swift
 string literals keeps it off the heap and out of the compiled binary — the whole
@@ -22,13 +21,11 @@ Hash = FNV-1a-64 over the normalized UTF-8; normalization mirrors the Swift read
 
 import struct
 import unicodedata
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CACHE = ROOT / ".cache"
 OUT = ROOT.parent / "keyboard" / "safety.kbguard"
-GOOGLE_URL = "https://raw.githubusercontent.com/Shidouuu/Google-profanity-words/master/list.txt"
+SOURCE = ROOT / "data" / "safety_terms.tsv"
 
 MASK64 = (1 << 64) - 1
 # action ids (see manifest): allow=0, demote=1, suppress_suggest=2, suppress_always=3
@@ -54,50 +51,23 @@ def normalize(term: str, lang: int) -> str:
     return " ".join(s.split())
 
 
-def read_existing(path: Path) -> dict[str, tuple[int, int]]:
-    """{normalized term: (langID, actionID)} from an existing kbguard, or {}."""
-    if not path.exists():
-        return {}
-    d = path.read_bytes()
-    if d[:8] != b"KBGUARD1":
-        return {}
-    ver, esz, count, _blobbytes, _reserved = struct.unpack_from("<HHIII", d, 8)
-    base, blob = 24, 24 + count * esz
-    out: dict[str, tuple[int, int]] = {}
-    for i in range(count):
-        _h, off, ln, lang, act, _flags, _src, _rr = struct.unpack_from("<QIHBBHHI", d, base + i * esz)
-        term = d[blob + off:blob + off + ln].decode("utf-8")
-        out[term] = (lang, act)
-    return out
-
-
 def main():
-    CACHE.mkdir(exist_ok=True)
-    google = CACHE / "google_profanity_list.txt"
-    if not google.exists():
-        print(f"downloading {GOOGLE_URL} ...")
-        urllib.request.urlretrieve(GOOGLE_URL, google)
-
-    # Existing terms first (keep their curated actions), then Google words.
-    terms: dict[str, tuple[int, int]] = dict(read_existing(OUT))
-    existing = len(terms)
-    added = upgraded = 0
-    for line in google.read_text(errors="replace").splitlines():
-        w = line.strip()
-        if not w:
+    if not SOURCE.exists():
+        raise SystemExit(f"missing reviewed safety policy: {SOURCE}")
+    terms: dict[str, tuple[int, int]] = {}
+    for line_number, raw in enumerate(SOURCE.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.partition("#")[0].strip()
+        if not line:
             continue
-        norm = normalize(w, LANG_EN)
+        parts = line.split("\t")
+        if len(parts) != 2 or parts[1] not in {"en", "te"}:
+            raise SystemExit(f"invalid {SOURCE.name}:{line_number}: expected term<TAB>en|te")
+        word, language = parts
+        lang = LANG_TE if language == "te" else LANG_EN
+        norm = normalize(word, lang)
         if not norm:
             continue
-        if norm in terms:
-            lang, act = terms[norm]
-            if act < SUPPRESS:            # Google says it's bad → upgrade demote/allow to suppress
-                terms[norm] = (lang, SUPPRESS)
-                upgraded += 1
-        else:
-            terms[norm] = (LANG_EN, SUPPRESS)
-            added += 1
-    print(f"merged: {existing} existing, {added} new, {upgraded} upgraded to suppress")
+        terms[norm] = (lang, SUPPRESS)
 
     # Build sorted (hash, term) entries + blob.
     rows = sorted(((fnv1a64(t), t, lang, act) for t, (lang, act) in terms.items()),
@@ -109,15 +79,16 @@ def main():
         entries.append((h, len(blob), len(b), lang, act))
         blob += b
 
-    with OUT.open("wb") as f:
+    temporary = OUT.with_suffix(".kbguard.tmp")
+    with temporary.open("wb") as f:
         f.write(b"KBGUARD1")
         f.write(struct.pack("<HHIII", 1, 24, len(entries), len(blob), 0))
         for h, off, ln, lang, act in entries:
             f.write(struct.pack("<QIHBBHHI", h, off, ln, lang, act, 0, 0, 0))
         f.write(blob)
+    temporary.replace(OUT)
 
-    print(f"wrote {OUT} ({OUT.stat().st_size} bytes): {len(entries)} terms "
-          f"({existing} existing + {added} new from Google)")
+    print(f"wrote {OUT} ({OUT.stat().st_size} bytes): {len(entries)} reviewed terms")
 
 
 if __name__ == "__main__":

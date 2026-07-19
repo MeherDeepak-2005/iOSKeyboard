@@ -8,31 +8,91 @@ enum KBDiagnostics {
 	/// Everything the app displays. All sizes in MB; times in seconds.
 	struct Snapshot: Codable {
 		var updated = Date.distantPast
-		var modelActive = false
-		var loadCount = 0           // times the model became resident (incl. reloads)
-		var dropCount = 0           // times pressure evicted a resident model
 		var warningCount = 0
 		var criticalCount = 0
-		var activeSeconds = 0.0     // cumulative time the model was resident
-		var lastLoadMs = 0.0        // most recent MLModel load latency
 		var peakFootprintMB = 0.0   // highest phys_footprint seen (what jetsam watches)
 		var minAvailableMB = 0.0    // lowest headroom seen (0 = never sampled)
 		var limitMB = 0.0           // inferred kill ceiling = footprint + headroom, at the tightest moment
-		// Helpfulness: of the ranking passes the neural prior actually scored, how many
-		// times did blending it in CHANGE the top candidate vs the n-gram alone? The
-		// residency stats above say the model is loaded; this says it earns its memory.
-		var neuralRankPasses = 0
-		var neuralTop1Changed = 0
-		// Optional for backward-compatible decoding of snapshots written by older builds.
-		var modelState: String?
-		var lastModelError: String?
-		var lastGateAvailableMB: Double?
+		var storageFailureCount: Int?
+		var lastStorageOperation: String?
+		// Fixed buckets contain counts only. No text, context, file paths, or identifiers.
+		var hostInsertLatencyBins: [Int]?
+		var tapDecodeLatencyBins: [Int]?
+		var glidePreviewLatencyBins: [Int]?
+		var glideFinalLatencyBins: [Int]?
+		var glideCommitLatencyBins: [Int]?
 	}
 
 	static let key = "kb.diag"
 	static var store: UserDefaults { KBSettings.sharedDefaults }
 	private static let log = Logger(subsystem: KBSettings.appGroup, category: "diag")
 	private static let glideCaptureQueue = DispatchQueue(label: "keyboard.glide.capture", qos: .utility)
+	private static let metricsQueue = DispatchQueue(label: "keyboard.metrics", qos: .utility)
+	private static let performanceLog = OSLog(subsystem: KBSettings.appGroup,
+		category: .pointsOfInterest)
+	private static let latencyThresholds: [Double] = [1, 2, 4, 8, 16, 32, 50, 75, 120, 250]
+
+	enum LatencyOperation: Sendable {
+		case hostInsert, tapDecode, glidePreview, glideFinal, glideCommit
+	}
+
+	static func beginHostInsert() -> OSSignpostID {
+		let id = OSSignpostID(log: performanceLog)
+		os_signpost(.begin, log: performanceLog, name: "Host Insert", signpostID: id)
+		return id
+	}
+	static func endHostInsert(_ id: OSSignpostID, milliseconds: Double) {
+		os_signpost(.end, log: performanceLog, name: "Host Insert", signpostID: id)
+		recordLatency(.hostInsert, milliseconds: milliseconds)
+	}
+	static func beginTapDecode() -> OSSignpostID {
+		let id = OSSignpostID(log: performanceLog)
+		os_signpost(.begin, log: performanceLog, name: "Tap Decode", signpostID: id)
+		return id
+	}
+	static func endTapDecode(_ id: OSSignpostID, milliseconds: Double) {
+		os_signpost(.end, log: performanceLog, name: "Tap Decode", signpostID: id)
+		recordLatency(.tapDecode, milliseconds: milliseconds)
+	}
+	static func beginGlidePreview() -> OSSignpostID {
+		let id = OSSignpostID(log: performanceLog)
+		os_signpost(.begin, log: performanceLog, name: "Glide Preview", signpostID: id)
+		return id
+	}
+	static func endGlidePreview(_ id: OSSignpostID, milliseconds: Double) {
+		os_signpost(.end, log: performanceLog, name: "Glide Preview", signpostID: id)
+		recordLatency(.glidePreview, milliseconds: milliseconds)
+	}
+	static func beginGlideFinal() -> OSSignpostID {
+		let id = OSSignpostID(log: performanceLog)
+		os_signpost(.begin, log: performanceLog, name: "Glide Final", signpostID: id)
+		return id
+	}
+	static func endGlideFinal(_ id: OSSignpostID, milliseconds: Double) {
+		os_signpost(.end, log: performanceLog, name: "Glide Final", signpostID: id)
+		recordLatency(.glideFinal, milliseconds: milliseconds)
+	}
+
+	private static func recordLatency(_ operation: LatencyOperation, milliseconds: Double) {
+		metricsQueue.async { Recorder.shared.recordLatency(operation, milliseconds: milliseconds) }
+	}
+
+	static func percentile(_ bins: [Int]?, fraction: Double) -> String? {
+		guard let bins, bins.count == latencyThresholds.count + 1 else { return nil }
+		let total = bins.reduce(0, +)
+		guard total > 0 else { return nil }
+		let target = max(1, Int(ceil(Double(total) * min(max(fraction, 0), 1))))
+		var running = 0
+		for (index, count) in bins.enumerated() {
+			running += count
+			if running >= target {
+				return index < latencyThresholds.count
+					? "≤ \(Int(latencyThresholds[index])) ms"
+					: "> \(Int(latencyThresholds.last ?? 250)) ms"
+			}
+		}
+		return nil
+	}
 
 	// MARK: App side — read + reset
 
@@ -43,82 +103,97 @@ enum KBDiagnostics {
 	}
 	static func reset() { store.removeObject(forKey: key); Recorder.shared.clear() }
 
-	// MARK: Live ranking log — see how the neural + n-gram scorers rank each candidate
+	// MARK: Live ranking log — inspect channel, n-gram, and frequency contributions
 	//
 	// When `verbose` is on, the engine logs one message per keystroke to the unified
-	// log (category "ranking"): every candidate's channel cost, neural score, n-gram
-	// score, blended prior, and final rank, plus the autocorrect margin-gate decision.
+	// log (category "ranking"): every candidate's channel cost, n-gram score,
+	// frequency contribution, and final rank, plus the autocorrect margin decision.
 	// Watch it live while typing:
 	//   log stream --predicate 'subsystem == "group.com.swiftuimasterclass.keyboard"' --level info
 
-	#if DEBUG
-	static let defaultVerbose = true
-	#else
 	static let defaultVerbose = false
-	#endif
+	#if DEBUG
 	static var verbose: Bool {
 		get { store.object(forKey: "kb.diag.verbose") as? Bool ?? defaultVerbose }
 		set { store.set(newValue, forKey: "kb.diag.verbose") }
 	}
+	#else
+	static var verbose: Bool {
+		get { false }
+		set { store.removeObject(forKey: "kb.diag.verbose") }
+	}
+	#endif
 	private static let rankLog = Logger(subsystem: KBSettings.appGroup, category: "ranking")
 
 	struct RankRow {
 		let word: String
-		let cost, logFreq, freqTerm, neural, ngram, prior, score: Double
+		let cost, logFreq, freqTerm, ngram, score: Double
 	}
 
 	/// One candidate table per ranking pass. `rows` already sorted best-first.
-	static func logRanking(label: String, context: [String], rows: [RankRow], modelActive: Bool, ms: Double) {
+	static func logRanking(label: String, context: [String], rows: [RankRow], ms: Double) {
+		#if DEBUG
 		guard verbose else { return }
 		func f(_ x: Double) -> String { String(format: "%+.2f", x) }
 		let ctx = context.suffix(4).joined(separator: " ")
-		var lines = ["[\(label)] ctx=\"\(ctx)\"  model=\(modelActive ? "ACTIVE" : "ngram-only")  (\(String(format: "%.1f", ms)) ms)  score = chan + blend + 0.3·freq"]
+		var lines = ["[\(label)] ctx=\"\(ctx)\"  model=ngram  (\(String(format: "%.1f", ms)) ms)  score = chan + ngram + 0.3·freq"]
 		for (i, r) in rows.prefix(6).enumerated() {
 			let word = r.word.count >= 12 ? String(r.word.prefix(12))
 				: r.word.padding(toLength: 12, withPad: " ", startingAt: 0)
-			let neu = r.neural.isNaN ? "   —  " : f(r.neural)
 			let freq = r.freqTerm == r.logFreq
 				? String(format: "%.2f", r.logFreq)
 				: "\(String(format: "%.2f", r.logFreq))→\(String(format: "%.2f", r.freqTerm))"
-			lines.append("  \(i < 3 ? "▶" : " ") \(word) chan \(f(-r.cost))  neu \(neu)  ng \(f(r.ngram))  blend \(f(r.prior))  freq \(freq)  = \(f(r.score))")
+			lines.append("  \(i < 3 ? "▶" : " ") \(word) chan \(f(-r.cost))  ng \(f(r.ngram))  freq \(freq)  = \(f(r.score))")
 		}
-		rankLog.info("\(lines.joined(separator: "\n"), privacy: .public)")
+		rankLog.debug("\(lines.joined(separator: "\n"), privacy: .private(mask: .hash))")
+		#endif
 	}
 
 	/// The autocorrect margin-gate outcome for the word just committed.
 	static func logDecision(typed: String, best: String?, margin: Double, threshold: Double, corrected: Bool) {
+		#if DEBUG
 		guard verbose else { return }
-		rankLog.info("[autocorrect] typed=\"\(typed, privacy: .public)\" best=\"\(best ?? "—", privacy: .public)\" margin=\(String(format: "%.2f", margin), privacy: .public) gate=\(String(format: "%.1f", threshold), privacy: .public) → \(corrected ? "CORRECT" : "keep typed", privacy: .public)")
+		rankLog.debug("[autocorrect] typed=\"\(typed, privacy: .private(mask: .hash))\" best=\"\(best ?? "—", privacy: .private(mask: .hash))\" margin=\(String(format: "%.2f", margin), privacy: .public) gate=\(String(format: "%.1f", threshold), privacy: .public) result=\(corrected ? "correct" : "keep", privacy: .public)")
+		#endif
 	}
 
 	/// Next-word prediction: which words, and how many came from beam search vs n-gram.
 	static func logPredict(context: [String], words: [String], beam: Int, ngram: Int) {
+		#if DEBUG
 		guard verbose else { return }
 		let ctx = context.suffix(4).joined(separator: " ")
-		rankLog.info("[predict] ctx=\"\(ctx, privacy: .public)\" → \(words.joined(separator: ", "), privacy: .public)  (beam \(beam), ngram \(ngram))")
+		rankLog.debug("[predict] ctx=\"\(ctx, privacy: .private(mask: .hash))\" words=\(words.joined(separator: ", "), privacy: .private(mask: .hash)) beam=\(beam, privacy: .public) ngram=\(ngram, privacy: .public)")
+		#endif
 	}
 
 	/// Glide preprocessing trace: how many points survived resampling, how many pivots,
 	/// and which letters those pivots land on (the decoder's raw signal).
 	static func logGlide(points: Int, pivots: Int, letters: String, margin: Double = -1) {
+		#if DEBUG
 		guard verbose else { return }
 		let m = margin >= 0 ? String(format: " margin=%.2f", margin) : ""
-		rankLog.info("[glide] \(points) pts, \(pivots) pivots\(m, privacy: .public) → \(letters, privacy: .public)")
+		rankLog.debug("[glide] \(points, privacy: .public) pts, \(pivots, privacy: .public) pivots\(m, privacy: .public) words=\(letters, privacy: .private(mask: .hash))")
+		#endif
 	}
 
 	/// End-to-end device latency from finger lift through the host `insertText` call.
 	/// Emitted after insertion, so diagnostics can never delay the visible commit.
 	static func logGlideCommit(ms: Double) {
+		recordLatency(.glideCommit, milliseconds: ms)
+		#if DEBUG
 		guard verbose else { return }
-		rankLog.info("[glide-commit] lift-to-insert \(String(format: "%.2f", ms), privacy: .public) ms")
+		rankLog.debug("[glide-commit] lift-to-insert \(String(format: "%.2f", ms), privacy: .public) ms")
+		#endif
 	}
 
 	/// Per-user glide adaptation (#37): the supervised sample just observed and the σ / gate
 	/// it produced, so the runtime tuning is watchable in the same log stream as ranking.
 	static func logGlideAdapt(kind: String, cost: Double, profile: GlideProfile) {
+		#if DEBUG
 		guard verbose else { return }
 		let s = profile.summary
-		rankLog.info("[glide-adapt] \(kind, privacy: .public) cost=\(String(format: "%.3f", cost), privacy: .public) → σ=\(String(format: "%.3f", s.sigma), privacy: .public) gate=\(String(format: "%.3f", s.gate), privacy: .public) (n=\(s.samples, privacy: .public))")
+		rankLog.debug("[glide-adapt] \(kind, privacy: .public) cost=\(String(format: "%.3f", cost), privacy: .public) sigma=\(String(format: "%.3f", s.sigma), privacy: .public) gate=\(String(format: "%.3f", s.gate), privacy: .public) n=\(s.samples, privacy: .public)")
+		#endif
 	}
 
 	/// The App Group file real glide strokes are appended to (for offline calibration).
@@ -134,26 +209,54 @@ enum KBDiagnostics {
 	/// `path` is the RAW grid trajectory aligned 1:1 with `times` (seconds), NOT the resampled
 	/// path — resampling to even arc length erases the velocity that dwell/pivot calibration
 	/// needs. `dwell` are the letters the finger lingered on; `margin` is the reranked top-1/top-2
-	/// gap (commit confidence). Extra keys are additive: calibrate.py reads only `word`/`path`.
-	static func captureGlide(path: [(Double, Double)], times: [Double], dwell: [Character],
+	/// gap (commit confidence). A commit is deliberately not a training label. An
+	/// explicit alternative pick appends a separate label event for the same opaque ID.
+	static func captureGlide(id: String, path: [(Double, Double)], times: [Double], dwell: [Character],
 							 candidates: [String], committed: String?, margin: Double) {
-		guard KBSettings.glideCapture, let url = glideCaptureURL else { return }
+		#if DEBUG
+		guard KBSettings.glideCapture else { return }
 		glideCaptureQueue.async {
-			let pts = path.map { "[\(String(format: "%.3f", $0.0)),\(String(format: "%.3f", $0.1))]" }.joined(separator: ",")
-			let ts = times.map { String(format: "%.4f", $0) }.joined(separator: ",")
-			let cands = candidates.map { "\"\($0)\"" }.joined(separator: ",")
-			let dwellStr = dwell.map { "\"\($0)\"" }.joined(separator: ",")
-			let line = "{\"path\":[\(pts)],\"times\":[\(ts)],\"dwell\":[\(dwellStr)],\"cands\":[\(cands)]," +
-						   "\"word\":\(committed.map { "\"\($0)\"" } ?? "null"),\"margin\":\(String(format: "%.3f", margin))}\n"
-			guard let data = line.data(using: .utf8) else { return }
-			if let h = try? FileHandle(forWritingTo: url) {
-				defer { try? h.close() }
-				_ = try? h.seekToEnd(); try? h.write(contentsOf: data)
-			} else {
-				try? data.write(to: url, options: .atomic)
-			}
+			writeGlideCapture([
+				"event": "gesture",
+				"id": id,
+				"path": path.map { [$0.0, $0.1] },
+				"times": times,
+				"dwell": dwell.map(String.init),
+				"candidates": candidates,
+				"committed": (committed as Any?) ?? NSNull(),
+				"margin": margin,
+			])
+		}
+		#endif
+	}
+
+	/// Add ground truth only when the user explicitly chooses a different Glide word.
+	static func captureGlideLabel(id: String, intended: String) {
+		#if DEBUG
+		guard KBSettings.glideCapture, !intended.isEmpty else { return }
+		glideCaptureQueue.async {
+			writeGlideCapture(["event": "label", "id": id, "intended": intended])
+		}
+		#endif
+	}
+
+	#if DEBUG
+	private static func writeGlideCapture(_ record: [String: Any]) {
+		guard let url = glideCaptureURL,
+			  JSONSerialization.isValidJSONObject(record),
+			  var data = try? JSONSerialization.data(withJSONObject: record) else { return }
+		data.append(0x0A)
+		let existingSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+		if existingSize > 5_000_000 { try? FileManager.default.removeItem(at: url) }
+		if let handle = try? FileHandle(forWritingTo: url) {
+			defer { try? handle.close() }
+			_ = try? handle.seekToEnd()
+			try? handle.write(contentsOf: data)
+		} else {
+			try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
 		}
 	}
+	#endif
 
 	// MARK: Measurement primitives (only meaningful INSIDE the memory-limited extension)
 
@@ -188,71 +291,61 @@ enum KBDiagnostics {
 		static let shared = Recorder()
 		private let lock = NSLock()
 		private var snap: Snapshot
-		private var activeSince: Date?
 		private var tick = 0
 
 		private init() { snap = KBDiagnostics.read() }
 
-		func clear() { lock.lock(); snap = Snapshot(); activeSince = nil; tick = 0; lock.unlock() }
+		func clear() { lock.lock(); snap = Snapshot(); tick = 0; lock.unlock() }
+		func flush() { lock.lock(); persistLocked(); lock.unlock() }
 
-		/// The model became resident — initial load or a lazy reload after a drop.
-		func modelActivated(loadMs: Double) {
-			lock.lock()
-			snap.loadCount += 1
-			snap.lastLoadMs = loadMs
-			snap.modelActive = true
-			snap.modelState = "active"
-			snap.lastModelError = nil
-			activeSince = Date()
-			persistLocked()
-			lock.unlock()
-			KBDiagnostics.log.notice("model active (load \(Int(loadMs)) ms)")
-		}
-
-		/// Explain why the model is not active instead of reducing every failure mode
-		/// to a silent nil. Persisted immediately because load/gate transitions are rare.
-		func modelState(_ state: String, error: String? = nil, availableMB: Double? = nil) {
-			lock.lock()
-			snap.modelState = state
-			snap.lastModelError = error
-			if let availableMB { snap.lastGateAvailableMB = availableMB }
-			persistLocked()
-			lock.unlock()
-			if let error {
-				KBDiagnostics.log.error("model \(state, privacy: .public): \(error, privacy: .public)")
-			} else if let availableMB {
-				KBDiagnostics.log.notice("model \(state, privacy: .public) at \(availableMB, privacy: .public) MB available")
-			} else {
-				KBDiagnostics.log.notice("model \(state, privacy: .public)")
-			}
-		}
-
-		/// Memory pressure fired; the engine dropped the model if it was resident.
-		func memoryPressure(critical: Bool, modelWasActive: Bool) {
+		func memoryPressure(critical: Bool) {
 			lock.lock()
 			if critical { snap.criticalCount += 1 } else { snap.warningCount += 1 }
-			if modelWasActive {
-				snap.dropCount += 1
-				foldActiveLocked()
-				snap.modelActive = false
-				snap.modelState = critical ? "pressure-critical" : "pressure-warning"
-			}
 			sampleLocked()
 			persistLocked()
 			lock.unlock()
-			KBDiagnostics.log.notice("pressure \(critical ? "critical" : "warning"), dropped \(modelWasActive ? "yes" : "no")")
+			KBDiagnostics.log.notice("memory pressure \(critical ? "critical" : "warning")")
 		}
 
-		/// One ranking pass where the neural prior scored the candidates. `changedTop1`
-		/// = the blended winner differs from what the n-gram alone would have picked.
-		/// Counter bumps only; piggybacks on the same 1-in-16 persist cadence as sample().
-		func rankPass(changedTop1: Bool) {
+		func recordLatency(_ operation: LatencyOperation, milliseconds: Double) {
 			lock.lock()
-			snap.neuralRankPasses += 1
-			if changedTop1 { snap.neuralTop1Changed += 1 }
+			switch operation {
+			case .hostInsert:
+				snap.hostInsertLatencyBins = bucket(snap.hostInsertLatencyBins, milliseconds)
+			case .tapDecode:
+				snap.tapDecodeLatencyBins = bucket(snap.tapDecodeLatencyBins, milliseconds)
+			case .glidePreview:
+				snap.glidePreviewLatencyBins = bucket(snap.glidePreviewLatencyBins, milliseconds)
+			case .glideFinal:
+				snap.glideFinalLatencyBins = bucket(snap.glideFinalLatencyBins, milliseconds)
+			case .glideCommit:
+				snap.glideCommitLatencyBins = bucket(snap.glideCommitLatencyBins, milliseconds)
+			}
 			tick += 1
-			if tick % 16 == 0 { persistLocked() }
+			if tick % 32 == 0 { persistLocked() }
 			lock.unlock()
+		}
+
+		private func bucket(_ existing: [Int]?, _ milliseconds: Double) -> [Int] {
+			var bins = existing ?? []
+			if bins.count != KBDiagnostics.latencyThresholds.count + 1 {
+				bins = [Int](repeating: 0, count: KBDiagnostics.latencyThresholds.count + 1)
+			}
+			let index = KBDiagnostics.latencyThresholds.firstIndex { milliseconds <= $0 }
+				?? KBDiagnostics.latencyThresholds.count
+			bins[index] &+= 1
+			return bins
+		}
+
+		/// Non-content persistence health. `operation` is a fixed code selected by the
+		/// caller (for example `personal-model-read`), never a path or user string.
+		func storageFailure(operation: String) {
+			lock.lock()
+			snap.storageFailureCount = (snap.storageFailureCount ?? 0) + 1
+			snap.lastStorageOperation = operation
+			persistLocked()
+			lock.unlock()
+			KBDiagnostics.log.error("storage operation failed: \(operation, privacy: .public)")
 		}
 
 		/// Cheap footprint/headroom sample. Call from the background suggestion pass.
@@ -273,15 +366,8 @@ enum KBDiagnostics {
 				snap.limitMB = foot + avail        // the ceiling, inferred at the tightest point
 			}
 		}
-		private func foldActiveLocked() {
-			if let since = activeSince {
-				snap.activeSeconds += Date().timeIntervalSince(since)
-				activeSince = nil
-			}
-		}
 		private func persistLocked() {
 			var out = snap
-			if let since = activeSince { out.activeSeconds += Date().timeIntervalSince(since) }  // include the open interval
 			out.updated = Date()
 			if let data = try? JSONEncoder().encode(out) { KBDiagnostics.store.set(data, forKey: KBDiagnostics.key) }
 		}

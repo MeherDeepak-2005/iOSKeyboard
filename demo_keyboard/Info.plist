@@ -2,8 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>KlipyAPIKey</key>
-	<string>JhmQ01hqypwCWNFZZOjdxDCX18XYvRYX5ClfQd9z24qU1TjsBKrIygoolUQylH20</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>

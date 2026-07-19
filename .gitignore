@@ -58,11 +58,10 @@ __pycache__/
 *.pt
 *.bin
 !keyboard/emoji.bin
-!keyboard/tokenizer.bin
+!keyboard/langdata.bin
 *.kbguard
+!keyboard/safety.kbguard
 *.mlpackage/
-!keyboard/rescorer.mlpackage/
-!keyboard/rescorer.mlpackage/**
 
 # JetBrains IDE
 .idea/
@@ -71,3 +70,4 @@ __pycache__/
 graphify-out/
 
 *.txt
+!keyboard/ThirdPartyNotices.txt

@@ -3,17 +3,27 @@ import Foundation
 // UserModel: on-device personalization — extracted from Keyboardengine.swift.
 
 final class UserModel {
+	private let storageURLOverride: URL?
 	private var tri: [String: [String: Int]] = [:], triTot: [String: Int] = [:]
 	private var bi:  [String: [String: Int]] = [:], biTot:  [String: Int] = [:]
 	private var unigrams: [String: Int] = [:]
 	private var unigramTotal = 0
+	/// Explicit spelling confirmations come only from an autocorrect undo. They are
+	/// persisted separately from ordinary use counts so repeated accidental typos do
+	/// not become indistinguishable from a word the user deliberately defended.
+	private var spellingConfirmations: [String: Int] = [:]
+	private var modelEpoch = KBPersonalData.currentEpoch
+	private struct LearnEvent { let context: [String]; let word: String }
+	private var recentLearnEvents: [LearnEvent] = []
 
-	/// All tables are written on the engine queue (learn/demote/prune) but READ from the
-	/// main thread too: the space key's synchronous fast-autocorrect ranks candidates with
-	/// the n-gram scorer inline, precisely so it never has to wait on the engine queue. So
-	/// every access goes through this lock — held for dictionary lookups (microseconds),
-	/// never across encoding or disk work.
+	/// The engine queue owns mutations while the Glide queues may read personalization.
+	/// Every access therefore goes through this short-held lock; encoding and disk I/O
+	/// always happen after a snapshot has been taken and never while the lock is held.
 	private let lock = NSLock()
+
+	init(storageURL: URL? = nil) {
+		storageURLOverride = storageURL
+	}
 
 	// MARK: Locked read API (safe from any thread)
 
@@ -51,6 +61,32 @@ final class UserModel {
 	func unigramsSnapshot() -> [String: Int] {
 		lock.lock(); defer { lock.unlock() }
 		return unigrams
+	}
+	func spellingConfirmationCount(_ word: String) -> Int {
+		lock.lock(); defer { lock.unlock() }
+		return spellingConfirmations[word] ?? 0
+	}
+	/// Number of distinct preceding words with which this spelling was actually used.
+	/// This is queried only at the rare OOV-adoption threshold, so the bounded scan is
+	/// preferable to maintaining another persistent index on every key boundary.
+	func contextDiversity(for word: String, stoppingAt limit: Int = 2) -> Int {
+		lock.lock(); defer { lock.unlock() }
+		var count = 0
+		for distribution in bi.values where distribution[word] != nil {
+			count += 1
+			if count >= limit { break }
+		}
+		return count
+	}
+
+	func confirmSpelling(_ word: String) {
+		lock.lock(); defer { lock.unlock() }
+		let current = KBPersonalData.currentEpoch
+		if modelEpoch != current { clearLocked(epoch: current) }
+		spellingConfirmations[word] = min((spellingConfirmations[word] ?? 0) + 1, 8)
+		if spellingConfirmations.count > 512 {
+			spellingConfirmations = spellingConfirmations.compactMapValues { $0 >= 2 ? $0 - 1 : nil }
+		}
 	}
 
 	// Growth caps. Without them every committed word adds unigram + bigram + trigram
@@ -105,14 +141,12 @@ final class UserModel {
 		totals = table.mapValues { $0.values.reduce(0, +) }
 	}
 
-	private lazy var storeURL: URL = {
-		if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: KBSettings.appGroup) {
-			return url.appendingPathComponent("kb_model.json")
-		}
-		let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-		try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-		return dir.appendingPathComponent("kb_model.json")
-	}()
+	private func storeURL(for epoch: UInt64) -> URL? {
+		storageURLOverride ?? KBPersonalData.modelURL(for: epoch)
+	}
+	private var legacyStoreURL: URL? {
+		storageURLOverride == nil ? KBPersonalData.legacyModelURL : nil
+	}
 	/// Encoding + disk write run here, OFF the engine's barrier. `save()` snapshots the
 	/// model under the barrier (cheap, consistent) and hands the write to this serial
 	/// queue, so the space key's `autocorrection()` never blocks behind a JSON write.
@@ -121,6 +155,8 @@ final class UserModel {
 	/// `context` and `word` must already be lowercased.
 	func learn(context ctx: [String], word lw: String) {
 		lock.lock(); defer { lock.unlock() }
+		let current = KBPersonalData.currentEpoch
+		if modelEpoch != current { clearLocked(epoch: current) }
 		unigrams[lw, default: 0] += 1; unigramTotal += 1
 		if let p = ctx.last {
 			bi[p, default: [:]][lw, default: 0] += 1; biTot[p, default: 0] += 1
@@ -129,29 +165,101 @@ final class UserModel {
 			let k = ctx[ctx.count - 2] + " " + ctx[ctx.count - 1]
 			tri[k, default: [:]][lw, default: 0] += 1; triTot[k, default: 0] += 1
 		}
+		recentLearnEvents.append(LearnEvent(context: ctx, word: lw))
+		if recentLearnEvents.count > 64 { recentLearnEvents.removeFirst() }
 	}
 
-	/// Walk back one learned use of a word the user actively replaced — undoing the
-	/// unigram credit a mistaken commit gave it.
+	/// Walk back the exact recent context contribution when possible. The old model
+	/// decremented only the unigram, leaving the same mistake reinforced in bi/trigrams.
 	func demote(_ lw: String) {
 		lock.lock(); defer { lock.unlock() }
-		guard let c = unigrams[lw] else { return }
-		unigrams[lw] = c > 1 ? c - 1 : nil
-		unigramTotal = max(0, unigramTotal - 1)
+		let current = KBPersonalData.currentEpoch
+		if modelEpoch != current { clearLocked(epoch: current); return }
+		if decrement(&unigrams, key: lw) {
+			unigramTotal = max(0, unigramTotal - 1)
+		}
+		guard let index = recentLearnEvents.lastIndex(where: { $0.word == lw }) else { return }
+		let event = recentLearnEvents.remove(at: index)
+		if let previous = event.context.last {
+			decrementNested(&bi, totals: &biTot, context: previous, word: lw)
+		}
+		if event.context.count >= 2 {
+			let context = event.context[event.context.count - 2] + " " + event.context[event.context.count - 1]
+			decrementNested(&tri, totals: &triTot, context: context, word: lw)
+		}
+	}
+
+	@discardableResult
+	private func decrement(_ table: inout [String: Int], key: String) -> Bool {
+		guard let value = table[key] else { return false }
+		table[key] = value > 1 ? value - 1 : nil
+		return true
+	}
+
+	private func decrementNested(_ table: inout [String: [String: Int]],
+							 totals: inout [String: Int], context: String, word: String) {
+		guard var words = table[context], let value = words[word] else { return }
+		words[word] = value > 1 ? value - 1 : nil
+		if words.isEmpty { table[context] = nil; totals[context] = nil }
+		else { table[context] = words; totals[context] = max(0, (totals[context] ?? 0) - 1) }
 	}
 
 	/// On-disk shape. Older files carry extra keys (`keptCounts`, `kept`) from when
 	/// rejections persisted — JSONDecoder ignores unknown keys, so they load fine and
 	/// the keys vanish on the next save.
-	private struct Snapshot: Codable {
+	private nonisolated struct Snapshot: Codable {
+		var version: Int?
+		var epoch: UInt64?
 		var tri: [String: [String: Int]]; var bi: [String: [String: Int]]
 		var uni: [String: Int]
+		var confirmed: [String: Int]?
 	}
 	func load() {
-		guard let data = try? Data(contentsOf: storeURL),
-			  let m = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+		let current = KBPersonalData.currentEpoch
+		guard let primary = storeURL(for: current) else {
+			KBDiagnostics.recorder.storageFailure(operation: "personal-container-unavailable")
+			reset(to: current)
+			return
+		}
+		let legacy = legacyStoreURL
+		let source: URL? = FileManager.default.fileExists(atPath: primary.path)
+			? primary
+			: legacy.flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil }
+		guard let source else {
+			reset(to: current)
+			return
+		}
+		do {
+			let data = try Data(contentsOf: source, options: .mappedIfSafe)
+			guard data.count <= 4_000_000 else { throw StoreError.invalidShape }
+			let decoded = try JSONDecoder().decode(Snapshot.self, from: data)
+			guard (decoded.version ?? 1) <= 2,
+				  (decoded.epoch ?? current) == current,
+				  decoded.uni.count <= Self.maxUnigrams * 2,
+				  decoded.bi.count <= Self.maxContexts * 2,
+				  decoded.tri.count <= Self.maxContexts * 2 else {
+				throw StoreError.invalidShape
+			}
+			install(decoded, current: current, migratedLegacy: source == legacy)
+		} catch {
+			KBPersonalData.withExclusiveStoreLock {
+				try? FileManager.default.removeItem(at: source)
+			}
+			KBDiagnostics.recorder.storageFailure(operation: "personal-model-read")
+			reset(to: current)
+		}
+	}
+
+	private enum StoreError: Error { case invalidShape }
+
+	private func install(_ m: Snapshot, current: UInt64, migratedLegacy: Bool) {
 		lock.lock()
-		tri = m.tri; bi = m.bi; unigrams = m.uni
+		modelEpoch = current
+		tri = sanitize(m.tri); bi = sanitize(m.bi)
+		unigrams = m.uni.filter { isValidWord($0.key) && $0.value > 0 }
+		spellingConfirmations = (m.confirmed ?? [:]).filter {
+			isValidWord($0.key) && $0.value > 0
+		}
 		triTot = tri.mapValues { $0.values.reduce(0, +) }
 		biTot  = bi.mapValues  { $0.values.reduce(0, +) }
 		unigramTotal = unigrams.values.reduce(0, +)
@@ -159,19 +267,73 @@ final class UserModel {
 		// launch footprint drops immediately and the pruned file is written back.
 		let pruned = pruneLocked()
 		lock.unlock()
-		if pruned { save() }
+		if pruned || migratedLegacy { save() }
+	}
+
+	private func sanitize(_ table: [String: [String: Int]]) -> [String: [String: Int]] {
+		var result: [String: [String: Int]] = [:]
+		result.reserveCapacity(min(table.count, Self.maxContexts))
+		for (context, words) in table where context.count <= 130 {
+			let valid = words.filter { isValidWord($0.key) && $0.value > 0 }
+			if !valid.isEmpty { result[context] = valid }
+		}
+		return result
+	}
+
+	private func isValidWord(_ word: String) -> Bool {
+		!word.isEmpty && word.count <= 64
+			&& word.allSatisfy { $0.isLetter || $0 == "'" }
 	}
 	func save() {
-		// Snapshot under the lock (COW references — O(1)); encode on the caller (cheap,
-		// in-memory, off the lock); only the slow disk write goes to the I/O queue, keeping
-		// it off the engine queue the space key's decisions can depend on. Serial queue =
-		// writes stay ordered, last one wins.
+		// Snapshot under the lock (COW references — O(1)); encoding and the atomic write
+		// both run on the I/O queue. The epoch and cross-process file lock make reset win
+		// over an already queued save from an older keyboard process.
 		lock.lock()
-		let m = Snapshot(tri: tri, bi: bi, uni: unigrams)
+		let epoch = modelEpoch
+		let m = Snapshot(version: 2, epoch: epoch, tri: tri, bi: bi, uni: unigrams,
+			confirmed: spellingConfirmations)
 		lock.unlock()
-		guard let data = try? JSONEncoder().encode(m) else { return }
-		let url = storeURL
-		ioQueue.async { try? data.write(to: url) }
+		guard let url = storeURL(for: epoch) else {
+			KBDiagnostics.recorder.storageFailure(operation: "personal-container-unavailable")
+			return
+		}
+		ioQueue.async {
+			let data: Data
+			do { data = try JSONEncoder().encode(m) }
+			catch {
+				KBDiagnostics.recorder.storageFailure(operation: "personal-model-encode")
+				return
+			}
+			KBPersonalData.withExclusiveStoreLock {
+				guard KBPersonalData.currentEpoch == epoch else { return }
+				do {
+					try data.write(to: url,
+						options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+				} catch {
+					KBDiagnostics.recorder.storageFailure(operation: "personal-model-write")
+				}
+			}
+		}
+	}
+
+	func reset(to epoch: UInt64 = KBPersonalData.currentEpoch) {
+		lock.lock()
+		clearLocked(epoch: epoch)
+		lock.unlock()
+	}
+
+	/// Deterministic test seam; production never waits for persistence on an input path.
+	func waitForPendingIO() { ioQueue.sync {} }
+
+	private func clearLocked(epoch: UInt64) {
+		tri.removeAll(keepingCapacity: false)
+		triTot.removeAll(keepingCapacity: false)
+		bi.removeAll(keepingCapacity: false)
+		biTot.removeAll(keepingCapacity: false)
+		unigrams.removeAll(keepingCapacity: false)
+		spellingConfirmations.removeAll(keepingCapacity: false)
+		unigramTotal = 0
+		recentLearnEvents.removeAll(keepingCapacity: false)
+		modelEpoch = epoch
 	}
 }
-

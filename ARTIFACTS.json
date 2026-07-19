@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-19T13:28:00+05:30",
+  "artifacts": [
+    {
+      "path": "keyboard/langdata.bin",
+      "sha256": "de48be323e36a0240664fd7266e842b036624b4f5d353e963ebe479d11952955",
+      "bytes": 19263737,
+	  "format": "KBLM v4",
+	  "builder": "tools/build_language_data.py",
+	  "contents": {
+		"words": 60449,
+		"bigramEntries": 233748,
+		"trigramEntries": 376779,
+		"trieNodes": 138138,
+		"sentenceStarters": 256
+	  },
+      "inputs": [
+        {
+          "name": "FrequencyWords English 2018",
+          "url": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/525f9b560de45753a5ea01069454e72e9aa541c6/content/2018/en/en_full.txt",
+          "sha256": "7fea67ab954e2c01df6c608c9826e594cf36f8823b3243554f88245fb75dc506",
+          "license": "CC-BY-SA-4.0"
+        },
+        {
+          "name": "Tatoeba English CC0 export snapshot",
+          "path": "tools/data/tatoeba-eng-cc0-2026-07-18.tsv.bz2",
+          "sha256": "14f975533e2f15257f674d6099b95cf6b2c3458a8baf7496935081ad862f4b91",
+          "license": "CC0-1.0"
+        },
+        {
+          "name": "Project-curated supplemental English vocabulary",
+          "path": "tools/data/english_supplemental.tsv",
+          "sha256": "86fe00479d6b84863eb19fd90c0ef3307ff93fae26f2b1c33262103613af2a05",
+          "license": "Project-owned"
+        }
+      ]
+    },
+    {
+      "path": "keyboard/safety.kbguard",
+      "sha256": "bda62d1674c9fbc84c0d04014ac24aa49e79b7a42052152fe00026aca67b76a1",
+      "bytes": 912,
+      "format": "KBGUARD1 v1",
+      "builder": "tools/build_safety_lexicon.py",
+      "inputs": [
+        {
+          "name": "Project-reviewed safety policy",
+          "path": "tools/data/safety_terms.tsv",
+          "sha256": "a0d087f0fa1e2227ec73405d4d1aae67b6ac19b28e366832780782a3b9f5d94e",
+          "license": "Project-owned"
+        }
+      ]
+    },
+    {
+      "path": "keyboard/emoji.bin",
+      "sha256": "aab47a6f406a3ae3788c6bc5066d902e965c687e8ed06fa97ebb0fdcd0073dc8",
+      "bytes": 41541,
+      "format": "KBEM v2",
+      "builder": "tools/build_emoji_data.py",
+      "inputs": [
+        {
+          "name": "Project-curated Unicode emoji catalog and aliases",
+          "license": "Project-owned"
+        },
+        {
+          "name": "Unicode Character Database 14.0 names via Python unicodedata",
+          "license": "Unicode-3.0"
+        }
+      ]
+    }
+  ],
+  "excludedReleaseArtifacts": [
+    {
+      "path": "keyboard/rescorer.mlpackage",
+      "reason": "Removed: checkpoint stage, training provenance, commercial corpus rights, and blind on-device evaluation were not release-qualified."
+    },
+    {
+      "path": "keyboard/tokenizer.bin",
+      "reason": "Removed with the unqualified checkpoint; tokenizer provenance was not independently release-qualified."
+    }
+  ]
+}

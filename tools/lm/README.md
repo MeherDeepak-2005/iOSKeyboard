@@ -1,87 +1,62 @@
-# Keyboard neural rescorer
+# Experimental language-model research
 
-This directory contains the PyTorch-to-Core-ML pipeline used by the keyboard's
-`NeuralScorer`. It supports both the legacy 4.7M `TinyLM` checkpoint and the
-10,601,472-parameter, 6-layer checkpoint supplied with the Qwen distillation
-project.
+This directory is an **offline research workspace**. No model, tokenizer, Core ML
+runtime, or neural scorer from this directory is included in the shipping app or
+keyboard extension. Production decoding currently uses the memory-mapped
+`langdata.bin` n-gram model.
 
-## Production export
+The scripts preserve earlier PyTorch, tokenizer, probing, and Core ML experiments
+so a future model can be evaluated reproducibly. Their outputs are development
+artifacts, not production deliverables. In particular, do not add
+`rescorer.mlpackage`, `tokenizer.bin`, or an export manifest to an Xcode target
+without completing the promotion gates below.
 
-Place the supplied source artifacts at:
+## Research inputs
 
-- `data/qwen_pretrain.pt`
-- `data/qwen_spm.model`
-- `data/qwen_spm.vocab`
-- `data/qwen_tokenizer_metadata.json`
+Some scripts expect local files under `data/`, such as a checkpoint and a
+SentencePiece model. Those inputs are intentionally not treated as release assets.
+An old checkpoint was identified as a pretraining-stage artifact, not a completed
+messaging distillation, task fine-tune, or quantization-aware training checkpoint.
+Conversion parity and perplexity alone do not establish autocorrect quality.
 
-The source checkpoint is currently stage `pretrain`; it is not a completed
-distillation, messaging fine-tune, or QAT checkpoint. The exporter records the
-stage and source SHA-256 in `coreml_export_manifest.json`.
+## Promotion gates
 
-Use the pinned ML environment, then run:
+A neural model may enter the app only after all of these are recorded in a reviewed
+artifact manifest:
 
-```bash
-python export_coreml.py
-python verify_coreml.py
-```
+1. Provenance and commercial redistribution rights for every corpus, checkpoint,
+   tokenizer, calibration sample, and generated artifact.
+2. A user-separated, blind typo and next-word evaluation showing a statistically
+   reliable gain over the shipping n-gram decoder, including false-correction rate.
+3. Candidate-oracle recall proving the correct word reaches the rescorer; a larger
+   model cannot recover candidates discarded before scoring.
+4. Core ML graph inspection, fixed or explicitly flexible input shapes, conversion
+   parity, quantization details, and deterministic source hashes.
+5. Physical-device measurements across supported devices for p50/p95/p99 latency,
+   peak and sustained extension footprint, energy, thermal behavior, and jetsam.
+6. Stable session semantics: model readiness or memory pressure must not silently
+   change the ranking tier in the middle of a word or Glide gesture.
+7. Release archive inspection proving that only the reviewed package and tokenizer
+   are bundled, with a remote rollback switch or version rollback plan.
 
-`export_coreml.py` writes:
+## Research commands
 
-- `../../keyboard/rescorer.mlpackage`
-- `../../keyboard/tokenizer.bin`
-- `coreml_export_manifest.json`
-
-The default export uses 512 representative messaging examples, a SmoothQuant
-alpha of 0.5, fixed batch 16, sequence length 32, and eight candidate score
-slots. It verifies numerical parity, graph quantization operations, checkpoint
-and tokenizer hashes, and a 12 MB package-size gate before saving production
-artifacts.
-
-The resulting package is W8A8 for eligible matrix operations: INT8 weights and
-calibrated INT8 activations. Layer normalization, softmax, indexing, and public
-scores remain floating point because Core ML does not provide an all-INT8
-transformer graph for those operations. No FP16 source model package is saved or
-bundled.
-
-## Current measurements
-
-- Parameters: 10,601,472 unique parameters, with tied token embedding/head.
-- Package: approximately 10.88 MB.
-- Core ML conversion parity on representative messaging inputs: 100% candidate
-  top-1 agreement and at least 95% next-token top-1 agreement.
-- Held-out register check on 5,000 common messaging lines: per-word perplexity
-  160.8 versus 408.1 for the legacy model.
-
-Perplexity and conversion parity do not establish on-device latency or final
-autocorrect accuracy. Measure those on supported physical devices before changing
-blend weights or removing the n-gram fallback.
-
-## Runtime contract
-
-The Core ML interface is:
-
-```text
-tokens            int32 [16, 32]
-score_positions   int32 [16, 8]
-target_ids        int32 [16, 8]
-score_mask      float32 [16, 8]
-next_positions    int32 [16, 1]
-
-candidate_log_probs [16]
-next_logits         [16, 6000]
-```
-
-`NeuralScorer` zero-pads unused batch rows and consumes only the live output
-prefix. The model remains off the keystroke path and falls back to the n-gram
-scorer while loading or under memory pressure.
-
-## Legacy training pipeline
-
-The original model can still be reproduced with:
+Use an isolated, pinned Python environment. Depending on the experiment, scripts
+include:
 
 ```bash
 python prepare_data.py
 python train_tokenizer.py
 python train_lm.py
-python eval_harness.py --neural
+python eval_harness.py
+python compare_scorers.py --help
+python export_coreml.py --help
+python verify_coreml.py --help
 ```
+
+Consult each script before running it. Several scripts reference large local data
+or optional ML packages and are not part of the Xcode build.
+
+The production comparison and confidence-interval harness lives in
+`tools/evaluation/`; use that task-level result, not token perplexity, to decide
+whether a model is eligible for promotion.

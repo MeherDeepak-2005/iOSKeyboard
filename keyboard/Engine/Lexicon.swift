@@ -4,11 +4,12 @@ import Foundation
 
 final class Lexicon {
 
-	/// With v3 langdata the 60k-word dictionary is searched IN PLACE in the mmap'd
-	/// static trie (clean, evictable pages), and this heap trie holds only adopted +
-	/// contact words — dozens, not tens of thousands. With a v2 file the full vocab
-	/// loads here as before.
-	private var dynamicTrie = Trie()
+	/// Immutable/base, supplementary, and learned words are separate layers. Resetting
+	/// personalization can therefore drop only learned words without damaging a v2
+	/// fallback dictionary or contact/text-replacement words imported for this process.
+	private var baseTrie = Trie()
+	private var supplementaryTrie = Trie()
+	private var personalTrie = Trie()
 	/// The mmap'd bundle data; also used by NgramScorer. nil in the host app / tests.
 	private(set) var langData: LangData?
 	/// True when langData carries the v3 static trie section.
@@ -19,55 +20,47 @@ final class Lexicon {
 	/// is capped (halve-and-drop, like UserModel) rather than left to accrete forever.
 	private var boosts: [String: Int] = [:]
 	private static let maxBoosts = 3000
+	/// A small, explicitly bounded side index lets Glide shape-score contact,
+	/// text-replacement, and confirmed personal words that are not in the mmap trie.
+	/// Keeping strings here avoids walking every mutable trie node per preview.
+	private var supplementaryGlideWords: [String: Int] = [:]
+	private var personalGlideWords: [String: Int] = [:]
+	private static let maxSupplementaryGlideWords = 768
+	private static let maxPersonalGlideWords = 384
 	/// Highest-frequency words, for the empty-context suggestion bar on a fresh install.
 	private(set) var topWords: [String] = []
 
-	/// Mutable state (dynamicTrie, boosts, the load-time flags) is written on the engine
-	/// queue but ALSO read from the MAIN thread: the space key's synchronous fast-autocorrect
-	/// runs the candidate search inline, precisely so the keystroke never waits on the engine
-	/// queue. Every method below takes this lock; the mmap'd static trie itself is immutable,
-	/// so the lock is only held for heap-trie walks and dictionary lookups — never disk or
-	/// neural work. (isProfane needs no lock: safety + roots are immutable.)
+	/// Mutable trie layers, boosts, and load-time flags are written by the engine queue
+	/// and read by dedicated decode/Glide queues. Every method below takes this lock;
+	/// the mmap'd static trie itself is immutable, and no disk or model work is performed
+	/// while the lock is held. (isProfane needs no lock: the safety map is immutable.)
 	private let lock = NSLock()
 
-	// The exact-match blocklist now lives in the bundled `safety.kbguard` binary
-	// (curated LDNOOBW en + Wiktionary te, 429 terms), memory-mapped and hash-indexed —
-	// see KBSafetyLexicon. nil only if the resource is missing (host app / tests).
+	// The project-reviewed exact-match policy lives in the bundled `safety.kbguard`
+	// binary, memory-mapped and hash-indexed. It filters generated candidates only;
+	// typed input is never censored. nil only if the resource is missing in tests.
 	private let safety = KBSafetyLexicon.bundled()
 
-	// Substrings that essentially never occur inside an innocent English word, so a
-	// containment check safely blocks COMPOUNDS the exact list misses — fuckface, shithole,
-	// dickhead, cocksucker, shitshow, etc. Kept in code deliberately: substring matching is
-	// a different strategy than the binary's exact hash lookup, and this list is narrow —
-	// roots like "ass"/"cock"/"dick"/"hell" are NOT here because they hide inside
-	// class / cockpit / dickens / hello (the Scunthorpe problem).
-	private let profanityRoots = [
-		"fuck", "shit", "cunt", "cocksuck", "dickhead", "faggot", "jackoff", "jerkoff", "gangbang",
-	]
-	// Innocent words that DO contain a root above (only "cunt" has real ones here).
-	private let profanityAllowlist: Set<String> = ["scunthorpe"]
-
 	func isProfane(_ w: String) -> Bool {
-		let lw = w.lowercased()
-		if profanityAllowlist.contains(lw) { return false }
-		if safety?.isBlocked(lw) == true { return true }        // exact-match binary blocklist
-		return profanityRoots.contains { lw.contains($0) }      // substring compounds
+		safety?.isBlocked(w.lowercased()) == true
 	}
 
 	func contains(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
-		return (staticTrie && langData?.trieContains(lw) == true) || dynamicTrie.contains(lw)
+		return (staticTrie && langData?.trieContains(lw) == true)
+			|| baseTrie.contains(lw) || supplementaryTrie.contains(lw) || personalTrie.contains(lw)
 	}
 	/// True only for words in the immutable corpus (static mmap trie). Used to filter
 	/// user-count boosts in next-word predictions so only dictionary words get personalized
 	/// ranking — OOV strings, adopted typos, and contact names don't flood suggestions.
 	func isStaticWord(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
-		return staticTrie && langData?.trieContains(lw) == true
+		return (staticTrie && langData?.trieContains(lw) == true) || (!staticTrie && baseTrie.contains(lw))
 	}
 	func isPrefix(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
-		return (staticTrie && langData?.trieHasPrefix(lw) == true) || dynamicTrie.hasPrefix(lw)
+		return (staticTrie && langData?.trieHasPrefix(lw) == true) || baseTrie.hasPrefix(lw)
+			|| supplementaryTrie.hasPrefix(lw) || personalTrie.hasPrefix(lw)
 	}
 	/// Standard English clitics. A string that is <lexicon word> + one of these is a
 	/// valid contraction even when the CONTRACTION itself is missing from the corpus
@@ -92,9 +85,8 @@ final class Lexicon {
 	/// "whens" → "when's" has no trie entry to validate against, so without the
 	/// fallback the OOV correction machinery flattened it to "when".
 	func apostropheRestoration(of lw: String) -> String? {
-		lock.lock()
-		let hit = staticTrie ? langData?.trieApostropheRestoration(of: lw)?.word : nil
-		lock.unlock()
+		lock.lock(); let data = staticTrie ? langData : nil; lock.unlock()
+		let hit = data?.trieApostropheRestoration(of: lw)?.word
 		if let hit { return hit }
 		return Self.syntheticContraction(of: lw)
 	}
@@ -125,11 +117,33 @@ final class Lexicon {
 	}
 	func insert(_ lw: String, freq: Int) {
 		lock.lock(); defer { lock.unlock() }
-		dynamicTrie.insert(lw, freq: freq)
+		supplementaryTrie.insert(lw, freq: freq)
+		if Self.isGlideSpelling(lw),
+		   supplementaryGlideWords.count < Self.maxSupplementaryGlideWords
+				|| supplementaryGlideWords[lw] != nil {
+			supplementaryGlideWords[lw] = max(supplementaryGlideWords[lw] ?? 0, freq)
+		}
+	}
+
+	func glideDynamicWords(limit: Int) -> [String] {
+		lock.lock(); defer { lock.unlock() }
+		var merged = supplementaryGlideWords
+		for (word, count) in personalGlideWords {
+			merged[word] = max(merged[word] ?? 0, count + 100)
+		}
+		return merged.sorted {
+			$0.value == $1.value ? $0.key < $1.key : $0.value > $1.value
+		}.prefix(limit).map(\.key)
+	}
+
+	private static func isGlideSpelling(_ word: String) -> Bool {
+		word.count >= 2 && word.utf8.allSatisfy {
+			($0 >= UInt8(ascii: "a") && $0 <= UInt8(ascii: "z")) || $0 == KB.apostrophe
+		}
 	}
 	func wordID(_ lw: String) -> Int32? {
 		lock.lock(); defer { lock.unlock() }
-		return staticTrie ? langData?.trieWordID(lw) : dynamicTrie.wordID(lw)
+		return staticTrie ? langData?.trieWordID(lw) : baseTrie.wordID(lw)
 	}
 	/// Immutable mmap snapshot for the dedicated Glide queues. The reference is copied
 	/// under the lock; all trie/ngram bytes are read-only after bundle loading completes.
@@ -137,30 +151,36 @@ final class Lexicon {
 		lock.lock(); defer { lock.unlock() }
 		return staticTrie ? langData : nil
 	}
-	func corrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil) -> [Candidate] {
-		lock.lock(); defer { lock.unlock() }
-		var out = dynamicTrie.search(lw, maxCost: maxCost, taps: taps)
-		if staticTrie, let ld = langData {
-			out += ld.trieSearch(lw, maxCost: maxCost, taps: taps).map(boosted)
+	func corrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
+					 shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
+		lock.lock()
+		let data = staticTrie ? langData : nil
+		let boostSnapshot = boosts
+		var out = staticTrie ? [] : baseTrie.search(lw, maxCost: maxCost, taps: taps).map(boosted)
+		out += supplementaryTrie.search(lw, maxCost: maxCost, taps: taps)
+		out += personalTrie.search(lw, maxCost: maxCost, taps: taps)
+		lock.unlock()
+		if let data {
+			out += data.trieSearch(lw, maxCost: maxCost, taps: taps,
+				shouldCancel: shouldCancel).map { Self.applying(boostSnapshot, to: $0) }
 		}
 		return out
 	}
 
 	/// Wide-radius fallback over the static corpus only, lock-free after a brief snapshot.
 	/// `corrections()` holds the lock for the entire trie walk; at 2× budget that's 3+ ms and
-	/// would block the main thread's fast-autocorrect if it contended. Here we snapshot
+	/// would delay other decoder work if it contended. Here we snapshot
 	/// `langData` and `boosts` under a tiny lock, release, then run the expensive DP lock-free
 	/// — the mmap data is immutable so the walk is safe. Dynamic trie is intentionally skipped
 	/// (adopted words are already close to correctly-typed forms and don't need the wide budget).
-	func broadCorrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil) -> [Candidate] {
+	func broadCorrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
+						  shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
 		lock.lock()
 		guard staticTrie, let ld = langData else { lock.unlock(); return [] }
 		let snap = boosts   // COW snapshot — O(1) under the lock
 		lock.unlock()
-		return ld.trieSearch(lw, maxCost: maxCost, taps: taps).map { c in
-			guard let b = snap[c.word] else { return c }
-			return Candidate(word: c.word, cost: c.cost, logFreq: log(exp(c.logFreq) + Double(b)))
-		}
+		return ld.trieSearch(lw, maxCost: maxCost, taps: taps,
+			shouldCancel: shouldCancel).map { Self.applying(snap, to: $0) }
 	}
 
 	/// Next-character priors under the current prefix, for key-target resizing:
@@ -188,15 +208,31 @@ final class Lexicon {
 			guard let b = boosts[lw] else { return base }
 			return log(exp(base) + Double(b))
 		}
-		return dynamicTrie.logFreq(lw)
+		if let base = baseTrie.logFreq(lw) {
+			guard let b = boosts[lw] else { return base }
+			return log(exp(base) + Double(b))
+		}
+		return supplementaryTrie.logFreq(lw) ?? personalTrie.logFreq(lw)
 	}
 	func completions(prefix lw: String, limit: Int) -> [Candidate] {
-		lock.lock(); defer { lock.unlock() }
-		var out = dynamicTrie.completions(prefix: lw, limit: limit)
-		if staticTrie, let ld = langData {
-			out += ld.trieCompletions(prefix: lw, limit: limit).map(boosted)
+		lock.lock()
+		let data = staticTrie ? langData : nil
+		let boostSnapshot = boosts
+		var out = staticTrie ? [] : baseTrie.completions(prefix: lw, limit: limit).map(boosted)
+		out += supplementaryTrie.completions(prefix: lw, limit: limit)
+		out += personalTrie.completions(prefix: lw, limit: limit)
+		lock.unlock()
+		if let data {
+			out += data.trieCompletions(prefix: lw, limit: limit)
+				.map { Self.applying(boostSnapshot, to: $0) }
 		}
 		return Array(out.sorted { $0.logFreq > $1.logFreq }.prefix(limit))
+	}
+
+	private static func applying(_ boosts: [String: Int], to candidate: Candidate) -> Candidate {
+		guard let boost = boosts[candidate.word] else { return candidate }
+		return Candidate(word: candidate.word, cost: candidate.cost,
+			logFreq: log(exp(candidate.logFreq) + Double(boost)))
 	}
 
 	/// Personal-use lift on a static word's frequency term — mirrors what `Trie.bump`
@@ -208,20 +244,45 @@ final class Lexicon {
 
 	/// Adoption: known words get their frequency bumped; unknown words enter the
 	/// dynamic trie once the user has typed them `adoptAfter` times.
-	func noteUse(of lw: String, timesUsed: Int, adoptAfter: Int) {
+	func noteUse(of lw: String, timesUsed: Int, adoptAfter: Int,
+				 allowAdoption: Bool = false) {
 		lock.lock(); defer { lock.unlock() }
-		if staticTrie, langData?.trieContains(lw) == true {
+		let baseWord = (staticTrie && langData?.trieContains(lw) == true)
+			|| (!staticTrie && baseTrie.contains(lw))
+		if baseWord {
 			boosts[lw] = min((boosts[lw] ?? 0) + 1, 100)
 			// Bound the key count: halve every entry, drop what falls to zero. Habits
 			// (high boosts) survive; one-off words shed. Rare (only past the cap).
 			if boosts.count > Self.maxBoosts {
 				boosts = boosts.compactMapValues { $0 >= 2 ? $0 >> 1 : nil }
 			}
-		} else if dynamicTrie.contains(lw) {
-			dynamicTrie.bump(lw)
-		} else if timesUsed >= adoptAfter {
-			dynamicTrie.insert(lw, freq: timesUsed)
+		} else if supplementaryTrie.contains(lw) {
+			if supplementaryGlideWords[lw] != nil {
+				supplementaryGlideWords[lw] = min((supplementaryGlideWords[lw] ?? 0) + 1, 500)
+			}
+			return
+		} else if personalTrie.contains(lw) {
+			personalTrie.bump(lw)
+			personalGlideWords[lw] = min((personalGlideWords[lw] ?? timesUsed) + 1, 500)
+		} else if allowAdoption, timesUsed >= adoptAfter {
+			personalTrie.insert(lw, freq: timesUsed)
+			if Self.isGlideSpelling(lw) {
+				personalGlideWords[lw] = timesUsed
+				if personalGlideWords.count > Self.maxPersonalGlideWords {
+					let keep = personalGlideWords.sorted { $0.value > $1.value }
+						.prefix(Self.maxPersonalGlideWords)
+					personalGlideWords = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
+				}
+			}
 		}
+	}
+
+	func resetPersonalization() {
+		lock.lock()
+		personalTrie = Trie()
+		personalGlideWords.removeAll(keepingCapacity: false)
+		boosts.removeAll(keepingCapacity: false)
+		lock.unlock()
 	}
 
 	/// Capitalize a cold-start opener (the empty bar is a sentence start): the→The,
@@ -279,14 +340,14 @@ final class Lexicon {
 						if top.count > 32 { top.sort { $0.1 > $1.1 }; top.removeLast(16) }
 					}
 				}
-				lock.lock(); dynamicTrie = t; lock.unlock()
+				lock.lock(); baseTrie = t; lock.unlock()
 				topWords = top.sorted { $0.1 > $1.1 }.prefix(8).map(\.0)
 			}
 		} else {
 			let seed = "the be to of and a in that have i it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us is are was word".split(separator: " ")
 			let t = Trie()
 			for (i, w) in seed.enumerated() { t.insert(String(w), freq: seed.count - i) }
-			lock.lock(); dynamicTrie = t; lock.unlock()
+			lock.lock(); baseTrie = t; lock.unlock()
 			topWords = seed.prefix(8).map(String.init)
 		}
 	}

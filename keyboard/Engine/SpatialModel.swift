@@ -2,14 +2,18 @@ import Foundation
 
 // Spatial model + per-tap coordinates — extracted from Keyboardengine.swift.
 
-struct KeyTap {
+struct KeyTap: Equatable {
 	let dx: Double
 	let dy: Double
 }
 
 enum KB {
 	static let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
-	static let rowOffset: [Double] = [0.0, 0.25, 0.75]
+	/// Normalized visual center offsets in key pitches. The UIKit deck centers the
+	/// nine-key home row by half a pitch; shift places Z one-and-a-half pitches after Q.
+	/// These values are shared by tap scoring and Glide decoding, so changing layout
+	/// without changing this table is a systematic input error, not a cosmetic issue.
+	static let rowOffset: [Double] = [0.0, 0.5, 1.5]
 	static let sigma = 1.0
 	static let apostrophe = UInt8(ascii: "'")
 	/// Skipping an apostrophe the candidate has but the typed string omitted costs a
@@ -50,4 +54,3 @@ enum KB {
 		return intended == typed ? min(3.0, base) : min(3.0, base + 0.3)
 	}
 }
-

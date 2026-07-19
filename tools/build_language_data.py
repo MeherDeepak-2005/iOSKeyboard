@@ -7,7 +7,7 @@ dictionaries on the heap: the pages are clean/file-backed, the OS evicts them
 under pressure, and they barely count against the extension's ~60-70 MB kill
 limit (dirty heap counts fully; mapped read-only file pages effectively don't).
 
-FORMAT v3 — v2's open-addressing hash tables plus a STATIC TRIE section, so the
+FORMAT v4 — v3's open-addressing tables and static trie plus sentence starters, so the
 Swift side can run its fuzzy-search DP and prefix completions directly over the
 mapped file instead of materializing a ~60k-word heap trie at every keyboard
 launch (that trie was most of the extension's fixed dirty footprint). Context
@@ -17,7 +17,8 @@ Keyboardengine.swift) and the eval-harness mirror this format identically.
 
 Layout (all fields u32 LE unless noted; entry ranges are [start, start+count)):
 
-  header   magic 'KBLM', version=3, W, biBuckets, BE, triBuckets, TE, trieNodes
+  header   magic 'KBLM', version=4, W, biBuckets, BE, triBuckets, TE, trieNodes,
+           starterCount
   freq     u32 x W                                 word frequencies, id = index
   offsets  u32 x (W+1)                             byte offsets into blob, per id
   biHash   (ctx, total, entStart, entCount) x biBuckets    empty slot: ctx=0xFFFFFFFF
@@ -30,23 +31,23 @@ Layout (all fields u32 LE unless noted; entry ranges are [start, start+count)):
            wordID 0xFFFFFFFF = not a word; maxFreq = max corpus frequency in
            the node's subtree, so top-k completion is a best-first walk that
            emits words in exact frequency order without visiting the subtree.
+  starters (wordID, count) x starterCount
   blob     utf8 word bytes
 
 `total` is the TRUE context total (pre-truncation) so probabilities stay honest
 even though only the top predictions per context are kept.
 
-Sources:
-  - Vocabulary (the trie dictionary + id space): hermitdave/FrequencyWords
-    (OpenSubtitles 2018) — a broad, conversational 60k word list. Kept large so
-    autocorrect has good coverage of valid words.
-  - Bi/trigram TABLES: our own tools/lm/data/corpus.txt (SMS + DailyDialog +
-    OpenSubtitles + Leipzig, register-tagged). Counting context from the same
-    messaging-register corpus the LM trains on — not Norvig web bigrams / Leipzig
-    news trigrams — is the "improve the n-gram model" change.
+Release inputs are deliberately immutable and checksum-verified:
+  - Vocabulary: hermitdave/FrequencyWords at a pinned Git commit (CC BY-SA 4.0).
+  - Bi/trigrams: the vendored Tatoeba English CC0 sentence export snapshot dated
+    2026-07-18. It is committed under tools/data so a rebuild never silently
+    changes when an upstream nightly export changes.
 
-Downloads are cached in tools/.cache/ (gitignored). Re-run any time.
+See ARTIFACTS.json and THIRD_PARTY_NOTICES.md for provenance and licensing.
 """
 
+import bz2
+import hashlib
 import re
 import struct
 import sys
@@ -54,16 +55,25 @@ import urllib.request
 from collections import Counter, defaultdict, deque
 from pathlib import Path
 
-DICT_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/en/en_full.txt"
+DICT_COMMIT = "525f9b560de45753a5ea01069454e72e9aa541c6"
+DICT_URL = (
+    "https://raw.githubusercontent.com/hermitdave/FrequencyWords/"
+    f"{DICT_COMMIT}/content/2018/en/en_full.txt"
+)
+DICT_SHA256 = "7fea67ab954e2c01df6c608c9826e594cf36f8823b3243554f88245fb75dc506"
+TATOEBA_SHA256 = "14f975533e2f15257f674d6099b95cf6b2c3458a8baf7496935081ad862f4b91"
 
 DICT_SIZE = 60_000
 MIN_WORD_FREQ = 5          # drop one-off OCR/subtitle junk from the long tail
-BI_PER_CTX = 32            # predictions per context worth keeping
-TRI_PER_CTX = 16
-TRI_MIN_COUNT = 3          # a trigram seen twice in the corpus is noise
+# Keep the complete observed successor distributions. The tables are mmap-backed,
+# and this corpus is small enough that truncating before measuring recall buys little
+# while permanently deleting valid continuations.
+BI_PER_CTX = None
+TRI_PER_CTX = None
+TRI_MIN_COUNT = 1
 STARTERS_KEEP = 256        # sentence-initial words kept for the cold-start bar
-CONTRACTIONS_KEEP = 300    # corpus-harvested interior-apostrophe words merged into vocab
-CONTRACTIONS_MIN = 100     # min corpus count — below this it's a typo, not a contraction
+CONTRACTIONS_KEEP = 500    # corpus-harvested interior-apostrophe words merged into vocab
+CONTRACTIONS_MIN = 2       # the CC0 snapshot is intentionally small and curated
 HASH_LOAD = 0.7            # hash-table load factor (buckets = nextPow2(n / load))
 EMPTY = 0xFFFFFFFF         # empty-bucket sentinel (word ids are < DICT_SIZE)
 
@@ -82,25 +92,56 @@ WORD = re.compile(r"^[a-z']+$")
 TOKEN = re.compile(r"[a-z']+")
 ROOT = Path(__file__).resolve().parent
 CACHE = ROOT / ".cache"
-CORPUS = ROOT / "lm" / "data" / "corpus.txt"
+CORPUS = ROOT / "data" / "tatoeba-eng-cc0-2026-07-18.tsv.bz2"
+SUPPLEMENTAL = ROOT / "data" / "english_supplemental.tsv"
 OUT = ROOT.parent / "keyboard" / "langdata.bin"
 
 MASK64 = (1 << 64) - 1
 
 
-def fetch(url: str, cache_name: str) -> Path:
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def require_hash(path: Path, expected: str) -> Path:
+    actual = sha256(path)
+    if actual != expected:
+        sys.exit(f"checksum mismatch for {path}: expected {expected}, got {actual}")
+    return path
+
+
+def fetch(url: str, cache_name: str, expected_sha256: str) -> Path:
     CACHE.mkdir(exist_ok=True)
     path = CACHE / cache_name
     if not path.exists():
         print(f"downloading {url} ...", flush=True)
         urllib.request.urlretrieve(url, path)
-    return path
+    return require_hash(path, expected_sha256)
+
+
+def corpus_sentences():
+    """Yield normalized word tokens from the pinned four-column Tatoeba export."""
+    require_hash(CORPUS, TATOEBA_SHA256)
+    with bz2.open(CORPUS, "rt", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            fields = line.rstrip("\n").split("\t", 3)
+            if len(fields) < 3 or fields[1] != "eng":
+                continue
+            text = fields[2].lower().replace("’", "'").replace("‘", "'").replace("`", "'")
+            tokens = [t.strip("'") for t in TOKEN.findall(text)]
+            tokens = [t for t in tokens if t]
+            if tokens:
+                yield tokens[:128]
 
 
 def build_vocab() -> list[tuple[str, int]]:
     vocab: list[tuple[str, int]] = []
     seen: set[str] = set()
-    for line in fetch(DICT_URL, "en_full.txt").read_text(errors="replace").splitlines():
+    for line in fetch(DICT_URL, "en_full.txt", DICT_SHA256).read_text(errors="replace").splitlines():
         parts = line.split()
         if len(parts) != 2 or not parts[1].isdigit():
             continue
@@ -115,34 +156,48 @@ def build_vocab() -> list[tuple[str, int]]:
         vocab.append((w, min(freq, 0xFFFFFFFF)))
         if len(vocab) >= DICT_SIZE:
             break
+    if SUPPLEMENTAL.exists():
+        for line in SUPPLEMENTAL.read_text(encoding="utf-8").splitlines():
+            line = line.partition("#")[0].strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) != 2 or not parts[1].isdigit():
+                sys.exit(f"invalid supplemental vocabulary row: {line!r}")
+            word, freq = parts[0].lower(), int(parts[1])
+            if not WORD.fullmatch(word) or word.startswith("'") or word.endswith("'"):
+                sys.exit(f"invalid supplemental word: {word!r}")
+            if word not in seen:
+                seen.add(word)
+                vocab.append((word, min(freq, 0xFFFFFFFF)))
     return vocab
 
 
 def build_ngrams(ids: dict[str, int]):
     """Count bi/trigrams AND sentence starters over corpus.txt (messaging register).
 
-    Starters = the first in-vocab word of each line. This is the fix for cold-start
+    Starters = the first word of each line only when that word is in-vocab. This is the fix for cold-start
     suggestions: ranking the empty-context bar by GLOBAL frequency surfaces mid-sentence
     function words (and, of, to) that almost never open a message. Sentence-initial
     counts instead surface openers — i, the, i'm, you, what — the way stock keyboards do.
     NOT TF/IDF: that would wrongly suppress 'the', which is a fine opener."""
     if not CORPUS.exists():
-        sys.exit(f"missing {CORPUS} — run tools/lm/prepare_data.py first")
+        sys.exit(f"missing immutable corpus snapshot: {CORPUS}")
     by_ctx_bi: dict[int, Counter] = defaultdict(Counter)
     tri_counts: Counter = Counter()
     starter_counts: Counter = Counter()
     print(f"counting bi/trigrams + starters over {CORPUS.name} ...", flush=True)
-    with CORPUS.open(errors="replace") as f:
-        for line in f:
-            toks = line.split()
-            if toks and toks[0].startswith("<"):        # drop the register tag
-                toks = toks[1:]
-            ti = [ids[t] for t in toks if t in ids]
-            if ti:
-                starter_counts[ti[0]] += 1              # first word of the sentence
-            for i in range(len(ti) - 1):
+    for toks in corpus_sentences():
+        ti = [ids.get(t) for t in toks]
+        if ti and ti[0] is not None:
+            starter_counts[ti[0]] += 1
+        # OOV tokens are hard boundaries. Deleting them first would invent an
+        # adjacency between words that never touched in the source sentence.
+        for i in range(len(ti) - 1):
+            if ti[i] is not None and ti[i + 1] is not None:
                 by_ctx_bi[ti[i]][ti[i + 1]] += 1
-            for i in range(len(ti) - 2):
+        for i in range(len(ti) - 2):
+            if ti[i] is not None and ti[i + 1] is not None and ti[i + 2] is not None:
                 tri_counts[(ti[i], ti[i + 1], ti[i + 2])] += 1
     bigrams = {c: cnt.most_common() for c, cnt in by_ctx_bi.items()}
     by_ctx_tri: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
@@ -248,14 +303,14 @@ def write_bin(vocab, bigrams, trigrams, starters) -> None:
     bi_rows, bi_ent = [], []
     for ctx, ent in bigrams.items():
         total = sum(c for _, c in ent)
-        kept = ent[:BI_PER_CTX]
+        kept = ent if BI_PER_CTX is None else ent[:BI_PER_CTX]
         bi_rows.append((ctx, min(total, 0xFFFFFFFF), len(bi_ent), len(kept)))
         bi_ent += [(w, min(c, 0xFFFFFFFF)) for w, c in kept]
 
     tri_rows, tri_ent = [], []
     for (a, b), ent in trigrams.items():
         total = sum(c for _, c in ent)
-        kept = ent[:TRI_PER_CTX]
+        kept = ent if TRI_PER_CTX is None else ent[:TRI_PER_CTX]
         tri_rows.append((a, b, min(total, 0xFFFFFFFF), len(tri_ent), len(kept)))
         tri_ent += [(w, min(c, 0xFFFFFFFF)) for w, c in kept]
 
@@ -263,7 +318,8 @@ def write_bin(vocab, bigrams, trigrams, starters) -> None:
     tri_buckets, tri_table = build_table(tri_rows, key_of=lambda r: (r[0] << 32) | r[1])
     trie = build_trie(vocab)
 
-    with OUT.open("wb") as f:
+    temporary = OUT.with_suffix(".bin.tmp")
+    with temporary.open("wb") as f:
         # v4 = v3 + a sentence-starters section (starterCount in the header, an array of
         # (wordId, count) sorted by count desc, placed between the trie and the blob).
         f.write(struct.pack("<9I", 0x4B424C4D, 4, len(vocab),
@@ -284,6 +340,7 @@ def write_bin(vocab, bigrams, trigrams, starters) -> None:
         for w, n in starters:
             f.write(struct.pack("<2I", w, min(n, 0xFFFFFFFF)))
         f.write(blob)
+    temporary.replace(OUT)
     mb = OUT.stat().st_size / 1e6
     top = ", ".join(vocab[w][0] for w, _ in starters[:6])
     print(f"wrote {OUT} ({mb:.1f} MB): {len(vocab)} words, "
@@ -299,28 +356,38 @@ def merge_contractions(vocab: list[tuple[str, int]]) -> list[tuple[str, int]]:
     Harvest interior-apostrophe tokens from our own corpus, scale their counts onto
     the vocab's frequency scale (via anchor words present in both), and merge."""
     if not CORPUS.exists():
-        sys.exit(f"missing {CORPUS} — run tools/lm/prepare_data.py first")
+        sys.exit(f"missing immutable corpus snapshot: {CORPUS}")
     pat = re.compile(r"^[a-z]+'[a-z]+$")
     counts: Counter = Counter()
     anchors = {"you": 0, "the": 0, "and": 0, "that": 0}
     print("harvesting contractions from corpus ...", flush=True)
-    with CORPUS.open(errors="replace") as f:
-        for line in f:
-            for tok in line.split():
-                if tok in anchors:
-                    anchors[tok] += 1
-                elif "'" in tok and pat.match(tok):
-                    counts[tok] += 1
+    for tokens in corpus_sentences():
+        for tok in tokens:
+            if tok in anchors:
+                anchors[tok] += 1
+            elif "'" in tok and pat.match(tok):
+                counts[tok] += 1
     vfreq = dict(vocab)
     ratios = [vfreq[w] / c for w, c in anchors.items() if c > 0 and w in vfreq]
     scale = sum(ratios) / len(ratios) if ratios else 1.0
-    have = set(vfreq)
-    added = [(w, min(int(c * scale), 0xFFFFFFFF))
-             for w, c in counts.most_common(CONTRACTIONS_KEEP)
-             if c >= CONTRACTIONS_MIN and w not in have]
-    merged = sorted(vocab + added, key=lambda e: -e[1])   # keep "earlier id = more frequent"
+    merged_freq = dict(vfreq)
+    added: list[tuple[str, int]] = []
+    upgraded = 0
+    for word, count in counts.most_common(CONTRACTIONS_KEEP):
+        if count < CONTRACTIONS_MIN:
+            continue
+        estimated = min(max(1, int(count * scale)), 0xFFFFFFFF)
+        if word in merged_freq:
+            if estimated > merged_freq[word]:
+                merged_freq[word] = estimated
+                upgraded += 1
+        else:
+            merged_freq[word] = estimated
+            added.append((word, estimated))
+    merged = sorted(merged_freq.items(), key=lambda e: (-e[1], e[0]))
     top = ", ".join(w for w, _ in added[:8])
-    print(f"contractions: +{len(added)} merged (scale x{scale:.0f}) [{top} ...]")
+    print(f"contractions: +{len(added)} merged, {upgraded} reweighted "
+          f"(scale x{scale:.0f}) [{top} ...]")
     return merged
 
 

@@ -8,6 +8,10 @@ final class KeyButton: UIView {
 	let repeats: Bool
 	let letterBase: String?          // lowercase base letter (for in-place shift relabelling)
 	let isShift: Bool                // shift key → its glyph is swapped on shift changes
+	let isInputModeSwitch: Bool
+	let isSpace: Bool
+	private(set) var alternatives: [String]
+	let role: KeyRole
 	private let canPopup: Bool       // show the character balloon on press
 	private let dark: Bool
 	private let gradient: CAGradientLayer?        // non-nil for the accent (action) key
@@ -19,6 +23,9 @@ final class KeyButton: UIView {
 	private var iconView: UIImageView?            // set for symbol keys (e.g. the shift glyph)
 	private var contentView: UIView?               // the glyph (label or icon) — hidden while covered
 	private let recessColor: UIColor               // cap fill while the balloon is floating
+	private let spokenLabelWasExplicit: Bool
+	private let foregroundColor: UIColor
+	private(set) var acceptsInput = true
 
 	/// Character to show in the press balloon (nil = no balloon). Reads the live label
 	/// so it always reflects the current shift/case.
@@ -30,25 +37,36 @@ final class KeyButton: UIView {
 		self.repeats = spec.repeats
 		self.letterBase = spec.letterBase
 		self.isShift = spec.isShift
+		self.isInputModeSwitch = spec.isInputModeSwitch
+		self.isSpace = spec.isSpace
+		self.alternatives = spec.alternatives
+		self.role = spec.role
 		self.canPopup = spec.popup
 		self.dark = theme.isDark
 		self.gradient = spec.role == .accent ? CAGradientLayer() : nil
-		self.dimColor = theme.isDark ? UIColor(white: 1, alpha: 0.18) : UIColor(white: 0, alpha: 0.12)
+		self.dimColor = theme.pressedOverlay
 		// Recessed "empty slot" look while the balloon floats: darken in both themes so the
 		// cap reads as a blackish transparent well and only the raised balloon shows the glyph.
 		self.recessColor = theme.isDark ? UIColor(white: 0, alpha: 0.34) : UIColor(white: 0, alpha: 0.16)
 		self.isPill = spec.pill
 		self.baseRadius = theme.cornerRadius
+		self.spokenLabelWasExplicit = spec.accessibilityLabel != nil
+		self.foregroundColor = {
+			switch spec.role {
+			case .normal: return theme.keyText
+			case .special: return theme.specialKeyText
+			case .accent: return theme.accentKeyText
+			case .accentSoft: return theme.accentSoftText
+			}
+		}()
 		super.init(frame: .zero)
 		isUserInteractionEnabled = false        // touches handled by KeyboardView
+		isAccessibilityElement = true
+		accessibilityLabel = spec.accessibilityLabel ?? spec.label ?? Self.spokenName(for: spec.symbol)
+		accessibilityTraits = .keyboardKey
+		if spec.isSpace { accessibilityHint = "Hold and drag to move the cursor" }
 
-		let fg: UIColor
-		switch spec.role {
-		case .normal:     fg = theme.keyText
-		case .special:    fg = theme.specialKeyText
-		case .accent:     fg = theme.accentKeyText
-		case .accentSoft: fg = theme.accentSoftText
-		}
+		let fg = foregroundColor
 
 		// Background: a gradient for the action key, a flat fill otherwise.
 		if let gradient {
@@ -83,9 +101,10 @@ final class KeyButton: UIView {
 			lbl.text = spec.label
 			lbl.textColor = fg
 			let multi = (spec.label?.count ?? 0) > 1
+			let bold = UIAccessibility.isBoldTextEnabled
 			// Key legends use Apple's system face for consistent metrics and alignment.
-			lbl.font = multi ? .systemFont(ofSize: 16, weight: .medium)
-							 : theme.font.uiFont(ofSize: 23)
+			lbl.font = multi ? .systemFont(ofSize: 16, weight: bold ? .semibold : .medium)
+							 : .systemFont(ofSize: 23, weight: bold ? .medium : .regular)
 			content = lbl
 			label = lbl
 		}
@@ -99,6 +118,11 @@ final class KeyButton: UIView {
 
 		layer.cornerRadius = theme.cornerRadius
 		layer.cornerCurve = .continuous
+		if UIAccessibility.shouldDifferentiateWithoutColor,
+		   spec.role == .accent || spec.role == .accentSoft {
+			layer.borderWidth = 1.25
+			layer.borderColor = foregroundColor.withAlphaComponent(0.48).cgColor
+		}
 		// Soft modern drop shadow. shadowPath is set in layoutSubviews so Core Animation
 		// never rasterizes an offscreen blur on the hot path.
 		layer.shadowColor = theme.shadowColor.cgColor
@@ -107,6 +131,36 @@ final class KeyButton: UIView {
 		layer.shadowOffset = CGSize(width: 0, height: 1)
 	}
 	required init?(coder: NSCoder) { fatalError() }
+
+	override func accessibilityActivate() -> Bool {
+		guard acceptsInput else { return false }
+		action()
+		return true
+	}
+
+	func trigger() {
+		guard acceptsInput else { return }
+		action()
+	}
+
+	func setInputEnabled(_ enabled: Bool) {
+		guard acceptsInput != enabled else { return }
+		acceptsInput = enabled
+		alpha = enabled ? 1 : 0.42
+		isAccessibilityElement = true
+		if enabled { accessibilityTraits.remove(.notEnabled) }
+		else { accessibilityTraits.insert(.notEnabled) }
+	}
+
+	func setAlternatives(_ values: [String], activation: @escaping (String) -> Void) {
+		alternatives = values
+		accessibilityCustomActions = values.map { value in
+			UIAccessibilityCustomAction(name: value) { _ in
+				activation(value)
+				return true
+			}
+		}
+	}
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
@@ -139,9 +193,59 @@ final class KeyButton: UIView {
 
 	/// Relabel a text key in place (used to switch letters between lower/upper case on a
 	/// shift change, without rebuilding the view).
-	func setTitle(_ text: String) { label?.text = text }
+	func setTitle(_ text: String) {
+		if label == nil {
+			let newLabel = UILabel()
+			newLabel.textColor = foregroundColor
+			installContent(newLabel)
+			label = newLabel
+		}
+		let bold = UIAccessibility.isBoldTextEnabled
+		label?.font = text.count > 1
+			? .systemFont(ofSize: 16, weight: bold ? .semibold : .medium)
+			: .systemFont(ofSize: 23, weight: bold ? .medium : .regular)
+		label?.text = text
+		label?.isHidden = false
+		iconView?.isHidden = true
+		contentView = label
+		if !spokenLabelWasExplicit { accessibilityLabel = text }
+	}
 	/// Swap a symbol key's glyph in place (used for shift → shift.fill → capslock.fill).
 	func setSymbol(_ name: String) {
+		if iconView == nil {
+			let newIcon = UIImageView()
+			newIcon.tintColor = foregroundColor
+			installContent(newIcon)
+			iconView = newIcon
+		}
 		iconView?.image = UIImage(systemName: name, withConfiguration: Self.symbolConfig)
+		iconView?.isHidden = false
+		label?.isHidden = true
+		contentView = iconView
+		if isShift {
+			accessibilityLabel = name == "capslock.fill" ? "Caps Lock" : "Shift"
+			accessibilityValue = name == "shift" ? "Off" : "On"
+		}
+	}
+
+	private func installContent(_ view: UIView) {
+		view.translatesAutoresizingMaskIntoConstraints = false
+		addSubview(view)
+		NSLayoutConstraint.activate([
+			view.centerXAnchor.constraint(equalTo: centerXAnchor),
+			view.centerYAnchor.constraint(equalTo: centerYAnchor)
+		])
+	}
+
+	private static func spokenName(for symbol: String?) -> String? {
+		switch symbol {
+		case "delete.left": return "Delete"
+		case "return": return "Return"
+		case "shift", "shift.fill": return "Shift"
+		case "capslock.fill": return "Caps Lock"
+		case "face.smiling": return "Emoji"
+		case "globe": return "Next Keyboard"
+		default: return nil
+		}
 	}
 }

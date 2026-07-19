@@ -102,18 +102,16 @@ enum GlidePreprocess {
 		Array(Set(a).union(b)).sorted()
 	}
 
-	/// Map a view point to grid space, relative to its nearest key center. The
-	/// nearest-key-relative mapping absorbs the qwerty row offsets automatically.
+	/// One affine view→grid transform anchored to a real key center. The prior
+	/// nearest-key-relative transform changed anchors at Voronoi boundaries; any tiny
+	/// visual/model offset therefore became a discontinuity in an otherwise smooth
+	/// stroke. With renderer and model sharing row offsets, every key yields the same
+	/// affine transform, so one stable reference is both cheaper and continuous.
 	static func toGrid(_ p: CGPoint, layout: GlideLayout) -> CGPoint {
-		var best = layout.centers[0]
-		var bestD = CGFloat.greatestFiniteMagnitude
-		for c in layout.centers {
-			let d = (c.point.x - p.x) * (c.point.x - p.x) + (c.point.y - p.y) * (c.point.y - p.y)
-			if d < bestD { bestD = d; best = c }
-		}
-		let g = KB.grid(for: best.letter) ?? (0, 0)
-		let dx = Double((p.x - best.point.x) / layout.xPitch)
-		let dy = Double((p.y - best.point.y) / layout.yPitch)
+		let reference = layout.centers.first(where: { $0.letter == "q" }) ?? layout.centers[0]
+		let g = KB.grid(for: reference.letter) ?? (0, 0)
+		let dx = Double((p.x - reference.point.x) / layout.xPitch)
+		let dy = Double((p.y - reference.point.y) / layout.yPitch)
 		return CGPoint(x: g.0 + dx, y: g.1 + dy)
 	}
 
@@ -273,10 +271,28 @@ enum GlideDecoder {
 		guard obs.count == N else { return [] }
 		let obsTan = dirWeight > 0 ? tangents(obs) : []
 
+		struct PathNode { let point: CGPoint; let parent: Int }
+		var pathArena: [PathNode] = []
+		pathArena.reserveCapacity(max(256, beamWidth * 20))
+		var pathScratch: [CGPoint] = []
+		pathScratch.reserveCapacity(22)
+		func appendPath(_ point: CGPoint, parent: Int) -> Int {
+			pathArena.append(PathNode(point: point, parent: parent))
+			return pathArena.count - 1
+		}
+
 		var results: [String: Double] = [:]
-		func emit(_ node: Int, _ letters: [CGPoint]) {
+		func emit(_ node: Int, _ pathIndex: Int) {
 			guard let w = lang.trieWord(atNode: node), w.count >= 2 else { return }
-			let cost = shapeCost(obs, obsTan, letters, band: band, dirWeight: dirWeight)
+			pathScratch.removeAll(keepingCapacity: true)
+			var index = pathIndex
+			while index >= 0 {
+				let entry = pathArena[index]
+				pathScratch.append(entry.point)
+				index = entry.parent
+			}
+			pathScratch.reverse()
+			let cost = shapeCost(obs, obsTan, pathScratch, band: band, dirWeight: dirWeight)
 			if results[w] == nil || cost < results[w]! { results[w] = cost }
 		}
 
@@ -284,8 +300,49 @@ enum GlideDecoder {
 		// letter, keeps letters-in-swipe-order) MINUS a frequency pull, so frequent prefixes
 		// survive even when a letter was under-reached. `prune` holds the raw shape sum;
 		// `key` is what we rank/prune by.
-		struct Hyp { let node: Int; let j: Int; let prune: Double; let key: Double; let letters: [CGPoint] }
-		func best(_ hs: [Hyp]) -> [Hyp] { hs.count <= beamWidth ? hs : Array(hs.sorted { $0.key < $1.key }.prefix(beamWidth)) }
+		struct Hyp { let node: Int; let j: Int; let prune: Double; let key: Double; let pathIndex: Int }
+		func better(_ lhs: Hyp, than rhs: Hyp) -> Bool {
+			lhs.key == rhs.key ? lhs.node < rhs.node : lhs.key < rhs.key
+		}
+		func siftUp(_ heap: inout [Hyp], from start: Int) {
+			var child = start
+			while child > 0 {
+				let parent = (child - 1) / 2
+				guard better(heap[parent], than: heap[child]) else { break }
+				heap.swapAt(parent, child)
+				child = parent
+			}
+		}
+		func siftDown(_ heap: inout [Hyp], from start: Int) {
+			var parent = start
+			while true {
+				let left = parent * 2 + 1
+				guard left < heap.count else { return }
+				let right = left + 1
+				var worseChild = left
+				if right < heap.count, better(heap[left], than: heap[right]) { worseChild = right }
+				guard better(heap[parent], than: heap[worseChild]) else { return }
+				heap.swapAt(parent, worseChild)
+				parent = worseChild
+			}
+		}
+		/// Keep the best K with a bounded max-heap. The prior implementation sorted every
+		/// child at every trie depth even though all but K entries were discarded.
+		func best(_ hypotheses: [Hyp]) -> [Hyp] {
+			guard hypotheses.count > beamWidth else { return hypotheses }
+			var heap: [Hyp] = []
+			heap.reserveCapacity(beamWidth)
+			for hypothesis in hypotheses {
+				if heap.count < beamWidth {
+					heap.append(hypothesis)
+					siftUp(&heap, from: heap.count - 1)
+				} else if better(hypothesis, than: heap[0]) {
+					heap[0] = hypothesis
+					siftDown(&heap, from: 0)
+				}
+			}
+			return heap
+		}
 		func keyFor(_ prune: Double, _ node: Int) -> Double {
 			prune - freqLambda * log(Double(lang.trieMaxFreq(ofNode: node)) + 1)
 		}
@@ -301,20 +358,25 @@ enum GlideDecoder {
 		seeds.sort { $0.d < $1.d }
 		var beam: [Hyp] = []
 		for (i, s) in seeds.enumerated() where s.d <= Double(seedRadius) || i < Self.seedMinKeep {
-			let h = Hyp(node: s.node, j: 0, prune: s.d, key: keyFor(s.d, s.node), letters: [s.l0])
-			beam.append(h); emit(s.node, h.letters)
+			let pathIndex = appendPath(s.l0, parent: -1)
+			let h = Hyp(node: s.node, j: 0, prune: s.d,
+				key: keyFor(s.d, s.node), pathIndex: pathIndex)
+			beam.append(h); emit(s.node, h.pathIndex)
 		}
 		beam = best(beam)
 
 		let maxDepth = 22
+		var next: [Hyp] = []
+		next.reserveCapacity(beamWidth * 12)
 		for _ in 1..<maxDepth {
 			if shouldCancel?() == true { return [] }
-			var next: [Hyp] = []
+			next.removeAll(keepingCapacity: true)
 			for h in beam {
 				lang.forEachChild(ofNode: h.node) { label, node in
 					if label == UInt8(ascii: "'") {          // geometry-free apostrophe
-						let nh = Hyp(node: node, j: h.j, prune: h.prune, key: keyFor(h.prune, node), letters: h.letters)
-						next.append(nh); emit(node, nh.letters)
+						let nh = Hyp(node: node, j: h.j, prune: h.prune,
+							key: keyFor(h.prune, node), pathIndex: h.pathIndex)
+						next.append(nh); emit(node, nh.pathIndex)
 						return
 					}
 					guard let la = gridCenter(label) else { return }
@@ -323,8 +385,10 @@ enum GlideDecoder {
 					var k = h.j + 1
 					while k < hi { let d = dist(obs[k], la); if d < bd { bd = d; bj = k }; k += 1 }
 					let np = h.prune + bd
-					let nh = Hyp(node: node, j: bj, prune: np, key: keyFor(np, node), letters: h.letters + [la])
-					next.append(nh); emit(node, nh.letters)
+					let pathIndex = appendPath(la, parent: h.pathIndex)
+					let nh = Hyp(node: node, j: bj, prune: np,
+						key: keyFor(np, node), pathIndex: pathIndex)
+					next.append(nh); emit(node, nh.pathIndex)
 				}
 			}
 			if next.isEmpty { break }
