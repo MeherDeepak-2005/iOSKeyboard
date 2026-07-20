@@ -99,13 +99,29 @@ final class NgramScorer {
 		}
 	}
 
+	/// Sparse-context shrinkage. A context table with few TOTAL observations is
+	/// unreliable, so its observed distribution is pulled toward the lower-order
+	/// backoff. Witten-Bell alone (observedWeight = total/(total+types)) still hands a
+	/// lone count-1 successor in a ~25-observation table ~2% mass (ln ≈ -3.6) — ~9 nats
+	/// above its unigram, enough for one Tatoeba sentence to nearly fire a garbage
+	/// correction ("receive physician"/"receive communion", 2026-07-20 evidence dump).
+	/// The confidence factor total/(total+floor) is ≈1 for well-populated tables and
+	/// ~halves the observed weight for tiny ones. MIRRORED EXACTLY in
+	/// eval_harness.py (`SPARSE_CONTEXT_FLOOR`) — the two must stay numerically identical.
+	/// 8: a ~24% discount on a tiny (total≈25) table, only ~4% on a normal (total≈200)
+	/// one. Larger values barely help the pathological tables while disturbing legit
+	/// mid-size contexts (harness top-1 cost is flat from ~4 upward, so this is chosen
+	/// for benefit/disturbance balance, not to chase the synthetic score).
+	private static let sparseContextFloor = 8.0
+
 	private func interpolate(total rawTotal: Int, types rawTypes: Int,
 							 count rawCount: Int, backoff: Double) -> Double {
 		let total = Double(rawTotal)
 		let types = Double(rawTypes)
 		guard total > 0, types > 0 else { return backoff }
 		let count = Double(rawCount)
-		let observedWeight = total / (total + types)
+		let confidence = total / (total + Self.sparseContextFloor)
+		let observedWeight = total / (total + types) * confidence
 		return observedWeight * (count / total) + (1 - observedWeight) * backoff
 	}
 
