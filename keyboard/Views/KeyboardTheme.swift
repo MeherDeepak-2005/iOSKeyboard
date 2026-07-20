@@ -269,7 +269,7 @@ private struct KBHSL {
 
 // MARK: - Model
 
-enum KeyboardSurfacePage { case letters, alternateLetters, numbers, symbols, emoji, media }
+enum KeyboardSurfacePage { case letters, alternateLetters, numbers, symbols, emoji, media, clipboard }
 enum KeyboardInputKind: Equatable {
 	case standard, email, url, webSearch, twitter
 	case numbersAndPunctuation, numberPad, decimalPad, phonePad

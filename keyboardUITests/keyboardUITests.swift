@@ -266,6 +266,28 @@ final class keyboardUITests: XCTestCase {
         }
     }
 
+	/// The re-added clipboard icon sits in the suggestion strip and is tappable — proving
+	/// SuggestionBar exposes it and the tap target is valid on a real device. The panel
+	/// it opens is an extension overlay whose accessibility subtree XCUITest does not
+	/// reliably snapshot, so its rendering is covered by the `renderClipboardPanel` unit
+	/// test instead; here we only assert the entry point and that the tap does not crash
+	/// the keyboard (the strip is still queryable afterward).
+	@MainActor
+	func testClipboardIconIsPresentAndTappable() throws {
+		try selectLanguage(identifier: "language.english", title: "English")
+		let host = launchRuntimeHost()
+		guard host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 4) else {
+			throw XCTSkip("Glyph is not the active software keyboard on this simulator")
+		}
+		let clip = host.descendants(matching: .any)["suggestion.clipboard"]
+		XCTAssertTrue(clip.waitForExistence(timeout: 3), "Clipboard icon missing from suggestion strip")
+		XCTAssertTrue(clip.isHittable, "Clipboard icon is not hittable")
+		clip.tap()
+		// The keyboard survived opening the panel: the deck is still there to type on.
+		XCTAssertTrue(host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 3),
+			"Keyboard disappeared after opening the clipboard panel")
+	}
+
 	/// Probes the emoji page end-to-end: opens the palette, taps specific cells (early
 	/// section, then a far section reached via a category tab), and verifies the exact
 	/// tapped emoji landed in the host field — hunting the "emoji selection bug" noted
