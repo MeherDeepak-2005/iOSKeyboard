@@ -17,6 +17,8 @@ final class SuggestionBar: UIView {
 	private var currentPrefix: String?
 	private var highlightsPrimary = false
 	private var stableGlideResult: (winner: String, alternatives: [String])?
+	private let visualOffsetY: CGFloat = -3
+	private let bottomPassThroughHeight: CGFloat = 6
 
 	init(theme: KeyboardTheme) {
 		self.textColor = theme.keyText
@@ -61,13 +63,13 @@ final class SuggestionBar: UIView {
 		super.layoutSubviews()
 		let w = bounds.width / 3
 		for (index, button) in buttons.enumerated() {
-			button.frame = CGRect(x: CGFloat(index) * w, y: 0,
+			button.frame = CGRect(x: CGFloat(index) * w, y: visualOffsetY,
 							  width: w, height: bounds.height)
 		}
 		let highlightInset: CGFloat = 4
 		primaryBackground.frame = CGRect(
 			x: w + highlightInset,
-			y: highlightInset,
+			y: highlightInset + visualOffsetY,
 			width: max(0, w - highlightInset * 2),
 			height: max(0, bounds.height - highlightInset * 2)
 		)
@@ -76,6 +78,14 @@ final class SuggestionBar: UIView {
 		let separatorHeight = max(0, bounds.height - inset * 2)
 		sep1.frame = CGRect(x: w, y: inset, width: 0.5, height: separatorHeight)
 		sep2.frame = CGRect(x: w * 2, y: inset, width: 0.5, height: separatorHeight)
+	}
+
+	/// The strip visually sits close to QWERTY, but the last six points belong to the
+	/// nearest top-row key. VoiceOver keeps the complete 44-point semantic target.
+	override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+		if !UIAccessibility.isVoiceOverRunning,
+			point.y >= bounds.maxY - bottomPassThroughHeight { return false }
+		return super.point(inside: point, with: event)
 	}
 
 	/// `typedPrefix` (the word the user is mid-typing) turns completions into ghost
@@ -92,18 +102,23 @@ final class SuggestionBar: UIView {
 
 	/// Immediate, zero-decoder-cost feedback while a glide is in progress. The path's
 	/// crossed letters occupy the primary (middle) slot until decoding replaces them.
-	func setGlidePreview(_ preview: String?, confident: Bool = true) {
+	func setGlidePreview(_ preview: String?, alternatives: [String] = [],
+		confident: Bool = true) {
 		guard let preview, !preview.isEmpty else {
 			renderStablePresentation()
 			return
 		}
+		let left = alternatives.indices.contains(0) ? alternatives[0] : ""
+		let right = alternatives.indices.contains(1) ? alternatives[1] : ""
+		let displayed = [left, preview, right]
 		for (i, b) in buttons.enumerated() {
 			b.setAttributedTitle(nil, for: .normal)
-			b.setTitle(i == 1 ? preview : "", for: .normal)
+			b.setTitle(displayed[i], for: .normal)
 			b.isEnabled = false
 			b.backgroundColor = .clear
 		}
-		setPrimaryHighlighted(confident)
+		primaryBackground.alpha = confident ? 1 : 0.72
+		setPrimaryHighlighted(true)
 	}
 
 	/// Keep the word that was actually committed in the shaded middle slot. The two
@@ -165,6 +180,7 @@ final class SuggestionBar: UIView {
 
 	private func setPrimaryHighlighted(_ on: Bool) {
 		primaryBackground.isHidden = !on
+		if !on { primaryBackground.alpha = 1 }
 		buttons.indices.forEach { index in
 			buttons[index].accessibilityTraits = index == 1 && on ? [.button, .selected] : .button
 		}

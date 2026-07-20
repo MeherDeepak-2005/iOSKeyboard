@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Export the keyboard LM as a calibrated Core ML W8A8 model.
+"""Export guarded iOS 18 Core ML W8 and calibrated W8A8 research packages.
 
 The production package keeps the existing Swift interface:
 
   tokens, score_positions, target_ids, score_mask, next_positions
       -> candidate_log_probs, next_logits
 
-The default checkpoint is the supplied 10.6M-parameter English pretraining
-checkpoint. Core ML activation calibration and model conversion run in separate
-processes from SentencePiece because those native libraries have deadlocked during
-interpreter teardown on some macOS/Python combinations.
+The exporter refuses pretrain/distill/finetune checkpoints unless an explicit
+research override is supplied. Its defaults write under ``tools/lm/artifacts``;
+promotion into the extension bundle is a separate, reviewed release action.
 
 The final package is W8A8: eligible matrix operations have INT8 weights and INT8
 activations. LayerNorm, softmax, indexing, and public scores remain floating point;
@@ -38,8 +37,10 @@ DEFAULT_CHECKPOINT = DATA / "qwen_pretrain.pt"
 DEFAULT_SENTENCEPIECE = DATA / "qwen_spm.model"
 DEFAULT_CALIBRATION_TEXT = DATA / "messaging_heldout.txt"
 DEFAULT_CALIBRATION_CACHE = DATA / "qwen_coreml_calibration.npz"
-DEFAULT_OUTPUT = KEYBOARD / "rescorer.mlpackage"
-DEFAULT_TOKENIZER_OUTPUT = KEYBOARD / "tokenizer.bin"
+DEFAULT_ARTIFACTS = HERE / "artifacts" / "coreml"
+DEFAULT_OUTPUT = DEFAULT_ARTIFACTS / "keyboard-w8a8.mlpackage"
+DEFAULT_W8_OUTPUT = DEFAULT_ARTIFACTS / "keyboard-w8.mlpackage"
+DEFAULT_TOKENIZER_OUTPUT = DEFAULT_ARTIFACTS / "tokenizer.bin"
 DEFAULT_MANIFEST = HERE / "coreml_export_manifest.json"
 
 L = 32
@@ -47,6 +48,10 @@ K = 8
 MAX_BATCH = 16
 MAX_PACKAGE_MB = 12.0
 WORD_RE = re.compile(r"[A-Za-z]+(?:['’][A-Za-z]+)*")
+INT8_WEIGHT_OPS = (
+    "constexpr_blockwise_shift_scale",  # Core ML Tools 9+
+    "constexpr_affine_dequantize",       # older Core ML Tools
+)
 
 
 def sha256(path: Path) -> str:
@@ -70,6 +75,11 @@ def package_bytes(path: Path) -> int:
     return sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
 
 
+def int8_weight_op_count(counts) -> int:
+    """Accept both current blockwise and legacy affine INT8 representations."""
+    return sum(int(counts.get(name, 0)) for name in INT8_WEIGHT_OPS)
+
+
 def load_checkpoint(path: Path):
     import torch
     from model import count_parameters, load_inference_checkpoint
@@ -83,13 +93,97 @@ def load_checkpoint(path: Path):
     return model, checkpoint
 
 
-def export_tokenizer(sentencepiece_path: Path, output: Path) -> None:
-    import sentencepiece as spm
+def _read_protobuf_varint(data: bytes, offset: int) -> tuple[int, int]:
+    value = 0
+    shift = 0
+    while offset < len(data) and shift < 70:
+        byte = data[offset]
+        offset += 1
+        value |= (byte & 0x7F) << shift
+        if byte < 0x80:
+            return value, offset
+        shift += 7
+    raise ValueError("invalid protobuf varint in SentencePiece model")
 
-    processor = spm.SentencePieceProcessor(model_file=str(sentencepiece_path))
-    count = processor.vocab_size()
-    pieces = [processor.id_to_piece(index) for index in range(count)]
-    scores = [processor.get_score(index) for index in range(count)]
+
+def _protobuf_fields(data: bytes):
+    """Yield protobuf fields without requiring generated SentencePiece bindings."""
+    offset = 0
+    while offset < len(data):
+        key, offset = _read_protobuf_varint(data, offset)
+        field_number, wire_type = key >> 3, key & 0x07
+        if field_number == 0:
+            raise ValueError("invalid protobuf field number in SentencePiece model")
+        if wire_type == 0:
+            value, offset = _read_protobuf_varint(data, offset)
+        elif wire_type == 1:
+            end = offset + 8
+            if end > len(data):
+                raise ValueError("truncated fixed64 protobuf field")
+            value, offset = data[offset:end], end
+        elif wire_type == 2:
+            length, offset = _read_protobuf_varint(data, offset)
+            end = offset + length
+            if end > len(data):
+                raise ValueError("truncated length-delimited protobuf field")
+            value, offset = data[offset:end], end
+        elif wire_type == 5:
+            end = offset + 4
+            if end > len(data):
+                raise ValueError("truncated fixed32 protobuf field")
+            value, offset = data[offset:end], end
+        else:
+            raise ValueError(f"unsupported protobuf wire type {wire_type}")
+        yield field_number, wire_type, value
+
+
+def _read_sentencepiece_model(path: Path) -> tuple[list[str], list[float], int]:
+    """Read the stable ModelProto piece fields used by the iOS tokenizer.
+
+    This build-time fallback keeps Xcode builds reproducible without relying on a
+    developer's global Python environment. It deliberately reads only repeated
+    SentencePiece records (piece, score, type); the UNKNOWN record supplies unk_id.
+    """
+    pieces: list[str] = []
+    scores: list[float] = []
+    unknown_id: int | None = None
+    for field_number, wire_type, value in _protobuf_fields(path.read_bytes()):
+        if field_number != 1 or wire_type != 2:
+            continue
+        piece = ""
+        score = 0.0
+        piece_type = 1
+        for nested_number, nested_wire, nested_value in _protobuf_fields(value):
+            if nested_number == 1 and nested_wire == 2:
+                piece = nested_value.decode("utf-8")
+            elif nested_number == 2 and nested_wire == 5:
+                score = struct.unpack("<f", nested_value)[0]
+            elif nested_number == 3 and nested_wire == 0:
+                piece_type = nested_value
+        if not piece:
+            raise ValueError("SentencePiece record has no text")
+        if piece_type == 2:
+            if unknown_id is not None:
+                raise ValueError("SentencePiece model has multiple UNKNOWN pieces")
+            unknown_id = len(pieces)
+        pieces.append(piece)
+        scores.append(score)
+    if not pieces or unknown_id is None:
+        raise ValueError("SentencePiece model has no pieces or UNKNOWN piece")
+    return pieces, scores, unknown_id
+
+
+def export_tokenizer(sentencepiece_path: Path, output: Path) -> None:
+    try:
+        import sentencepiece as spm
+    except ModuleNotFoundError:
+        pieces, scores, unknown_id = _read_sentencepiece_model(sentencepiece_path)
+    else:
+        processor = spm.SentencePieceProcessor(model_file=str(sentencepiece_path))
+        pieces = [processor.id_to_piece(index) for index in range(processor.vocab_size())]
+        scores = [processor.get_score(index) for index in range(processor.vocab_size())]
+        unknown_id = processor.unk_id()
+    count = len(pieces)
     blob = bytearray()
     offsets = [0]
     for piece in pieces:
@@ -97,11 +191,13 @@ def export_tokenizer(sentencepiece_path: Path, output: Path) -> None:
         offsets.append(len(blob))
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("wb") as handle:
-        handle.write(struct.pack("<4I", 0x4B42544B, 1, count, processor.unk_id()))
+    temporary = output.with_name(f".{output.name}.tmp")
+    with temporary.open("wb") as handle:
+        handle.write(struct.pack("<4I", 0x4B42544B, 1, count, unknown_id))
         handle.write(struct.pack(f"<{count}f", *scores))
         handle.write(struct.pack(f"<{count + 1}I", *offsets))
         handle.write(blob)
+    temporary.replace(output)
     print(f"wrote {output} ({count:,} pieces)", flush=True)
 
 
@@ -368,6 +464,13 @@ def export_model(args) -> None:
     from model import KeyboardInferenceModel, apply_smooth_quant, count_parameters
 
     model, checkpoint = load_checkpoint(args.checkpoint)
+    checkpoint_stage = str(checkpoint.get("stage", "legacy"))
+    if checkpoint_stage != "qat" and not args.allow_unpromoted_checkpoint:
+        raise RuntimeError(
+            f"checkpoint stage {checkpoint_stage!r} is not promotable; run messaging "
+            "fine-tuning and QAT first, or pass --allow-unpromoted-checkpoint for a "
+            "non-shipping research export"
+        )
     samples = load_calibration_cache(args.calibration_cache)
     if not samples:
         raise RuntimeError("activation calibration cache is empty")
@@ -421,7 +524,7 @@ def export_model(args) -> None:
     reference = ct.convert(
         traced,
         convert_to="mlprogram",
-        minimum_deployment_target=ct.target.iOS17,
+        minimum_deployment_target=ct.target.iOS18,
         compute_precision=ct.precision.FLOAT16,
         compute_units=ct.ComputeUnit.CPU_AND_NE,
         inputs=[
@@ -437,8 +540,8 @@ def export_model(args) -> None:
         ],
     )
     reference.author = "Glyph keyboard"
-    reference.short_description = "10.6M English keyboard candidate and next-word scorer"
-    reference.user_defined_metadata["checkpoint_stage"] = str(checkpoint.get("stage", "legacy"))
+    reference.short_description = "English keyboard candidate and next-word scorer"
+    reference.user_defined_metadata["checkpoint_stage"] = checkpoint_stage
     reference.user_defined_metadata["parameter_count"] = str(count_parameters(model))
     reference.user_defined_metadata["vocab_size"] = str(vocab_size)
     reference.user_defined_metadata["max_length"] = str(L)
@@ -482,6 +585,10 @@ def export_model(args) -> None:
         weight_threshold=0,
     ))
     weight_int8 = linear_quantize_weights(reference, config=weight_config)
+    weight_int8.author = reference.author
+    weight_int8.short_description = reference.short_description
+    weight_int8.user_defined_metadata.update(reference.user_defined_metadata)
+    weight_int8.user_defined_metadata["quantization"] = "W8"
     w8a8 = linear_quantize_weights(activation_int8, config=weight_config)
     w8a8.author = reference.author
     w8a8.short_description = reference.short_description
@@ -490,7 +597,7 @@ def export_model(args) -> None:
 
     counts = mil_op_counts(w8a8)
     required = {
-        "weight_int8": counts["constexpr_affine_dequantize"] > 0,
+        "weight_int8": int8_weight_op_count(counts) > 0,
         "activation_int8": counts["quantize"] > 0 and counts["dequantize"] > 0,
     }
     if not all(required.values()):
@@ -522,17 +629,22 @@ def export_model(args) -> None:
     if not parity_passed:
         raise RuntimeError(f"W8A8 numerical parity gate failed: {parity}")
 
-    if args.output.exists():
-        shutil.rmtree(args.output)
+    for path in (args.w8_output, args.output):
+        if path.exists():
+            shutil.rmtree(path)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    print(f"saving production W8A8 package: {args.output}", flush=True)
+    args.w8_output.parent.mkdir(parents=True, exist_ok=True)
+    print(f"saving W8 comparison package: {args.w8_output}", flush=True)
+    weight_int8.save(args.w8_output)
+    print(f"saving W8A8 research package: {args.output}", flush=True)
     w8a8.save(args.output)
-    size_mb = package_bytes(args.output) / 1_000_000
-    size_passed = size_mb <= MAX_PACKAGE_MB
+    w8_size_mb = package_bytes(args.w8_output) / 1_000_000
+    w8a8_size_mb = package_bytes(args.output) / 1_000_000
+    size_passed = w8a8_size_mb <= MAX_PACKAGE_MB
     manifest = {
         "checkpoint": manifest_path(args.checkpoint),
         "checkpoint_sha256": sha256(args.checkpoint),
-        "checkpoint_stage": checkpoint.get("stage", "legacy"),
+        "checkpoint_stage": checkpoint_stage,
         "sentencepiece": manifest_path(args.sentencepiece),
         "sentencepiece_sha256": sha256(args.sentencepiece),
         "parameters": count_parameters(model),
@@ -542,27 +654,36 @@ def export_model(args) -> None:
             "batch_size": MAX_BATCH,
             "score_slots": K,
         },
+        "minimum_deployment_target": "iOS18",
+        "promotion_status": "research-only",
         "quantization": "W8A8" if args.activation_scope == "all" else "transformer-W8A8-head-W8",
         "activation_scope": args.activation_scope,
         "smooth_quant_alpha": args.smooth_alpha,
         "smooth_quant_layers": smooth_summary,
         "smooth_quant_fp_equivalence": smooth_equivalence,
         "mil_ops": dict(sorted(counts.items())),
+        "int8_weight_storage_ops": {
+            name: counts.get(name, 0) for name in INT8_WEIGHT_OPS
+        },
         "activation_exclusions": activation_exclusions,
         "w8a8_checks": required,
         "activation_only_parity": activation_parity,
         "weight_only_parity": weight_parity,
         "parity": parity,
         "parity_passed": parity_passed,
-        "package": manifest_path(args.output),
-        "package_mb": size_mb,
+        "packages": {
+            "w8": {"path": manifest_path(args.w8_output), "size_mb": w8_size_mb},
+            "w8a8": {"path": manifest_path(args.output), "size_mb": w8a8_size_mb},
+        },
         "package_gate_mb": MAX_PACKAGE_MB,
         "package_gate_passed": size_passed,
     }
     args.manifest.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     print(json.dumps(manifest, indent=2, sort_keys=True), flush=True)
     if not size_passed:
-        raise RuntimeError(f"W8A8 package is {size_mb:.2f} MB; gate is {MAX_PACKAGE_MB:.2f} MB")
+        raise RuntimeError(
+            f"W8A8 package is {w8a8_size_mb:.2f} MB; gate is {MAX_PACKAGE_MB:.2f} MB"
+        )
 
 
 def parse_args():
@@ -586,13 +707,19 @@ def parse_args():
         help="Apply inference-only SmoothQuant to transformer linears (0 disables it)",
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--w8-output", type=Path, default=DEFAULT_W8_OUTPUT)
     parser.add_argument("--tokenizer-output", type=Path, default=DEFAULT_TOKENIZER_OUTPUT)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument(
+        "--allow-unpromoted-checkpoint",
+        action="store_true",
+        help="permit a research export from a checkpoint whose stage is not qat",
+    )
     return parser.parse_args()
 
 
 def subprocess_args(args, part: str) -> list[str]:
-    return [
+    result = [
         sys.executable,
         str(Path(__file__).resolve()),
         "--part", part,
@@ -604,9 +731,13 @@ def subprocess_args(args, part: str) -> list[str]:
         "--activation-scope", args.activation_scope,
         "--smooth-alpha", str(args.smooth_alpha),
         "--output", str(args.output),
+        "--w8-output", str(args.w8_output),
         "--tokenizer-output", str(args.tokenizer_output),
         "--manifest", str(args.manifest),
     ]
+    if args.allow_unpromoted_checkpoint:
+        result.append("--allow-unpromoted-checkpoint")
+    return result
 
 
 def main() -> None:

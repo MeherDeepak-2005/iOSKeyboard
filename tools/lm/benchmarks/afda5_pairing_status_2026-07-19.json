@@ -1,0 +1,61 @@
+{
+  "schema_version": 2,
+  "generated_date": "2026-07-20",
+  "status": "blocked_missing_reproducible_baseline_artifact_and_device_run",
+  "baseline": {
+    "commit": "afda5b487e24859c13888252591b7669e6b91b85",
+    "commit_date": "2026-07-17T03:11:02+05:30",
+    "language_data_tracked_at_commit": false,
+    "model_package_tracked_at_commit": false
+  },
+  "candidate_baseline_artifact": {
+    "source": "unversioned DerivedData discovery",
+    "bytes": 19734010,
+    "sha256": "e011273c5235259a63219b7e21f15a8d0bce3126b49f0c85081f39ea6981ef23",
+    "eligible_for_pairing": false,
+    "reason": "The v4/v5 verifier reports differences in vocabulary/frequencies, bigrams, trigrams, trie, and sentence starters; provenance cannot tie this build product to afda5b4."
+  },
+  "current_candidate": {
+    "source_commit": "c9ff32654271d02d5ab0586fda156f569b5e1f09",
+    "worktree_dirty": true,
+    "language_data_sha256": "a5accdb6100bf782637b91b522a33af20d199e7c85cc39e9a0da21ff4cbfc0d8",
+    "w8_weight_sha256": "a4c42d86904f5cc1c26efd519784baf8db4e8d6419b7ab75ce043c009344e248",
+    "tokenizer_sha256": "c2fea4a790c16a25537c81d226b47c0ddc6911f20f1895022676d68a4d70753c",
+    "shipping_artifact_manifest_sha256": "f63cc0a96caffa096dfd0f99aeb103d2cb659d66be0ee92093806baf51d66c04",
+    "internal_w8_artifact_manifest_sha256": "f51fc3905e4f38ef5b9fb0135781a81c66b7b5953fad3b88e7b5be62e4de5f25"
+  },
+  "incremental_generator_verification": {
+    "normal_radius_full_trie_equivalence": "passed",
+    "normal_radius_fixture": "correcgion",
+    "severe_recovery_fixtures": {
+      "coeevitjkn": "correction",
+      "thisbis": "this is"
+    },
+    "candidate_quality_superiority_claim_permitted": false,
+    "latency_superiority_claim_permitted": false,
+    "reason": "Equivalence and golden behavior are unit-tested, but afda5b4 lacks reproducible language/model artifacts and no paired physical-device run exists."
+  },
+  "available_preflight_corpus": {
+    "path": "tools/.cache/eng_news_2024_1M.tar.gz",
+    "sha256": "8f1d4d07b9771f8a7fc219ad587d5382eabf5009ef563f1bc4c12a467a8e3a97",
+    "user_separated": false,
+    "eligible_for_commercial_claim": false
+  },
+  "blind_paired_corpus_present": false,
+  "required_paired_metrics": [
+    "candidate_oracle_recall_at_24_before_forced_gold",
+    "top1",
+    "top3",
+    "false_correction_rate",
+    "severe_deviation_recall",
+    "suggestion_commit_agreement",
+    "generator_cold_warm_p50_p95_p99",
+    "neural_scorer_cold_warm_p50_p95_p99",
+    "peak_memory",
+    "sustained_queue_growth",
+    "bundle_size"
+  ],
+  "physical_device_result_present": false,
+  "superiority_claim_permitted": false,
+  "next_action": "Reproduce afda5b4 with its exact language/model artifacts, or supply their hashes and files, then run both builds on the same physical iPhone and corpus through tools/evaluation/replay_report.py."
+}

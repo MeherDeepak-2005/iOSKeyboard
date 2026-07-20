@@ -81,9 +81,11 @@ enum KBPersonalData {
 			let captureRemoved = remove("glide_capture.jsonl")
 			let success = modelsRemoved && captureRemoved
 			KBSettings.sharedDefaults.removeObject(forKey: "kb.glideprofile")
+			KBSettings.sharedDefaults.removeObject(forKey: "kb.touchprofile")
 			return success
 		}
 		recordResetDeletion(deleted)
+		KBStats.synchronizeAfterExternalReset()
 		postReset()
 	}
 
@@ -112,6 +114,7 @@ enum KBPersonalData {
 			return success
 		}
 		recordResetDeletion(deleted)
+		KBStats.synchronizeAfterExternalReset()
 		postReset()
 	}
 

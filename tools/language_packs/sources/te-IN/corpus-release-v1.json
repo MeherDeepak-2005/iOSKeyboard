@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "id": "tatoeba_telugu_2026_07_19",
+      "name": "Tatoeba Telugu detailed sentences",
+      "path": "../../../data/tatoeba-tel-ccby-2026-07-19.tsv.bz2",
+      "url": "https://downloads.tatoeba.org/exports/per_language/tel/",
+      "license": "CC BY 2.0 FR",
+      "licenseURL": "https://creativecommons.org/licenses/by/2.0/fr/",
+      "sha256": "833268b5ac5b18f69903594a8e8c5ab7cbfdaa9f1d6f69e6dc927282cdc9da9c",
+      "sourceRevision": "snapshot-2026-07-19",
+      "attribution": "Tatoeba contributors listed in the generated pack manifest",
+      "split": "train",
+      "purpose": "training",
+      "language": "telugu",
+      "domain": "mixed",
+      "format": "tatoeba_tsv",
+      "countWeight": 1,
+      "maxSentences": 50000,
+      "researchOnly": false,
+      "releaseEligible": true
+    }
+  ]
+}

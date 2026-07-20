@@ -1,0 +1,1764 @@
+{
+  "aksharantar": {
+    "archive_sha256": "08f1c2841f4d02fcc2a56362f7760ec16fc52d8a199029c68d44024ab0d22c1a",
+    "license": "source-dependent CC-BY/CC0",
+    "member": "tel_train.json"
+  },
+  "candidate_counts": {
+    "telugu": 194,
+    "tenglish": 244
+  },
+  "candidates": [
+    {
+      "log_rate_ratio": 6.133242,
+      "negative_documents": 0,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "nayudipai"
+      ],
+      "term": "నాయుడిపై"
+    },
+    {
+      "log_rate_ratio": 6.133242,
+      "negative_documents": 0,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "లోటస్"
+    },
+    {
+      "log_rate_ratio": 5.479315,
+      "negative_documents": 2,
+      "positive_documents": 6,
+      "roman_aliases": [],
+      "term": "దుయ్యబట్టారు"
+    },
+    {
+      "log_rate_ratio": 5.371102,
+      "negative_documents": 1,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "ఘాటుగా"
+    },
+    {
+      "log_rate_ratio": 5.371102,
+      "negative_documents": 1,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "చెరిగారు"
+    },
+    {
+      "log_rate_ratio": 5.371102,
+      "negative_documents": 1,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "పాండ్"
+    },
+    {
+      "log_rate_ratio": 5.371102,
+      "negative_documents": 1,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "mandipaddaadu"
+      ],
+      "term": "మండిపడ్డాడు"
+    },
+    {
+      "log_rate_ratio": 5.371102,
+      "negative_documents": 1,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "వ్యవహరిస్తున్న"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "అసభ్యకరంగా"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "eesiki"
+      ],
+      "term": "ఈసికి"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ఓకీఫ్"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "kakani"
+      ],
+      "term": "కాకాని"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "chaanal"
+      ],
+      "term": "చానల్"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "genders"
+      ],
+      "term": "జెండర్స్"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "tluga"
+      ],
+      "term": "ట్లుగా"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "duushistuu"
+      ],
+      "term": "దూషిస్తూ"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "nnu"
+      ],
+      "term": "న్ను"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "పట్టించుకోలేదని"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "పడిందని"
+    },
+    {
+      "log_rate_ratio": 5.03463,
+      "negative_documents": 1,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "రేపాయి"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 3,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "akther"
+      ],
+      "term": "అక్తర్"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 3,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "bandham"
+      ],
+      "term": "బంధం"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 2,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "kamiteelu",
+        "kamitilu"
+      ],
+      "term": "కమిటీలు"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 2,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "karnisena"
+      ],
+      "term": "కర్ణిసేన"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 2,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "gaani"
+      ],
+      "term": "గాని"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 2,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "teriste"
+      ],
+      "term": "తెరిస్తే"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 2,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ధ్వజమెత్తారు"
+    },
+    {
+      "log_rate_ratio": 4.523804,
+      "negative_documents": 2,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "nirnayaalapai"
+      ],
+      "term": "నిర్ణయాలపై"
+    },
+    {
+      "log_rate_ratio": 4.27249,
+      "negative_documents": 4,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "గుప్పిస్తున్నారు"
+    },
+    {
+      "log_rate_ratio": 4.27249,
+      "negative_documents": 4,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "ddaaru"
+      ],
+      "term": "డ్డారు"
+    },
+    {
+      "log_rate_ratio": 4.27249,
+      "negative_documents": 4,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "nippulu"
+      ],
+      "term": "నిప్పులు"
+    },
+    {
+      "log_rate_ratio": 4.208723,
+      "negative_documents": 18,
+      "positive_documents": 13,
+      "roman_aliases": [
+        "vimarshinchaaru",
+        "vimarshincharu",
+        "vimarsinchaaru"
+      ],
+      "term": "విమర్శించారు"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "అంపైర్ల"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "alantappudu"
+      ],
+      "term": "అలాంటప్పుడు"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "తీవ్రస్థాయిలో"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "noru"
+      ],
+      "term": "నోరు"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "పాల్పడుతున్న"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "bedirimchaaru",
+        "bedirinchaaru",
+        "bedirincharu"
+      ],
+      "term": "బెదిరించారు"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "మండి"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "రుణమాఫీ"
+    },
+    {
+      "log_rate_ratio": 4.187332,
+      "negative_documents": 3,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "vidvesha"
+      ],
+      "term": "విద్వేష"
+    },
+    {
+      "log_rate_ratio": 4.044231,
+      "negative_documents": 10,
+      "positive_documents": 6,
+      "roman_aliases": [],
+      "term": "మండిపడ్డారు"
+    },
+    {
+      "log_rate_ratio": 3.936017,
+      "negative_documents": 4,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ఎదుర్కొంటున్నారు"
+    },
+    {
+      "log_rate_ratio": 3.936017,
+      "negative_documents": 4,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "దీసారు"
+    },
+    {
+      "log_rate_ratio": 3.936017,
+      "negative_documents": 4,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "matlaadite",
+        "matladithe",
+        "matladthe"
+      ],
+      "term": "మాట్లాడితే"
+    },
+    {
+      "log_rate_ratio": 3.904765,
+      "negative_documents": 6,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "నేతల"
+    },
+    {
+      "log_rate_ratio": 3.815619,
+      "negative_documents": 33,
+      "positive_documents": 16,
+      "roman_aliases": [
+        "vimarsalu",
+        "vimarshalu"
+      ],
+      "term": "విమర్శలు"
+    },
+    {
+      "log_rate_ratio": 3.786205,
+      "negative_documents": 11,
+      "positive_documents": 5,
+      "roman_aliases": [],
+      "term": "ఎద్దేవా"
+    },
+    {
+      "log_rate_ratio": 3.786205,
+      "negative_documents": 11,
+      "positive_documents": 5,
+      "roman_aliases": [],
+      "term": "హెచ్చరించారు"
+    },
+    {
+      "log_rate_ratio": 3.735347,
+      "negative_documents": 5,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "కేంద్రమంత్రి"
+    },
+    {
+      "log_rate_ratio": 3.735347,
+      "negative_documents": 5,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "gn"
+      ],
+      "term": "జై"
+    },
+    {
+      "log_rate_ratio": 3.735347,
+      "negative_documents": 5,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "తా"
+    },
+    {
+      "log_rate_ratio": 3.735347,
+      "negative_documents": 5,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "parokshamga",
+        "parookshamgaa",
+        "parookshangaa"
+      ],
+      "term": "పరోక్షంగా"
+    },
+    {
+      "log_rate_ratio": 3.735347,
+      "negative_documents": 5,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "moduu"
+      ],
+      "term": "మోదు"
+    },
+    {
+      "log_rate_ratio": 3.735347,
+      "negative_documents": 5,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "raccha",
+        "racha",
+        "rachha"
+      ],
+      "term": "రచ్చ"
+    },
+    {
+      "log_rate_ratio": 3.735347,
+      "negative_documents": 5,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ర్శించారు"
+    },
+    {
+      "log_rate_ratio": 3.636501,
+      "negative_documents": 25,
+      "positive_documents": 10,
+      "roman_aliases": [
+        "aaroepinchaaru",
+        "aaropinchaaru"
+      ],
+      "term": "ఆరోపించారు"
+    },
+    {
+      "log_rate_ratio": 3.568293,
+      "negative_documents": 6,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "aatatiiru"
+      ],
+      "term": "ఆటతీరు"
+    },
+    {
+      "log_rate_ratio": 3.568293,
+      "negative_documents": 6,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "kaaranamani"
+      ],
+      "term": "కారణమని"
+    },
+    {
+      "log_rate_ratio": 3.568293,
+      "negative_documents": 6,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "నిజామాబాద్"
+    },
+    {
+      "log_rate_ratio": 3.568293,
+      "negative_documents": 6,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ప్యానెల్"
+    },
+    {
+      "log_rate_ratio": 3.568293,
+      "negative_documents": 6,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "విపక్షాలు"
+    },
+    {
+      "log_rate_ratio": 3.568293,
+      "negative_documents": 6,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "sahakarinchina"
+      ],
+      "term": "సహకరించిన"
+    },
+    {
+      "log_rate_ratio": 3.465197,
+      "negative_documents": 24,
+      "positive_documents": 8,
+      "roman_aliases": [
+        "aagraham",
+        "agraham"
+      ],
+      "term": "ఆగ్రహం"
+    },
+    {
+      "log_rate_ratio": 3.425192,
+      "negative_documents": 10,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "చెలరేగాయి"
+    },
+    {
+      "log_rate_ratio": 3.425192,
+      "negative_documents": 7,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "jaathi",
+        "jaati"
+      ],
+      "term": "జాతి"
+    },
+    {
+      "log_rate_ratio": 3.425192,
+      "negative_documents": 7,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "paalakula",
+        "palakula"
+      ],
+      "term": "పాలకుల"
+    },
+    {
+      "log_rate_ratio": 3.425192,
+      "negative_documents": 7,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "waall",
+        "wal"
+      ],
+      "term": "వాల్"
+    },
+    {
+      "log_rate_ratio": 3.425192,
+      "negative_documents": 7,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "హ్యాండ్స్"
+    },
+    {
+      "log_rate_ratio": 3.310781,
+      "negative_documents": 18,
+      "positive_documents": 5,
+      "roman_aliases": [
+        "aaroepanhalu",
+        "aaropanalu",
+        "aropanalu"
+      ],
+      "term": "ఆరోపణలు"
+    },
+    {
+      "log_rate_ratio": 3.300029,
+      "negative_documents": 8,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "comb"
+      ],
+      "term": "కాంబ్"
+    },
+    {
+      "log_rate_ratio": 3.300029,
+      "negative_documents": 8,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "kontakaalamgaa",
+        "konthakalamga",
+        "konthakalanga"
+      ],
+      "term": "కొంతకాలంగా"
+    },
+    {
+      "log_rate_ratio": 3.300029,
+      "negative_documents": 8,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "రాజకీయం"
+    },
+    {
+      "log_rate_ratio": 3.300029,
+      "negative_documents": 8,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "raaledani",
+        "raledani"
+      ],
+      "term": "రాలేదని"
+    },
+    {
+      "log_rate_ratio": 3.250838,
+      "negative_documents": 12,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "kangana"
+      ],
+      "term": "కంగన"
+    },
+    {
+      "log_rate_ratio": 3.250838,
+      "negative_documents": 12,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "చెప్పుకొచ్చారు"
+    },
+    {
+      "log_rate_ratio": 3.188803,
+      "negative_documents": 9,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "ilaage",
+        "ilage"
+      ],
+      "term": "ఇలాగే"
+    },
+    {
+      "log_rate_ratio": 3.188803,
+      "negative_documents": 9,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "జనం"
+    },
+    {
+      "log_rate_ratio": 3.188803,
+      "negative_documents": 9,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "plaanning"
+      ],
+      "term": "ప్లానింగ్"
+    },
+    {
+      "log_rate_ratio": 3.188803,
+      "negative_documents": 9,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "vima"
+      ],
+      "term": "విమ"
+    },
+    {
+      "log_rate_ratio": 3.173877,
+      "negative_documents": 13,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "sarfaraz",
+        "sarfraz",
+        "surfaraj"
+      ],
+      "term": "సర్ఫరాజ్"
+    },
+    {
+      "log_rate_ratio": 3.110111,
+      "negative_documents": 18,
+      "positive_documents": 4,
+      "roman_aliases": [
+        "olle",
+        "valle"
+      ],
+      "term": "వల్లే"
+    },
+    {
+      "log_rate_ratio": 3.088719,
+      "negative_documents": 10,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "remduu",
+        "rendoo",
+        "renduu"
+      ],
+      "term": "రెండూ"
+    },
+    {
+      "log_rate_ratio": 3.035727,
+      "negative_documents": 15,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "cricketarlu"
+      ],
+      "term": "క్రికెటర్లు"
+    },
+    {
+      "log_rate_ratio": 2.997748,
+      "negative_documents": 11,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "adhikaaram"
+      ],
+      "term": "అధికారం"
+    },
+    {
+      "log_rate_ratio": 2.997748,
+      "negative_documents": 11,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "gambhir",
+        "gambhr"
+      ],
+      "term": "గంభీర్"
+    },
+    {
+      "log_rate_ratio": 2.997748,
+      "negative_documents": 11,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ప్రాజెక్టులు"
+    },
+    {
+      "log_rate_ratio": 2.964066,
+      "negative_documents": 78,
+      "positive_documents": 16,
+      "roman_aliases": [
+        "modie"
+      ],
+      "term": "మోడీ"
+    },
+    {
+      "log_rate_ratio": 2.959828,
+      "negative_documents": 21,
+      "positive_documents": 4,
+      "roman_aliases": [
+        "caselu",
+        "caseulu",
+        "kesulu"
+      ],
+      "term": "కేసులు"
+    },
+    {
+      "log_rate_ratio": 2.914366,
+      "negative_documents": 27,
+      "positive_documents": 5,
+      "roman_aliases": [
+        "theeru"
+      ],
+      "term": "తీరు"
+    },
+    {
+      "log_rate_ratio": 2.914366,
+      "negative_documents": 12,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "yepi"
+      ],
+      "term": "ఏపి"
+    },
+    {
+      "log_rate_ratio": 2.914366,
+      "negative_documents": 12,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "కలకలం"
+    },
+    {
+      "log_rate_ratio": 2.914366,
+      "negative_documents": 12,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "మోడీకి"
+    },
+    {
+      "log_rate_ratio": 2.878648,
+      "negative_documents": 28,
+      "positive_documents": 5,
+      "roman_aliases": [
+        "sabhalo",
+        "sabhaloe"
+      ],
+      "term": "సభలో"
+    },
+    {
+      "log_rate_ratio": 2.853122,
+      "negative_documents": 50,
+      "positive_documents": 9,
+      "roman_aliases": [
+        "vyaakhyalu",
+        "vyakhyalu"
+      ],
+      "term": "వ్యాఖ్యలు"
+    },
+    {
+      "log_rate_ratio": 2.844162,
+      "negative_documents": 29,
+      "positive_documents": 5,
+      "roman_aliases": [
+        "avineethi",
+        "avineeti",
+        "aviniiti"
+      ],
+      "term": "అవినీతి"
+    },
+    {
+      "log_rate_ratio": 2.837405,
+      "negative_documents": 13,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "raajakeeyaalu",
+        "raajakiyaalu",
+        "rajakeeyaalu"
+      ],
+      "term": "రాజకీయాలు"
+    },
+    {
+      "log_rate_ratio": 2.765946,
+      "negative_documents": 14,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ఘటనపై"
+    },
+    {
+      "log_rate_ratio": 2.765946,
+      "negative_documents": 14,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "cheththa",
+        "chetta",
+        "chettha"
+      ],
+      "term": "చెత్త"
+    },
+    {
+      "log_rate_ratio": 2.765946,
+      "negative_documents": 14,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "prajalanu"
+      ],
+      "term": "ప్రజలను"
+    },
+    {
+      "log_rate_ratio": 2.765946,
+      "negative_documents": 14,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "మనసు"
+    },
+    {
+      "log_rate_ratio": 2.699255,
+      "negative_documents": 15,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "అంద"
+    },
+    {
+      "log_rate_ratio": 2.699255,
+      "negative_documents": 15,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "ipdu",
+        "ipudu",
+        "ipuudu"
+      ],
+      "term": "ఇపుడు"
+    },
+    {
+      "log_rate_ratio": 2.699255,
+      "negative_documents": 15,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "aidellalo",
+        "ideellhaloo",
+        "idellalo"
+      ],
+      "term": "ఐదేళ్లలో"
+    },
+    {
+      "log_rate_ratio": 2.699255,
+      "negative_documents": 15,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "trance"
+      ],
+      "term": "ట్రాన్స్"
+    },
+    {
+      "log_rate_ratio": 2.699255,
+      "negative_documents": 15,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "maatlaadina",
+        "matladina"
+      ],
+      "term": "మాట్లాడిన"
+    },
+    {
+      "log_rate_ratio": 2.636734,
+      "negative_documents": 16,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "cheeyaalsina",
+        "cheyaalsina",
+        "cheyalsina"
+      ],
+      "term": "చేయాల్సిన"
+    },
+    {
+      "log_rate_ratio": 2.636734,
+      "negative_documents": 16,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "tappudu",
+        "thappudu"
+      ],
+      "term": "తప్పుడు"
+    },
+    {
+      "log_rate_ratio": 2.636734,
+      "negative_documents": 16,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "నిల"
+    },
+    {
+      "log_rate_ratio": 2.636734,
+      "negative_documents": 16,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "vijayasaireddy"
+      ],
+      "term": "విజయసాయిరెడ్డి"
+    },
+    {
+      "log_rate_ratio": 2.62886,
+      "negative_documents": 76,
+      "positive_documents": 11,
+      "roman_aliases": [
+        "teevra",
+        "thivra",
+        "tivra"
+      ],
+      "term": "తీవ్ర"
+    },
+    {
+      "log_rate_ratio": 2.610155,
+      "negative_documents": 30,
+      "positive_documents": 4,
+      "roman_aliases": [],
+      "term": "కదా"
+    },
+    {
+      "log_rate_ratio": 2.577894,
+      "negative_documents": 24,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "daadullu",
+        "daadulu",
+        "dhadulu"
+      ],
+      "term": "దాడులు"
+    },
+    {
+      "log_rate_ratio": 2.577894,
+      "negative_documents": 17,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "kohlini"
+      ],
+      "term": "కోహ్లిని"
+    },
+    {
+      "log_rate_ratio": 2.577894,
+      "negative_documents": 17,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "cheesindani",
+        "chesindani"
+      ],
+      "term": "చేసిందని"
+    },
+    {
+      "log_rate_ratio": 2.577894,
+      "negative_documents": 17,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "ravisaastri"
+      ],
+      "term": "రవిశాస్త్రి"
+    },
+    {
+      "log_rate_ratio": 2.577894,
+      "negative_documents": 17,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "revant",
+        "revanth"
+      ],
+      "term": "రేవంత్"
+    },
+    {
+      "log_rate_ratio": 2.577894,
+      "negative_documents": 17,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "సెలక్షన్"
+    },
+    {
+      "log_rate_ratio": 2.522324,
+      "negative_documents": 18,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "ootamiki",
+        "otamiki"
+      ],
+      "term": "ఓటమికి"
+    },
+    {
+      "log_rate_ratio": 2.522324,
+      "negative_documents": 18,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "మాధ్యమాల్లో"
+    },
+    {
+      "log_rate_ratio": 2.46968,
+      "negative_documents": 19,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "తెదేపా"
+    },
+    {
+      "log_rate_ratio": 2.46968,
+      "negative_documents": 19,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "నెస్"
+    },
+    {
+      "log_rate_ratio": 2.46968,
+      "negative_documents": 19,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "panilo",
+        "paniloe",
+        "paniloo"
+      ],
+      "term": "పనిలో"
+    },
+    {
+      "log_rate_ratio": 2.41967,
+      "negative_documents": 20,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "nijamga",
+        "nijamgaa",
+        "nijangaa"
+      ],
+      "term": "నిజంగా"
+    },
+    {
+      "log_rate_ratio": 2.41967,
+      "negative_documents": 20,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "yootyuub"
+      ],
+      "term": "యూట్యూబ్"
+    },
+    {
+      "log_rate_ratio": 2.40354,
+      "negative_documents": 37,
+      "positive_documents": 4,
+      "roman_aliases": [
+        "deeshamloo",
+        "desamloo",
+        "deshamlo"
+      ],
+      "term": "దేశంలో"
+    },
+    {
+      "log_rate_ratio": 2.372042,
+      "negative_documents": 21,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "chotla",
+        "chotta"
+      ],
+      "term": "చోట్ల"
+    },
+    {
+      "log_rate_ratio": 2.351581,
+      "negative_documents": 39,
+      "positive_documents": 4,
+      "roman_aliases": [
+        "commission",
+        "kamishan",
+        "kommission"
+      ],
+      "term": "కమిషన్"
+    },
+    {
+      "log_rate_ratio": 2.326579,
+      "negative_documents": 22,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "టికే"
+    },
+    {
+      "log_rate_ratio": 2.283094,
+      "negative_documents": 23,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "apati",
+        "appati"
+      ],
+      "term": "అప్పటి"
+    },
+    {
+      "log_rate_ratio": 2.241422,
+      "negative_documents": 24,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "hayaamlo",
+        "hayaamloo"
+      ],
+      "term": "హయాంలో"
+    },
+    {
+      "log_rate_ratio": 2.207034,
+      "negative_documents": 35,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "stashion",
+        "steshion",
+        "stetion"
+      ],
+      "term": "స్టేషన్"
+    },
+    {
+      "log_rate_ratio": 2.16295,
+      "negative_documents": 26,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "asembliiloe",
+        "assemblyloo"
+      ],
+      "term": "అసెంబ్లీలో"
+    },
+    {
+      "log_rate_ratio": 2.16295,
+      "negative_documents": 26,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "etthuna",
+        "yethuna",
+        "yettuna"
+      ],
+      "term": "ఎత్తున"
+    },
+    {
+      "log_rate_ratio": 2.16295,
+      "negative_documents": 26,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ఏపీకి"
+    },
+    {
+      "log_rate_ratio": 2.16295,
+      "negative_documents": 26,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "vyaakhyaanimchaaru",
+        "vyaakhyaaninchaaru"
+      ],
+      "term": "వ్యాఖ్యానించారు"
+    },
+    {
+      "log_rate_ratio": 2.125909,
+      "negative_documents": 27,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "ఆలోచన"
+    },
+    {
+      "log_rate_ratio": 2.125909,
+      "negative_documents": 27,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "vaesaaru",
+        "veasharu",
+        "vessaru"
+      ],
+      "term": "వేశారు"
+    },
+    {
+      "log_rate_ratio": 2.075265,
+      "negative_documents": 40,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "పెట్టి"
+    },
+    {
+      "log_rate_ratio": 2.071474,
+      "negative_documents": 75,
+      "positive_documents": 6,
+      "roman_aliases": [
+        "hodaa",
+        "hodha",
+        "hodhaa"
+      ],
+      "term": "హోదా"
+    },
+    {
+      "log_rate_ratio": 2.055704,
+      "negative_documents": 29,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "annii"
+      ],
+      "term": "అన్నీ"
+    },
+    {
+      "log_rate_ratio": 2.055704,
+      "negative_documents": 29,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "aamerica",
+        "americo"
+      ],
+      "term": "అమెరికా"
+    },
+    {
+      "log_rate_ratio": 2.022368,
+      "negative_documents": 30,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "kaarmika",
+        "karmika"
+      ],
+      "term": "కార్మిక"
+    },
+    {
+      "log_rate_ratio": 2.022368,
+      "negative_documents": 30,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "mayank"
+      ],
+      "term": "మయాంక్"
+    },
+    {
+      "log_rate_ratio": 2.022368,
+      "negative_documents": 30,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "harbhajan"
+      ],
+      "term": "హర్భజన్"
+    },
+    {
+      "log_rate_ratio": 1.996697,
+      "negative_documents": 181,
+      "positive_documents": 14,
+      "roman_aliases": [
+        "tdp",
+        "tidipi"
+      ],
+      "term": "టీడీపీ"
+    },
+    {
+      "log_rate_ratio": 1.995525,
+      "negative_documents": 294,
+      "positive_documents": 23,
+      "roman_aliases": [
+        "chandhrabaabu",
+        "chandrababau",
+        "chandrababu"
+      ],
+      "term": "చంద్రబాబు"
+    },
+    {
+      "log_rate_ratio": 1.990107,
+      "negative_documents": 31,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "trss"
+      ],
+      "term": "టీఆర్ఎస్"
+    },
+    {
+      "log_rate_ratio": 1.981078,
+      "negative_documents": 44,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "kaadani",
+        "kaadhani",
+        "kadani"
+      ],
+      "term": "కాదని"
+    },
+    {
+      "log_rate_ratio": 1.972939,
+      "negative_documents": 70,
+      "positive_documents": 5,
+      "roman_aliases": [],
+      "term": "మీ"
+    },
+    {
+      "log_rate_ratio": 1.958855,
+      "negative_documents": 32,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "gaandhe",
+        "gaandhee",
+        "ghandy"
+      ],
+      "term": "గాంధీ"
+    },
+    {
+      "log_rate_ratio": 1.958855,
+      "negative_documents": 32,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "teesukovalani",
+        "theesukoovaalani",
+        "tiisukoevaalani"
+      ],
+      "term": "తీసుకోవాలని"
+    },
+    {
+      "log_rate_ratio": 1.928549,
+      "negative_documents": 33,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "narender",
+        "narendra",
+        "narerndra"
+      ],
+      "term": "నరేంద్ర"
+    },
+    {
+      "log_rate_ratio": 1.92288,
+      "negative_documents": 141,
+      "positive_documents": 10,
+      "roman_aliases": [],
+      "term": "వ్యక్తం"
+    },
+    {
+      "log_rate_ratio": 1.899135,
+      "negative_documents": 34,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "raashtraala",
+        "rashtrala",
+        "rastrala"
+      ],
+      "term": "రాష్ట్రాల"
+    },
+    {
+      "log_rate_ratio": 1.895003,
+      "negative_documents": 48,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "paerkonnaadu",
+        "perkonnaadu"
+      ],
+      "term": "పేర్కొన్నాడు"
+    },
+    {
+      "log_rate_ratio": 1.876841,
+      "negative_documents": 63,
+      "positive_documents": 4,
+      "roman_aliases": [
+        "vaarini",
+        "varini"
+      ],
+      "term": "వారిని"
+    },
+    {
+      "log_rate_ratio": 1.874594,
+      "negative_documents": 49,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "చేసారు"
+    },
+    {
+      "log_rate_ratio": 1.870562,
+      "negative_documents": 35,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "ksha"
+      ],
+      "term": "క్ష"
+    },
+    {
+      "log_rate_ratio": 1.870562,
+      "negative_documents": 35,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "మీరు"
+    },
+    {
+      "log_rate_ratio": 1.834985,
+      "negative_documents": 51,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "amith"
+      ],
+      "term": "అమిత్"
+    },
+    {
+      "log_rate_ratio": 1.815754,
+      "negative_documents": 52,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "adhikaara",
+        "adhikara"
+      ],
+      "term": "అధికార"
+    },
+    {
+      "log_rate_ratio": 1.815754,
+      "negative_documents": 52,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "కారణం"
+    },
+    {
+      "log_rate_ratio": 1.815754,
+      "negative_documents": 37,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "konugolu",
+        "konugoolu"
+      ],
+      "term": "కొనుగోలు"
+    },
+    {
+      "log_rate_ratio": 1.815754,
+      "negative_documents": 37,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "పట్ల"
+    },
+    {
+      "log_rate_ratio": 1.815754,
+      "negative_documents": 37,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "laekha"
+      ],
+      "term": "లేఖ"
+    },
+    {
+      "log_rate_ratio": 1.789436,
+      "negative_documents": 38,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "modii",
+        "moedii"
+      ],
+      "term": "మోదీ"
+    },
+    {
+      "log_rate_ratio": 1.763794,
+      "negative_documents": 39,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "adhikaaramloki",
+        "adhikaaramlooki"
+      ],
+      "term": "అధికారంలోకి"
+    },
+    {
+      "log_rate_ratio": 1.742326,
+      "negative_documents": 56,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "ఫిర్యాదు"
+    },
+    {
+      "log_rate_ratio": 1.738793,
+      "negative_documents": 40,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "బెంగాల్"
+    },
+    {
+      "log_rate_ratio": 1.738793,
+      "negative_documents": 40,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "రోజులు"
+    },
+    {
+      "log_rate_ratio": 1.736895,
+      "negative_documents": 105,
+      "positive_documents": 6,
+      "roman_aliases": [
+        "kcr"
+      ],
+      "term": "కేసీఆర్"
+    },
+    {
+      "log_rate_ratio": 1.714401,
+      "negative_documents": 124,
+      "positive_documents": 7,
+      "roman_aliases": [
+        "ledani",
+        "ledhani",
+        "leedani"
+      ],
+      "term": "లేదని"
+    },
+    {
+      "log_rate_ratio": 1.714401,
+      "negative_documents": 41,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "ippa"
+      ],
+      "term": "ఇప్ప"
+    },
+    {
+      "log_rate_ratio": 1.714401,
+      "negative_documents": 41,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "kaalam"
+      ],
+      "term": "కాలం"
+    },
+    {
+      "log_rate_ratio": 1.714401,
+      "negative_documents": 41,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "prathipaksha",
+        "pratipaksha"
+      ],
+      "term": "ప్రతిపక్ష"
+    },
+    {
+      "log_rate_ratio": 1.690591,
+      "negative_documents": 42,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "bayataku"
+      ],
+      "term": "బయటకు"
+    },
+    {
+      "log_rate_ratio": 1.679952,
+      "negative_documents": 94,
+      "positive_documents": 5,
+      "roman_aliases": [
+        "ilaanti",
+        "ilaanty",
+        "ilanti"
+      ],
+      "term": "ఇలాంటి"
+    },
+    {
+      "log_rate_ratio": 1.673924,
+      "negative_documents": 60,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "comitte",
+        "commiitte",
+        "kamitee"
+      ],
+      "term": "కమిటీ"
+    },
+    {
+      "log_rate_ratio": 1.667334,
+      "negative_documents": 43,
+      "positive_documents": 2,
+      "roman_aliases": [],
+      "term": "కళ్యాణ్"
+    },
+    {
+      "log_rate_ratio": 1.663803,
+      "negative_documents": 113,
+      "positive_documents": 6,
+      "roman_aliases": [
+        "neethalu",
+        "nethalu"
+      ],
+      "term": "నేతలు"
+    },
+    {
+      "log_rate_ratio": 1.65753,
+      "negative_documents": 61,
+      "positive_documents": 3,
+      "roman_aliases": [
+        "annana"
+      ],
+      "term": "అన్న"
+    },
+    {
+      "log_rate_ratio": 1.652124,
+      "negative_documents": 79,
+      "positive_documents": 4,
+      "roman_aliases": [
+        "pradhaani",
+        "pradhani"
+      ],
+      "term": "ప్రధాని"
+    },
+    {
+      "log_rate_ratio": 1.628394,
+      "negative_documents": 99,
+      "positive_documents": 5,
+      "roman_aliases": [
+        "paristhithi",
+        "paristhiti",
+        "paristiti"
+      ],
+      "term": "పరిస్థితి"
+    },
+    {
+      "log_rate_ratio": 1.622382,
+      "negative_documents": 45,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "ttd"
+      ],
+      "term": "టీటీడీ"
+    },
+    {
+      "log_rate_ratio": 1.603956,
+      "negative_documents": 120,
+      "positive_documents": 6,
+      "roman_aliases": [
+        "laekundaa",
+        "leekundaa",
+        "lekundaa"
+      ],
+      "term": "లేకుండా"
+    },
+    {
+      "log_rate_ratio": 1.600642,
+      "negative_documents": 46,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "reepu",
+        "repu"
+      ],
+      "term": "రేపు"
+    },
+    {
+      "log_rate_ratio": 1.594517,
+      "negative_documents": 65,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "మాట"
+    },
+    {
+      "log_rate_ratio": 1.594517,
+      "negative_documents": 65,
+      "positive_documents": 3,
+      "roman_aliases": [],
+      "term": "షా"
+    },
+    {
+      "log_rate_ratio": 1.579365,
+      "negative_documents": 47,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "prajalaku"
+      ],
+      "term": "ప్రజలకు"
+    },
+    {
+      "log_rate_ratio": 1.558531,
+      "negative_documents": 48,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "cheppina"
+      ],
+      "term": "చెప్పిన"
+    },
+    {
+      "log_rate_ratio": 1.538122,
+      "negative_documents": 49,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "taralimchaaru",
+        "tharalinchaaru",
+        "tharalincharu"
+      ],
+      "term": "తరలించారు"
+    },
+    {
+      "log_rate_ratio": 1.518121,
+      "negative_documents": 50,
+      "positive_documents": 2,
+      "roman_aliases": [
+        "takkuva",
+        "takuwa",
+        "thakkuva"
+      ],
+      "term": "తక్కువ"
+    },
+    {
+      "log_rate_ratio": 1.505599,
+      "negative_documents": 112,
+      "positive_documents": 5,
+      "roman_aliases": [],
+      "term": "బీజేపీ"
+    }
+  ],
+  "criteria": {
+    "aliases_per_native_term": 3,
+    "maximum_native_terms": 300,
+    "minimum_log_ratio": 1.5,
+    "minimum_positive_documents": 2
+  },
+  "documents": {
+    "negative": 24336,
+    "positive": 263
+  },
+  "policy": "Sentence labels produce a review queue only. Native-speaker approval is required per exact term and alias before runtime inclusion.",
+  "release_eligible": false,
+  "runtime_terms_added": 0,
+  "schema_version": 1,
+  "source": {
+    "license": "CC-BY-4.0",
+    "name": "mounikaiiith/Telugu-Hatespeech training split",
+    "sha256": "da735d6ab71de52c2d123ff0c32d5e960e17078be856072ad098d3e7a564ac59"
+  }
+}

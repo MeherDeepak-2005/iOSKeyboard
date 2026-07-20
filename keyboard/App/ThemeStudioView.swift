@@ -24,9 +24,28 @@ struct ThemeStudioView: View {
 		return Self.contrastIssues(in: themes.light, label: "Light")
 			+ Self.contrastIssues(in: themes.dark, label: "Dark")
 	}
+	private var previewIsDark: Bool {
+		usesCustom ? side == .dark : systemScheme == .dark
+	}
+	private var previewCustomTheme: KBCustomTheme? {
+		guard usesCustom else { return nil }
+		return previewIsDark ? themes.dark : themes.light
+	}
 
 	var body: some View {
 		List {
+			Section("Preview") {
+				KeyboardAppearancePreview(
+					accent: accent,
+					customTheme: previewCustomTheme,
+					dark: previewIsDark,
+					languageMode: store.languageMode
+				)
+				.aspectRatio(390.0 / 242.0, contentMode: .fit)
+				.listRowInsets(EdgeInsets())
+				.listRowBackground(Color.clear)
+			}
+
 			ForEach(KBPalette.groups, id: \.title) { group in
 				Section(group.title) {
 					LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], spacing: 12) {
@@ -187,5 +206,82 @@ struct ThemeStudioView: View {
 		return 0.2126 * linear((value >> 16) & 0xFF)
 			+ 0.7152 * linear((value >> 8) & 0xFF)
 			+ 0.0722 * linear(value & 0xFF)
+	}
+}
+
+/// In-app appearance preview backed by the production UIKit renderer. iOS does not
+/// allow an app to embed or drive its keyboard-extension process, so sharing the exact
+/// view implementation is the deterministic equivalent without duplicating layout.
+private struct KeyboardAppearancePreview: UIViewRepresentable {
+	let accent: KBAccent
+	let customTheme: KBCustomTheme?
+	let dark: Bool
+	let languageMode: KBLanguageMode
+
+	func makeUIView(context: Context) -> KeyboardAppearancePreviewHost {
+		KeyboardAppearancePreviewHost()
+	}
+
+	func updateUIView(_ host: KeyboardAppearancePreviewHost, context: Context) {
+		host.update(accent: accent, customTheme: customTheme, dark: dark,
+			languageMode: languageMode)
+	}
+}
+
+private final class KeyboardAppearancePreviewHost: UIView {
+	private struct Configuration: Equatable {
+		let accentID: String
+		let customTheme: KBCustomTheme?
+		let dark: Bool
+		let languageMode: KBLanguageMode
+	}
+
+	private let referenceWidth: CGFloat = 390
+	private var configuration: Configuration?
+	private var keyboard: KeyboardView?
+
+	override init(frame: CGRect) {
+		super.init(frame: frame)
+		backgroundColor = .clear
+		clipsToBounds = true
+		isAccessibilityElement = true
+		accessibilityLabel = "Keyboard appearance preview"
+		accessibilityTraits = .image
+	}
+
+	required init?(coder: NSCoder) { fatalError() }
+
+	func update(accent: KBAccent, customTheme: KBCustomTheme?, dark: Bool,
+		languageMode: KBLanguageMode) {
+		let next = Configuration(accentID: accent.id, customTheme: customTheme,
+			dark: dark, languageMode: languageMode)
+		guard next != configuration else { return }
+		configuration = next
+
+		keyboard?.removeFromSuperview()
+		let theme = KeyboardTheme.preview(dark: dark, accent: accent,
+			customTheme: customTheme)
+		let keyboard = KeyboardView(theme: theme, showsGlobe: false,
+			languageMode: languageMode)
+		keyboard.setSuggestions(["might", "this", "type"], highlightPrimary: true)
+		keyboard.setActionTitle("Done")
+		keyboard.isUserInteractionEnabled = false
+		keyboard.accessibilityElementsHidden = true
+		addSubview(keyboard)
+		self.keyboard = keyboard
+		setNeedsLayout()
+	}
+
+	override func layoutSubviews() {
+		super.layoutSubviews()
+		guard let keyboard, bounds.width > 0, bounds.height > 0 else { return }
+		keyboard.transform = .identity
+		let referenceSize = CGSize(width: referenceWidth, height: keyboard.keyboardHeight)
+		keyboard.frame = CGRect(origin: .zero, size: referenceSize)
+		keyboard.layoutIfNeeded()
+		let scale = min(bounds.width / referenceSize.width,
+			bounds.height / referenceSize.height)
+		keyboard.transform = CGAffineTransform(scaleX: scale, y: scale)
+		keyboard.center = CGPoint(x: bounds.midX, y: bounds.midY)
 	}
 }

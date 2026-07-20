@@ -1,21 +1,37 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-19T13:28:00+05:30",
+  "generatedAt": "2026-07-20T01:37:02+05:30",
   "artifacts": [
     {
       "path": "keyboard/langdata.bin",
-      "sha256": "de48be323e36a0240664fd7266e842b036624b4f5d353e963ebe479d11952955",
-      "bytes": 19263737,
-	  "format": "KBLM v4",
+	  "sha256": "a5accdb6100bf782637b91b522a33af20d199e7c85cc39e9a0da21ff4cbfc0d8",
+	  "bytes": 9391297,
+	  "format": "KBLM v5",
 	  "builder": "tools/build_language_data.py",
 	  "contents": {
-		"words": 60449,
-		"bigramEntries": 233748,
-		"trigramEntries": 376779,
-		"trieNodes": 138138,
-		"sentenceStarters": 256
+		"words": 60450,
+		"bigramContexts": 28949,
+		"bigramEntries": 239287,
+		"trigramContexts": 217418,
+		"trigramEntries": 384691,
+		"trieNodes": 145386,
+		"sentenceStarters": 20
 	  },
       "inputs": [
+        {
+          "name": "English Speller Database v2 size-60/70 snapshot",
+          "path": "tools/data/esdb-v2-en-60-70-2026-07-20.tsv.bz2",
+          "url": "https://github.com/en-wl/wordlist/tree/v2",
+          "commit": "1e5b7d3a72f47a71da5d28686c1dd4b397178485",
+          "sha256": "b24c7392b4aec4adfea0b9322f80f86ab14a3ce13b74825ba2453af38c49ec28",
+          "license": "MIT-like combined work from BSD-compatible sources",
+          "contents": {
+            "size60Words": 107220,
+            "size70AdditionalWords": 56713,
+            "size60RawSha256": "45a4dd29b86234fbabce26f33272466bb5572db6fdca1470c4f218e6b666a56d",
+            "size70RawSha256": "8363339af936f7a0c5100993915d55d3dd1523700b921647b59feae2957cf67b"
+          }
+        },
         {
           "name": "FrequencyWords English 2018",
           "url": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/525f9b560de45753a5ea01069454e72e9aa541c6/content/2018/en/en_full.txt",
@@ -31,23 +47,189 @@
         {
           "name": "Project-curated supplemental English vocabulary",
           "path": "tools/data/english_supplemental.tsv",
-          "sha256": "86fe00479d6b84863eb19fd90c0ef3307ff93fae26f2b1c33262103613af2a05",
+          "sha256": "12c1cfefc2ae47785de897e2d4cf719064e1fd82e57638906409f8b4aa95dc8d",
           "license": "Project-owned"
         }
       ]
     },
     {
+      "path": "keyboard/telugu_layout.kbpack",
+      "sha256": "486d12c6748b0221ecbe641028f33174cbe45b7b1d9bc2ea55886e6f17caedd9",
+      "bytes": 4288,
+      "format": "binary-plist Telugu-layout-v2",
+      "builder": "tools/language_packs/build_telugu_pack.py",
+      "contents": {
+        "identifier": "te-IN-apple-mobile",
+        "normalization": "NFC",
+        "pages": ["alphabetic", "numbers"],
+        "glyphRows": 5,
+        "nativeSpeakerReviewed": false
+      },
+      "inputs": [
+        {
+          "name": "Project-authored Apple-mobile Telugu layout source",
+          "path": "tools/language_packs/sources/te-IN/apple-mobile-2020.json",
+          "url": "https://www.unicode.org/cldr/charts/41/keyboards/layouts/te.html",
+          "sha256": "65851c575bb67c79cf60f44056d748de6c87d31f40209ea77892ee4f8fcdd176",
+          "license": "Project-owned mapping; Unicode-3.0 cross-check"
+        }
+      ]
+    },
+    {
+      "path": "keyboard/telugu_langdata.bin",
+      "sha256": "6f887cc3b8eb7b50f7fabae17705dc3b356888de09187ccce53b4ac19ada4557",
+      "bytes": 1924776,
+      "format": "KBTD v1 compact scalar trie and bi/trigram LM",
+      "builder": "tools/language_packs/build_telugu_pack.py",
+      "contents": {
+        "words": 22000,
+        "trieNodes": 73851,
+        "trieEdges": 73850,
+        "bigramContexts": 567,
+        "bigramEntries": 951,
+        "trigramContexts": 650,
+        "trigramEntries": 667
+      },
+      "inputs": [
+        {
+          "name": "AI4Bharat Aksharantar Telugu training split",
+          "url": "https://huggingface.co/datasets/ai4bharat/Aksharantar",
+          "archiveSha256": "08f1c2841f4d02fcc2a56362f7760ec16fc52d8a199029c68d44024ab0d22c1a",
+          "memberSha256": "eb77e61d9bc2b3fc4ed1f94d5b56f0fdf0f13c916ea7bb66b1c810f5f00e55f8",
+          "license": "Source-dependent CC-BY/CC0"
+        },
+        {
+          "name": "Tatoeba Telugu detailed sentence snapshot",
+          "path": "tools/data/tatoeba-tel-ccby-2026-07-19.tsv.bz2",
+          "url": "https://tatoeba.org/en/downloads",
+          "sha256": "833268b5ac5b18f69903594a8e8c5ab7cbfdaa9f1d6f69e6dc927282cdc9da9c",
+          "license": "CC-BY-2.0-FR"
+        },
+        {
+          "name": "Hash-pinned Telugu/Roman corpus source manifest",
+          "path": "tools/language_packs/sources/te-IN/corpus-release-v1.json",
+          "sha256": "f0d62f106d02ca761cfa8d8dc68d28ff171a02c2550e4ebe958c0af0c3a6abbe",
+          "license": "Metadata; source licenses recorded per entry"
+        },
+        {
+          "name": "Project-reviewed core Tenglish aliases",
+          "path": "tools/language_packs/sources/te-IN/tenglish-core-reviewed.tsv",
+          "sha256": "de09faf9c89d9df9bd856d2416c90b02fc7abe2c0bc180cc539638bdce5b0c9b",
+          "license": "Project-owned"
+        }
+      ]
+    },
+    {
+      "path": "keyboard/tenglish_lexicon.bin",
+      "sha256": "e70b56a4bbb77f9c8ed39570a446691b3ba963cc6e7a97787d4ef195f7a967c7",
+      "bytes": 871171,
+      "format": "KBXL v3 compact weighted transliteration lexicon and Roman Telugu bi/trigram LM",
+      "builder": "tools/language_packs/build_telugu_pack.py",
+      "contents": {
+        "romanKeys": 12000,
+        "variants": 20028,
+        "bigramContexts": 82,
+        "bigramEntries": 141,
+        "trigramContexts": 33,
+        "trigramEntries": 34,
+        "unknownInputPolicy": "remain literal"
+      },
+      "inputs": [
+        {
+          "name": "AI4Bharat Aksharantar Telugu training split",
+          "url": "https://huggingface.co/datasets/ai4bharat/Aksharantar",
+          "archiveSha256": "08f1c2841f4d02fcc2a56362f7760ec16fc52d8a199029c68d44024ab0d22c1a",
+          "memberSha256": "eb77e61d9bc2b3fc4ed1f94d5b56f0fdf0f13c916ea7bb66b1c810f5f00e55f8",
+          "license": "Source-dependent CC-BY/CC0"
+        },
+        {
+          "name": "Project-reviewed core Tenglish aliases",
+          "path": "tools/language_packs/sources/te-IN/tenglish-core-reviewed.tsv",
+          "sha256": "de09faf9c89d9df9bd856d2416c90b02fc7abe2c0bc180cc539638bdce5b0c9b",
+          "license": "Project-owned"
+        },
+        {
+          "name": "Hash-pinned Telugu/Roman corpus source manifest",
+          "path": "tools/language_packs/sources/te-IN/corpus-release-v1.json",
+          "sha256": "f0d62f106d02ca761cfa8d8dc68d28ff171a02c2550e4ebe958c0af0c3a6abbe",
+          "license": "Metadata; source licenses recorded per entry"
+        }
+      ]
+    },
+    {
+      "path": "keyboard/telugu_pack_manifest.json",
+      "sha256": "7c6308c9611bb47b3966f5cfca43e7807163091d9755258a9da322053a893b38",
+      "bytes": 5948,
+      "format": "LanguagePackManifest v2",
+      "builder": "tools/language_packs/build_telugu_pack.py",
+      "contents": {
+        "releaseStatus": "research",
+        "benchmarkVersion": "telugu-beta-unvalidated-v2",
+        "tatoebaContributors": 13
+      },
+      "inputs": []
+    },
+    {
       "path": "keyboard/safety.kbguard",
-      "sha256": "bda62d1674c9fbc84c0d04014ac24aa49e79b7a42052152fe00026aca67b76a1",
-      "bytes": 912,
+      "sha256": "15df514efe2e7b19f75aa12fe626f4cf33ce397ab73479c220c5f940d718ad5b",
+      "bytes": 31927,
       "format": "KBGUARD1 v1",
       "builder": "tools/build_safety_lexicon.py",
+      "contents": {
+        "exactTerms": 997,
+        "policy": "Suppress automatic suggestions and corrections; never censor literal input"
+      },
       "inputs": [
+        {
+          "name": "Google Profanity Words English list",
+          "path": "tools/data/google_profanity_en.txt",
+          "url": "https://github.com/coffee-and-fun/google-profanity-words/blob/0ae3460863120bc671361b9403cc65d5f2075b89/data/en.txt",
+          "commit": "0ae3460863120bc671361b9403cc65d5f2075b89",
+          "sha256": "ea16a22f12b4fb9d32747b8fc7af21b90ce59df7313f6275ce1ef17d746b0dfe",
+          "license": "MIT"
+        },
+        {
+          "name": "Recovered reviewed production safety policy",
+          "path": "tools/data/safety_recovered_reviewed.tsv",
+          "sourceArtifactSha256": "f5e3b4bf377146293413aba016d52677c47a24435db3ab9cc0fc8a3875faa310",
+          "sha256": "709605fe9cbc6575b5ec1be0364e21b238f86a8259014a3813c4cec86e003441",
+          "rows": 804,
+          "license": "Internal reviewed policy"
+        },
         {
           "name": "Project-reviewed safety policy",
           "path": "tools/data/safety_terms.tsv",
-          "sha256": "a0d087f0fa1e2227ec73405d4d1aae67b6ac19b28e366832780782a3b9f5d94e",
+          "sha256": "bf61e1e2798106673b26c939020d808d08823ce7f69ac0aafed0c92ec6dfd249",
           "license": "Project-owned"
+        },
+        {
+          "name": "Tenglish safety review candidates",
+          "path": "tools/data/safety_tenglish_candidates.tsv",
+          "sha256": "13fdaac49b781259640fc35e330fa3c530c555e6116d447fccc50e0b53387c03",
+          "license": "CC-BY-4.0 plus source-dependent CC-BY/CC0 aliases",
+          "contents": {
+            "teluguCandidates": 194,
+            "tenglishCandidates": 244,
+            "reviewStatus": "candidate",
+            "runtimeTermsAdded": 0
+          },
+          "auditPath": "tools/data/safety_telugu_candidate_audit.json",
+          "auditSha256": "56741fddf60615517f5b63571b4561b2b6dfd1da0a93212b30439cc9bf884790",
+          "runtimePolicy": "Candidate-only; zero unreviewed rows shipped",
+          "inputs": [
+            {
+              "name": "Telugu Hate Speech training split",
+              "url": "https://huggingface.co/datasets/mounikaiiith/Telugu-Hatespeech",
+              "sha256": "da735d6ab71de52c2d123ff0c32d5e960e17078be856072ad098d3e7a564ac59",
+              "license": "CC-BY-4.0"
+            },
+            {
+              "name": "AI4Bharat Aksharantar Telugu training split",
+              "url": "https://huggingface.co/datasets/ai4bharat/Aksharantar",
+              "archiveSha256": "08f1c2841f4d02fcc2a56362f7760ec16fc52d8a199029c68d44024ab0d22c1a",
+              "license": "Source-dependent CC-BY/CC0"
+            }
+          ]
         }
       ]
     },

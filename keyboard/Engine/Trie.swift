@@ -2,9 +2,9 @@ import Foundation
 
 // Trie: weighted fuzzy search (Damerau + touch taps) + Candidate — extracted from Keyboardengine.swift.
 
-struct Candidate { let word: String; let cost: Double; let logFreq: Double }
+nonisolated struct Candidate { let word: String; let cost: Double; let logFreq: Double }
 
-final class Trie {
+nonisolated final class Trie {
 	private final class Node {
 		// Compact child storage: a tiny inline-sorted array beats a Dictionary here —
 		// ≤27 children means linear scan wins, and it saves ~100B of hashed-storage
@@ -95,12 +95,16 @@ final class Trie {
 		for i in 0...n { dp[i] = Double(i) * Trie.insCost }
 		var out: [Candidate] = []
 		for (ch, child) in root.children {
-			Trie.recurse(child, ch, 0, 1, chars, tapRow, &dp, maxDepth, maxCost, &out)
+			let firstPenalty = Trie.firstLetterPenaltyPolicy(typedLength: n,
+				candidateFirst: ch, typedFirst: chars[0])
+			Trie.recurse(child, ch, 0, 1, firstPenalty, chars, tapRow,
+				&dp, maxDepth, maxCost, &out)
 		}
 		return out
 	}
 
-	private static func recurse(_ node: Node, _ letter: UInt8, _ prevLetter: UInt8, _ depth: Int,
+	private static func recurse(_ node: Node, _ letter: UInt8, _ prevLetter: UInt8,
+								_ depth: Int, _ firstPenalty: Double,
 								_ typed: [UInt8], _ taps: [KeyTap?]?,
 								_ dp: inout [Double], _ maxDepth: Int,
 								_ maxCost: Double, _ out: inout [Candidate]) {
@@ -115,8 +119,7 @@ final class Trie {
 		for col in 1...n {
 			let ins = dp[base + col - 1] + insCost
 			let del = dp[prev + col] + skip
-			var s = KB.subCost(letter, typed: typed[col - 1], tap: taps?[col - 1] ?? nil)
-			if depth == 1, col == 1, letter != typed[0] { s += firstLetterPenaltyPolicy(typedLength: n, candidateFirst: letter, typedFirst: typed[0]) }  // protect first letter
+			let s = KB.subCost(letter, typed: typed[col - 1], tap: taps?[col - 1] ?? nil)
 			var v = min(ins, del, dp[prev + col - 1] + s)
 			// Transposition: candidate's last two letters match the typed pair swapped.
 			// prev - (n+1) is the depth-2 row, valid whenever depth ≥ 2 (row 0 = init).
@@ -126,11 +129,15 @@ final class Trie {
 			dp[base + col] = v
 			if v < rowMin { rowMin = v }
 		}
-		if let w = node.word, dp[base + n] <= maxCost {
-			out.append(Candidate(word: w, cost: dp[base + n], logFreq: node.logFreq))
+		let finalCost = dp[base + n] + firstPenalty
+		if let w = node.word, finalCost <= maxCost {
+			out.append(Candidate(word: w, cost: finalCost, logFreq: node.logFreq))
 		}
-		if rowMin <= maxCost {
-			for (ch, child) in node.children { recurse(child, ch, letter, depth + 1, typed, taps, &dp, maxDepth, maxCost, &out) }
+		if rowMin + firstPenalty <= maxCost {
+			for (ch, child) in node.children {
+				recurse(child, ch, letter, depth + 1, firstPenalty, typed, taps,
+					&dp, maxDepth, maxCost, &out)
+			}
 		}
 	}
 

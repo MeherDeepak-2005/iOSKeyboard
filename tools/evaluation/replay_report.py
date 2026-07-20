@@ -52,6 +52,17 @@ def validate_result(value: Any, key: str, line: int) -> dict[str, Any]:
         isinstance(latency, bool) or not isinstance(latency, (int, float)) or latency < 0
     ):
         raise SchemaError(f"line {line}: {key}.latency_ms must be non-negative")
+    confidence = value.get("confidence")
+    if confidence is not None and (
+        isinstance(confidence, bool) or not isinstance(confidence, (int, float))
+        or not 0 <= confidence <= 1
+    ):
+        raise SchemaError(f"line {line}: {key}.confidence must be between 0 and 1")
+    saved = value.get("keystrokes_saved")
+    if saved is not None and (
+        isinstance(saved, bool) or not isinstance(saved, (int, float)) or saved < 0
+    ):
+        raise SchemaError(f"line {line}: {key}.keystrokes_saved must be non-negative")
     return value
 
 
@@ -102,20 +113,29 @@ def event_metrics(row: dict[str, Any], engine: str) -> dict[str, float]:
     result = row[engine]
     resolved = normalized(resolved_word(row, engine))
     suggestions = [normalized(word) for word in result["suggestions"]]
-    candidates = [normalized(word) for word in result.get("candidates", [])]
+    raw_candidates = result.get("candidates")
+    candidates = [normalized(word) for word in raw_candidates or []]
+    correct = float(resolved == intended)
+    confidence = result.get("confidence")
     return {
-        "correction_accuracy": float(resolved == intended),
-        "false_correction": float(typed == intended and resolved != intended),
-        "missed_correction": float(typed != intended and resolved != intended),
+        "correction_accuracy": correct,
+        "false_correction": (float(resolved != intended)
+                             if typed == intended else math.nan),
+        "missed_correction": (float(resolved != intended)
+                              if typed != intended else math.nan),
         "modified": float(resolved != typed),
         "suggestion_top1": float(bool(suggestions) and suggestions[0] == intended),
         "suggestion_top3": float(intended in suggestions[:3]),
-        "candidate_recall": float(not candidates or intended in candidates),
+        "candidate_recall": (float(intended in candidates)
+                             if raw_candidates is not None else math.nan),
+        "keystroke_savings": float(result.get("keystrokes_saved", math.nan)),
+        "brier_score": ((float(confidence) - correct) ** 2
+                        if confidence is not None else math.nan),
     }
 
 
 def mean(values: Iterable[float]) -> float:
-    values = list(values)
+    values = [value for value in values if not math.isnan(value)]
     return sum(values) / len(values) if values else math.nan
 
 
@@ -151,6 +171,9 @@ def clustered_interval(
         by_user[row["user_id"]].append(row)
     users = sorted(by_user)
     if len(users) < 2 or samples <= 0:
+        return math.nan, math.nan
+    if math.isnan(mean(event_metrics(row, "engine")[metric] for row in rows)) or \
+       math.isnan(mean(event_metrics(row, "baseline")[metric] for row in rows)):
         return math.nan, math.nan
     rng = random.Random(seed)
     deltas: list[float] = []
@@ -192,13 +215,15 @@ def report(rows: list[dict[str, Any]], split: str, bootstrap: int, seed: int) ->
     engine = aggregate(rows, "engine")
     baseline = aggregate(rows, "baseline")
     quality = [
-        ("Correction accuracy", "correction_accuracy"),
-        ("False-correction rate", "false_correction"),
-        ("Missed-correction rate", "missed_correction"),
-        ("Suggestion top-1", "suggestion_top1"),
-        ("Suggestion top-3", "suggestion_top3"),
-        ("Candidate-oracle recall", "candidate_recall"),
-        ("Word modification rate", "modified"),
+        ("Correction accuracy", "correction_accuracy", "percent"),
+        ("False-correction rate", "false_correction", "percent"),
+        ("Missed-correction rate", "missed_correction", "percent"),
+        ("Suggestion top-1", "suggestion_top1", "percent"),
+        ("Suggestion top-3", "suggestion_top3", "percent"),
+        ("Candidate-oracle recall", "candidate_recall", "percent"),
+        ("Word modification rate", "modified", "percent"),
+        ("Mean keystrokes saved", "keystroke_savings", "number"),
+        ("Calibration Brier score", "brier_score", "number"),
     ]
     lines = [
         "# Paired decoder report",
@@ -211,13 +236,20 @@ def report(rows: list[dict[str, Any]], split: str, bootstrap: int, seed: int) ->
         "| Metric | Engine | Baseline | Paired delta | 95% user-cluster CI |",
         "|---|---:|---:|---:|---:|",
     ]
-    for label, key in quality:
+    for label, key, kind in quality:
         delta = engine[key] - baseline[key]
         low, high = clustered_interval(rows, key, bootstrap, seed)
-        interval = "n/a" if math.isnan(low) else f"[{low * 100:+.2f}, {high * 100:+.2f}] pp"
+        if kind == "percent":
+            engine_text, baseline_text = percentage(engine[key]), percentage(baseline[key])
+            delta_text = "n/a" if math.isnan(delta) else f"{delta * 100:+.2f} pp"
+            interval = "n/a" if math.isnan(low) else f"[{low * 100:+.2f}, {high * 100:+.2f}] pp"
+        else:
+            engine_text = "n/a" if math.isnan(engine[key]) else f"{engine[key]:.4f}"
+            baseline_text = "n/a" if math.isnan(baseline[key]) else f"{baseline[key]:.4f}"
+            delta_text = "n/a" if math.isnan(delta) else f"{delta:+.4f}"
+            interval = "n/a" if math.isnan(low) else f"[{low:+.4f}, {high:+.4f}]"
         lines.append(
-            f"| {label} | {percentage(engine[key])} | {percentage(baseline[key])} "
-            f"| {delta * 100:+.2f} pp | {interval} |"
+            f"| {label} | {engine_text} | {baseline_text} | {delta_text} | {interval} |"
         )
     lines.extend(
         [

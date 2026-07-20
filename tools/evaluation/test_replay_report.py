@@ -60,6 +60,15 @@ class ReplayReportTests(unittest.TestCase):
         with self.assertRaises(replay_report.SchemaError):
             replay_report.load_rows(path)
 
+    def test_error_rates_use_their_eligible_case_denominators(self) -> None:
+        clean = self.row("clean", "u1", intended="hello")
+        clean["typed"] = "hello"
+        clean["engine"]["correction"] = "help"
+        typo = self.row("typo", "u2", intended="hello")
+        metrics = replay_report.aggregate([clean, typo], "engine")
+        self.assertEqual(metrics["false_correction"], 1.0)
+        self.assertEqual(metrics["missed_correction"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

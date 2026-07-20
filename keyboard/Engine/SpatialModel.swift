@@ -2,12 +2,111 @@ import Foundation
 
 // Spatial model + per-tap coordinates — extracted from Keyboardengine.swift.
 
-struct KeyTap: Equatable {
+nonisolated struct KeyTap: Equatable {
 	let dx: Double
 	let dy: Double
 }
 
-enum KB {
+/// Bounded on-device personalization of tap-center means and diagonal covariance.
+/// Only aggregate sufficient statistics are persisted; no text or raw touch sequence
+/// leaves the decoder. Three row clusters provide enough data to adapt without the
+/// severe overfitting of one model per key.
+final class TouchSpatialProfile {
+	private struct Bucket: Codable, Equatable {
+		var count = 0
+		var meanX = 0.0
+		var meanY = 0.0
+		var m2X = 0.0
+		var m2Y = 0.0
+
+		mutating func observe(_ tap: KeyTap) {
+			count += 1
+			let dx = tap.dx - meanX
+			let dy = tap.dy - meanY
+			meanX += dx / Double(count)
+			meanY += dy / Double(count)
+			m2X += dx * (tap.dx - meanX)
+			m2Y += dy * (tap.dy - meanY)
+			if count > 2_000 {
+				count /= 2
+				m2X *= 0.5
+				m2Y *= 0.5
+			}
+		}
+	}
+
+	private struct Stored: Codable, Equatable {
+		var version = 1
+		var rows = [Bucket(), Bucket(), Bucket()]
+	}
+
+	private static let key = "kb.touchprofile"
+	private static let minimumSamples = 32
+	private static let referenceDeviation = 0.28
+	private var stored: Stored
+	private var unsavedSamples = 0
+
+	init(defaults: UserDefaults = KBSettings.sharedDefaults) {
+		if let data = defaults.data(forKey: Self.key),
+		   let decoded = try? JSONDecoder().decode(Stored.self, from: data),
+		   decoded.version == 1, decoded.rows.count == 3 {
+			stored = decoded
+		} else {
+			stored = Stored()
+		}
+	}
+
+	func adjusted(_ taps: [KeyTap?]?, typed: String) -> [KeyTap?]? {
+		guard let taps, taps.count == typed.utf8.count else { return taps }
+		return zip(typed.utf8, taps).map { letter, tap in
+			guard let tap, let row = rowIndex(for: letter) else { return tap }
+			let bucket = stored.rows[row]
+			guard bucket.count >= Self.minimumSamples else { return tap }
+			let denominator = Double(max(1, bucket.count - 1))
+			let sigmaX = sqrt(max(bucket.m2X / denominator, 0.01))
+			let sigmaY = sqrt(max(bucket.m2Y / denominator, 0.01))
+			let centerX = min(max(bucket.meanX, -0.22), 0.22)
+			let centerY = min(max(bucket.meanY, -0.22), 0.22)
+			// Covariance scaling is deliberately capped: personalization refines an
+			// ambiguous edge tap and can never make a distant key look exact.
+			let scaleX = min(max(Self.referenceDeviation / sigmaX, 0.75), 1.25)
+			let scaleY = min(max(Self.referenceDeviation / sigmaY, 0.75), 1.25)
+			return KeyTap(dx: (tap.dx - centerX) * scaleX,
+				dy: (tap.dy - centerY) * scaleY)
+		}
+	}
+
+	func observe(word: String, taps: [KeyTap?],
+				 defaults: UserDefaults = KBSettings.sharedDefaults) {
+		guard word.utf8.count == taps.count else { return }
+		for (letter, tap) in zip(word.lowercased().utf8, taps) {
+			guard let tap, let row = rowIndex(for: letter),
+				  abs(tap.dx) <= 0.8, abs(tap.dy) <= 0.8 else { continue }
+			stored.rows[row].observe(tap)
+			unsavedSamples += 1
+		}
+		if unsavedSamples >= 32 { save(defaults: defaults) }
+	}
+
+	func save(defaults: UserDefaults = KBSettings.sharedDefaults) {
+		guard unsavedSamples > 0, let data = try? JSONEncoder().encode(stored) else { return }
+		defaults.set(data, forKey: Self.key)
+		unsavedSamples = 0
+	}
+
+	func reset(defaults: UserDefaults = KBSettings.sharedDefaults) {
+		stored = Stored()
+		unsavedSamples = 0
+		defaults.removeObject(forKey: Self.key)
+	}
+
+	private func rowIndex(for letter: UInt8) -> Int? {
+		guard let y = KB.pos[letter]?.1 else { return nil }
+		return Int(y)
+	}
+}
+
+nonisolated enum KB {
 	static let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 	/// Normalized visual center offsets in key pitches. The UIKit deck centers the
 	/// nine-key home row by half a pitch; shift places Z one-and-a-half pitches after Q.

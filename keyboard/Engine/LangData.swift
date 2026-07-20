@@ -2,15 +2,132 @@ import Foundation
 
 // LangData: mmap reader for langdata.bin (n-grams + static trie) — extracted from Keyboardengine.swift.
 
-final class LangData {
+nonisolated struct IncrementalLexiconSeed {
+	let word: String
+	let bytes: [UInt8]
+	let logFreq: Double
+}
+
+/// Exact incremental OSA channel costs over a bounded set of static-lexicon words.
+/// Appending one typed byte advances one DP column; it does not walk the trie again.
+/// The seed set includes every root branch that can fit the production 3.6 normal
+/// radius, so normal-radius output remains equivalent to the full mapped-trie walk.
+nonisolated final class IncrementalDecodeSession {
+	private let seeds: [IncrementalLexiconSeed]
+	private let offsets: [Int]
+	private var previous: [Double]
+	private var previousPrevious: [Double]
+	private var scratch: [Double]
+	private(set) var typed: [UInt8] = []
+
+	init(seeds: [IncrementalLexiconSeed]) {
+		self.seeds = seeds
+		var offsets: [Int] = []
+		offsets.reserveCapacity(seeds.count)
+		var cells = 0
+		for seed in seeds {
+			offsets.append(cells)
+			cells += seed.bytes.count + 1
+		}
+		self.offsets = offsets
+		previous = [Double](repeating: 0, count: cells)
+		previousPrevious = [Double](repeating: 0, count: cells)
+		scratch = [Double](repeating: 0, count: cells)
+		resetRows()
+	}
+
+	var seedCount: Int { seeds.count }
+
+	/// Advances an append-only word in O(total seeded spelling bytes). A cursor edit,
+	/// backspace, or changed prefix deterministically rebuilds the retained columns.
+	@discardableResult
+	func advance(to word: String, taps: [KeyTap?]? = nil) -> Bool {
+		let bytes = Array(word.lowercased().utf8)
+		guard !bytes.isEmpty,
+			bytes.allSatisfy({ ($0 >= UInt8(ascii: "a") && $0 <= UInt8(ascii: "z"))
+				|| $0 == KB.apostrophe }) else { return false }
+		let tapRow = taps?.count == bytes.count ? taps : nil
+		if bytes.count < typed.count || !bytes.starts(with: typed) {
+			resetRows()
+			typed.removeAll(keepingCapacity: true)
+		}
+		for index in typed.count..<bytes.count {
+			append(bytes[index], tap: tapRow?[index])
+		}
+		return typed == bytes
+	}
+
+	func candidates(maxCost: Double) -> [Candidate] {
+		guard !typed.isEmpty else { return [] }
+		var result: [Candidate] = []
+		result.reserveCapacity(min(128, seeds.count))
+		for (index, seed) in seeds.enumerated() {
+			guard let first = seed.bytes.first else { continue }
+			let penalty = Trie.firstLetterPenaltyPolicy(typedLength: typed.count,
+				candidateFirst: first, typedFirst: typed[0])
+			let cost = previous[offsets[index] + seed.bytes.count] + penalty
+			if cost <= maxCost {
+				result.append(Candidate(word: seed.word, cost: cost,
+					logFreq: seed.logFreq))
+			}
+		}
+		return result
+	}
+
+	private func resetRows() {
+		for (index, seed) in seeds.enumerated() {
+			let offset = offsets[index]
+			previous[offset] = 0
+			for column in 1...seed.bytes.count {
+				let skip = seed.bytes[column - 1] == KB.apostrophe
+					? KB.apostropheSkipCost : Trie.delCost
+				previous[offset + column] = previous[offset + column - 1] + skip
+			}
+		}
+	}
+
+	private func append(_ byte: UInt8, tap: KeyTap?) {
+		let typedIndex = typed.count + 1
+		for (index, seed) in seeds.enumerated() {
+			let offset = offsets[index]
+			scratch[offset] = Double(typedIndex) * Trie.insCost
+			for column in 1...seed.bytes.count {
+				let candidate = seed.bytes[column - 1]
+				let skip = candidate == KB.apostrophe
+					? KB.apostropheSkipCost : Trie.delCost
+				let insertion = previous[offset + column] + Trie.insCost
+				let deletion = scratch[offset + column - 1] + skip
+				let substitution = previous[offset + column - 1]
+					+ KB.subCost(candidate, typed: byte, tap: tap)
+				var value = min(insertion, min(deletion, substitution))
+				if typedIndex >= 2, column >= 2,
+					candidate == typed[typedIndex - 2],
+					seed.bytes[column - 2] == byte {
+					value = min(value,
+						previousPrevious[offset + column - 2] + Trie.transCost)
+				}
+				scratch[offset + column] = value
+			}
+		}
+		swap(&previousPrevious, &previous)
+		swap(&previous, &scratch)
+		typed.append(byte)
+	}
+}
+
+nonisolated final class LangData {
 	private let data: Data
+	let formatVersion: Int
 	let wordCount: Int
 	private let biBuckets, biEntCount, triBuckets, triEntCount: Int
 	private let freqBase, offsBase, biHashBase, biEntBase, triHashBase, triEntBase, trieBase, startersBase, blobBase: Int
 	private let trieNodeCount: Int
 	private let starterCount: Int
+	private let trieNodeSize: Int
+	private let continuationSize: Int
+	private let starterSize: Int
 	private static let empty = 0xFFFFFFFF          // empty-bucket sentinel (ids are < wordCount)
-	private static let nodeSize = 14               // trie record: see the trie MARK
+	private static let empty16 = 0xFFFF
 
 	init?(url: URL) {
 		guard let d = try? Data(contentsOf: url, options: .alwaysMapped), d.count >= 28 else { return nil }
@@ -19,21 +136,28 @@ final class LangData {
 		}
 		guard u32(0) == 0x4B424C4D else { return nil }                 // magic "KBLM"
 		let version = u32(4)
-		guard version >= 2, version <= 4 else { return nil }           // v3 = +trie, v4 = +starters
+		guard version >= 2, version <= 5 else { return nil }
+		let headerSize = version >= 4 ? 36 : (version >= 3 ? 32 : 28)
+		guard d.count >= headerSize else { return nil }
+		formatVersion = version
 		wordCount   = u32(8)
+		if version == 5, wordCount >= Self.empty16 { return nil }
 		biBuckets   = u32(12); biEntCount  = u32(16)
 		triBuckets  = u32(20); triEntCount = u32(24)
 		trieNodeCount = version >= 3 ? u32(28) : 0
 		starterCount  = version >= 4 ? u32(32) : 0
-		freqBase    = version >= 4 ? 36 : (version >= 3 ? 32 : 28)
+		trieNodeSize = version == 5 ? 12 : 14
+		continuationSize = version == 5 ? 6 : 8
+		starterSize = version == 5 ? 6 : 8
+		freqBase    = headerSize
 		offsBase    = freqBase    + 4 * wordCount
 		biHashBase  = offsBase    + 4 * (wordCount + 1)
-		biEntBase   = biHashBase  + 16 * biBuckets       // (ctx, total, entStart, entCount)
-		triHashBase = biEntBase   + 8 * biEntCount
-		triEntBase  = triHashBase + 20 * triBuckets      // (w1, w2, total, entStart, entCount)
-		trieBase    = triEntBase  + 8 * triEntCount
-		startersBase = trieBase   + Self.nodeSize * trieNodeCount   // (wordId, count) x starterCount
-		blobBase    = startersBase + 8 * starterCount
+		biEntBase   = biHashBase  + (version == 5 ? 12 : 16) * biBuckets
+		triHashBase = biEntBase   + continuationSize * biEntCount
+		triEntBase  = triHashBase + (version == 5 ? 12 : 20) * triBuckets
+		trieBase    = triEntBase  + continuationSize * triEntCount
+		startersBase = trieBase   + trieNodeSize * trieNodeCount
+		blobBase    = startersBase + starterSize * starterCount
 		guard blobBase <= d.count else { return nil }
 		data = d
 	}
@@ -43,11 +167,17 @@ final class LangData {
 	/// (i, the, i'm, you) rather than mid-sentence function words (and, of, to).
 	func starterIDs(limit: Int) -> [Int] {
 		guard starterCount > 0 else { return [] }
-		return (0..<min(limit, starterCount)).map { u32(startersBase + 8 * $0) }
+		return (0..<min(limit, starterCount)).map {
+			formatVersion == 5 ? u16(startersBase + starterSize * $0)
+				: u32(startersBase + starterSize * $0)
+		}
 	}
 
 	private func u32(_ off: Int) -> Int {
 		Int(UInt32(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: off, as: UInt32.self) }))
+	}
+	private func u16(_ off: Int) -> Int {
+		Int(UInt16(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: off, as: UInt16.self) }))
 	}
 
 	func freq(_ id: Int) -> Int { u32(freqBase + 4 * id) }
@@ -146,6 +276,20 @@ final class LangData {
 
 	private func bigramRange(after ctx: Int32) -> (total: Int, start: Int, count: Int)? {
 		guard biBuckets > 0 else { return nil }
+		if formatVersion == 5 {
+			let key = Int(ctx)
+			guard key >= 0, key < Self.empty16 else { return nil }
+			var lower = 0, upper = biBuckets
+			while lower < upper {
+				let middle = lower + (upper - lower) / 2
+				let slot = u16(biHashBase + 12 * middle)
+				if slot < key { lower = middle + 1 } else { upper = middle }
+			}
+			guard lower < biBuckets else { return nil }
+			let base = biHashBase + 12 * lower
+			guard u16(base) == key else { return nil }
+			return (u32(base + 4), u32(base + 8), u16(base + 2))
+		}
 		let mask = biBuckets - 1
 		let key = Int(ctx)
 		var bucket = Int(Self.mix64(UInt64(UInt32(bitPattern: ctx))) & UInt64(mask))
@@ -161,6 +305,25 @@ final class LangData {
 	private func trigramRange(after w1: Int32, _ w2: Int32)
 		-> (total: Int, start: Int, count: Int)? {
 		guard triBuckets > 0 else { return nil }
+		if formatVersion == 5 {
+			guard w1 >= 0, w2 >= 0,
+				w1 < Int32(Self.empty16), w2 < Int32(Self.empty16) else { return nil }
+			let key = (UInt32(w1) << 16) | UInt32(w2)
+			var lower = 0, upper = triBuckets
+			while lower < upper {
+				let middle = lower + (upper - lower) / 2
+				let slot = UInt32(u32(triHashBase + 12 * middle))
+				if slot < key { lower = middle + 1 } else { upper = middle }
+			}
+			guard lower < triBuckets else { return nil }
+			let base = triHashBase + 12 * lower
+			guard UInt32(u32(base)) == key else { return nil }
+			let start = u32(base + 8)
+			let end = lower + 1 < triBuckets
+				? u32(triHashBase + 12 * (lower + 1) + 8) : triEntCount
+			guard end >= start else { return nil }
+			return (u32(base + 4), start, end - start)
+		}
 		let mask = triBuckets - 1
 		let key = (UInt64(UInt32(bitPattern: w1)) << 32) | UInt64(UInt32(bitPattern: w2))
 		var bucket = Int(Self.mix64(key) & UInt64(mask))
@@ -176,38 +339,53 @@ final class LangData {
 	}
 
 	private func selectedCounts(base: Int, range: (total: Int, start: Int, count: Int),
-								words: [Int32]) -> (total: Int, types: Int, counts: [Int32: Int]) {
+									words: [Int32]) -> (total: Int, types: Int, counts: [Int32: Int]) {
 		let wanted = Set(words)
 		var found: [Int32: Int] = [:]
 		found.reserveCapacity(min(wanted.count, range.count))
 		guard !wanted.isEmpty else { return (range.total, range.count, found) }
 		for index in range.start..<(range.start + range.count) {
-			let word = Int32(u32(base + 8 * index))
-			if wanted.contains(word) { found[word] = u32(base + 8 * index + 4) }
+			let offset = base + continuationSize * index
+			let word = Int32(formatVersion == 5 ? u16(offset) : u32(offset))
+			let countOffset = formatVersion == 5 ? 2 : 4
+			if wanted.contains(word) { found[word] = u32(offset + countOffset) }
 		}
 		return (range.total, range.count, found)
 	}
 
 	private func entries(_ base: Int, _ start: Int, _ end: Int) -> [(word: Int32, count: Int)] {
-		(start..<end).map { (Int32(u32(base + 8 * $0)), u32(base + 8 * $0 + 4)) }
+		(start..<end).map {
+			let offset = base + continuationSize * $0
+			return (Int32(formatVersion == 5 ? u16(offset) : u32(offset)),
+				u32(offset + (formatVersion == 5 ? 2 : 4)))
+		}
 	}
 
 	// MARK: Static trie (v3) — fuzzy search + completions directly over the mmap
 	//
-	// Node record, 14 B packed, BFS order with each node's children contiguous and
+	// Node records are BFS ordered with each node's children contiguous and
 	// label-sorted (built by tools/build_language_data.py):
-	//   label u8 | childCount u8 | firstChild u32 | wordID u32 (0xFFFFFFFF = none) |
-	//   maxFreq u32 — max corpus frequency in the subtree, for best-first completion.
+	// v2-v4 use a 14-byte UInt32 word ID; v5 uses a 12-byte UInt16 word ID.
 	// Node 0 is the root. Walking these records in place replaces the ~60k-word heap
 	// trie that used to be rebuilt (and count as dirty memory) at every launch.
 
 	var hasTrie: Bool { trieNodeCount > 0 }
 
 	private func nodeByte(_ node: Int, _ off: Int) -> Int {
-		Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: trieBase + Self.nodeSize * node + off, as: UInt8.self) })
+		Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: trieBase + trieNodeSize * node + off, as: UInt8.self) })
 	}
 	private func nodeU32(_ node: Int, _ off: Int) -> UInt32 {
-		UInt32(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: trieBase + Self.nodeSize * node + off, as: UInt32.self) })
+		UInt32(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: trieBase + trieNodeSize * node + off, as: UInt32.self) })
+	}
+	private func nodeWordID(_ node: Int) -> UInt32 {
+		if formatVersion == 5 {
+			let id = u16(trieBase + trieNodeSize * node + 6)
+			return id == Self.empty16 ? UInt32(Self.empty) : UInt32(id)
+		}
+		return nodeU32(node, 6)
+	}
+	private func nodeMaxFreq(_ node: Int) -> UInt32 {
+		nodeU32(node, formatVersion == 5 ? 8 : 10)
 	}
 
 	/// Walk the exact byte path from the root; nil when it leaves the trie.
@@ -227,7 +405,7 @@ final class LangData {
 
 	func trieContains(_ lw: String) -> Bool {
 		guard let n = trieNode(for: Array(lw.utf8)) else { return false }
-		return nodeU32(n, 6) != UInt32(Self.empty)
+		return nodeWordID(n) != UInt32(Self.empty)
 	}
 
 	/// The most frequent dictionary word formed by inserting ONE apostrophe into an
@@ -244,7 +422,7 @@ final class LangData {
 			var cand = bytes
 			cand.insert(UInt8(ascii: "'"), at: i)
 			guard let n = trieNode(for: cand) else { continue }
-			let id = nodeU32(n, 6)
+			let id = nodeWordID(n)
 			guard id != UInt32(Self.empty) else { continue }
 			let f = freq(Int(Int32(bitPattern: id)))
 			if best == nil || f > best!.freq {
@@ -256,8 +434,45 @@ final class LangData {
 	func trieHasPrefix(_ lw: String) -> Bool { trieNode(for: Array(lw.utf8)) != nil }
 	func trieWordID(_ lw: String) -> Int32? {
 		guard let n = trieNode(for: Array(lw.utf8)) else { return nil }
-		let id = nodeU32(n, 6)
+		let id = nodeWordID(n)
 		return id == UInt32(Self.empty) ? nil : Int32(bitPattern: id)
+	}
+
+	/// Materializes only root branches that can possibly fit the normal production
+	/// channel radius. For words of length five or more, a wrong-root path that avoids
+	/// direct substitution already costs firstPenalty + insertion/deletion = 4.1, so
+	/// this direct-substitution gate is complete for the 3.6 radius.
+	func incrementalSeeds(typedFirst: UInt8, firstTap: KeyTap?,
+		stateCap: Int = 24_000) -> [IncrementalLexiconSeed]? {
+		guard hasTrie, typedFirst >= UInt8(ascii: "a"),
+			typedFirst <= UInt8(ascii: "z") else { return nil }
+		let maximumNormalCost = 3.6
+		let longWordPenalty = Trie.firstLetterPenaltyPolicy(typedLength: 8,
+			candidateFirst: UInt8(ascii: "z"), typedFirst: typedFirst)
+		var allowedInitials = Set<UInt8>()
+		forEachChild(ofNode: trieRootNode) { label, _ in
+			if label == typedFirst
+				|| longWordPenalty + KB.subCost(label, typed: typedFirst,
+					tap: firstTap) <= maximumNormalCost {
+				allowedInitials.insert(label)
+			}
+		}
+
+		var seeds: [IncrementalLexiconSeed] = []
+		seeds.reserveCapacity(min(stateCap, wordCount / 3))
+		for id in 0..<wordCount {
+			let start = u32(offsBase + 4 * id)
+			let end = u32(offsBase + 4 * (id + 1))
+			guard end > start, blobBase + end <= data.count else { return nil }
+			let first = data[blobBase + start]
+			guard allowedInitials.contains(first) else { continue }
+			if seeds.count >= stateCap { return nil }
+			let bytes = Array(data[(blobBase + start)..<(blobBase + end)])
+			seeds.append(IncrementalLexiconSeed(
+				word: String(decoding: bytes, as: UTF8.self), bytes: bytes,
+				logFreq: log(Double(max(freq(id), 1)) + 1)))
+		}
+		return seeds
 	}
 
 	/// The same weighted-DP fuzzy search as `Trie.search` — identical costs, identical
@@ -278,14 +493,23 @@ final class LangData {
 		var visits = 0
 		var cancelled = false
 		let nodeBase = trieBase
+		let nodeSize = trieNodeSize
+		let compactWordIDs = formatVersion == 5
 		data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
 			func byte(_ node: Int, _ off: Int) -> UInt8 {
-				raw.loadUnaligned(fromByteOffset: nodeBase + Self.nodeSize * node + off, as: UInt8.self)
+				raw.loadUnaligned(fromByteOffset: nodeBase + nodeSize * node + off, as: UInt8.self)
 			}
 			func u32le(_ node: Int, _ off: Int) -> UInt32 {
-				UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: nodeBase + Self.nodeSize * node + off, as: UInt32.self))
+				UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: nodeBase + nodeSize * node + off, as: UInt32.self))
 			}
-			func recurse(_ node: Int, _ letter: UInt8, _ prevLetter: UInt8, _ depth: Int) {
+			func wordID(_ node: Int) -> UInt32 {
+				guard compactWordIDs else { return u32le(node, 6) }
+				let id = UInt16(littleEndian: raw.loadUnaligned(
+					fromByteOffset: nodeBase + nodeSize * node + 6, as: UInt16.self))
+				return id == UInt16(Self.empty16) ? UInt32(Self.empty) : UInt32(id)
+			}
+			func recurse(_ node: Int, _ letter: UInt8, _ prevLetter: UInt8,
+				_ depth: Int, _ firstPenalty: Double) {
 				guard !cancelled, depth <= maxDepth else { return }
 				visits &+= 1
 				if visits & 127 == 0, shouldCancel?() == true {
@@ -300,10 +524,7 @@ final class LangData {
 				for col in 1...n {
 					let ins = dp[base + col - 1] + Trie.insCost
 					let del = dp[prev + col] + skip
-					var s = KB.subCost(letter, typed: chars[col - 1], tap: tapRow?[col - 1] ?? nil)
-					if depth == 1, col == 1, letter != chars[0] {
-						s += Trie.firstLetterPenaltyPolicy(typedLength: n, candidateFirst: letter, typedFirst: chars[0])
-					}
+					let s = KB.subCost(letter, typed: chars[col - 1], tap: tapRow?[col - 1] ?? nil)
 					var v = min(ins, del, dp[prev + col - 1] + s)
 					if depth >= 2, col >= 2, letter == chars[col - 2], prevLetter == chars[col - 1] {
 						v = min(v, dp[prev - (n + 1) + col - 2] + Trie.transCost)
@@ -311,17 +532,26 @@ final class LangData {
 					dp[base + col] = v
 					if v < rowMin { rowMin = v }
 				}
-				let id = u32le(node, 6)
-				if id != UInt32(Self.empty), dp[base + n] <= maxCost {
-					hits.append((Int32(bitPattern: id), dp[base + n]))
+				let id = wordID(node)
+				let finalCost = dp[base + n] + firstPenalty
+				if id != UInt32(Self.empty), finalCost <= maxCost {
+					hits.append((Int32(bitPattern: id), finalCost))
 				}
-				if rowMin <= maxCost {
+				if rowMin + firstPenalty <= maxCost {
 					let first = Int(u32le(node, 2)), count = Int(byte(node, 1))
-					for c in 0..<count { recurse(first + c, byte(first + c, 0), letter, depth + 1) }
+					for c in 0..<count {
+						recurse(first + c, byte(first + c, 0), letter,
+							depth + 1, firstPenalty)
+					}
 				}
 			}
 			let first = Int(u32le(0, 2)), count = Int(byte(0, 1))
-			for c in 0..<count { recurse(first + c, byte(first + c, 0), 0, 1) }
+			for c in 0..<count {
+				let letter = byte(first + c, 0)
+				let penalty = Trie.firstLetterPenaltyPolicy(typedLength: n,
+					candidateFirst: letter, typedFirst: chars[0])
+				recurse(first + c, letter, 0, 1, penalty)
+			}
 		}
 		guard !cancelled else { return [] }
 		return hits.map { Candidate(word: word(Int($0.id)), cost: $0.cost,
@@ -334,7 +564,7 @@ final class LangData {
 	func trieChildren(after prefix: String) -> [(label: UInt8, maxFreq: UInt32)] {
 		guard let n = trieNode(for: Array(prefix.utf8)) else { return [] }
 		let first = Int(nodeU32(n, 2)), count = nodeByte(n, 1)
-		return (0..<count).map { (UInt8(nodeByte(first + $0, 0)), nodeU32(first + $0, 10)) }
+		return (0..<count).map { (UInt8(nodeByte(first + $0, 0)), nodeMaxFreq(first + $0)) }
 	}
 
 	/// Top-`limit` completions under `prefix`, best-first over the per-node subtree
@@ -373,7 +603,7 @@ final class LangData {
 			return top
 		}
 		var out: [Candidate] = []
-		push(Entry(priority: nodeU32(start, 10), node: start, wordID: -1))
+		push(Entry(priority: nodeMaxFreq(start), node: start, wordID: -1))
 		while !heap.isEmpty, out.count < limit {
 			let e = pop()
 			if e.node < 0 {
@@ -382,13 +612,13 @@ final class LangData {
 									 logFreq: log(Double(max(freq(id), 1)) + 1)))
 				continue
 			}
-			let id = nodeU32(e.node, 6)
+			let id = nodeWordID(e.node)
 			if id != UInt32(Self.empty) {
 				let wid = Int32(bitPattern: id)
 				push(Entry(priority: UInt32(clamping: freq(Int(wid))), node: -1, wordID: wid))
 			}
 			let first = Int(nodeU32(e.node, 2)), count = nodeByte(e.node, 1)
-			for c in 0..<count { push(Entry(priority: nodeU32(first + c, 10), node: first + c, wordID: -1)) }
+			for c in 0..<count { push(Entry(priority: nodeMaxFreq(first + c), node: first + c, wordID: -1)) }
 		}
 		return out
 	}
@@ -413,10 +643,10 @@ final class LangData {
 	}
 	/// The word ending at this node, or nil if the node is a non-terminal prefix.
 	func trieWord(atNode node: Int) -> String? {
-		let id = nodeU32(node, 6)
+		let id = nodeWordID(node)
 		return id == UInt32(Self.empty) ? nil : word(Int(Int32(bitPattern: id)))
 	}
-	/// Max corpus frequency anywhere in this node's subtree (packed at offset 10) — lets
+	/// Max corpus frequency anywhere in this node's subtree — lets
 	/// glide's beam keep frequent-but-imperfect prefixes alive so context can rescue them.
-	func trieMaxFreq(ofNode node: Int) -> UInt32 { nodeU32(node, 10) }
+	func trieMaxFreq(ofNode node: Int) -> UInt32 { nodeMaxFreq(node) }
 }

@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "status": "research_only_no_go_for_release",
+  "generated_date": "2026-07-19",
+  "checkpoint": {
+    "path": "/Users/meher/Downloads/qwen_lm_distil/artifacts/finetune.pt",
+    "stage": "finetune",
+    "parameters": 10601472,
+    "sha256": "db1030dc4f1d25d3a1c042c1fe0640d5bc5c4f3677a369457c681555aef901dc",
+    "tokenizer_sha256": "c2fea4a790c16a25537c81d226b47c0ddc6911f20f1895022676d68a4d70753c",
+    "contains_telugu_script_tokens": false
+  },
+  "held_out_messaging_perplexity": {
+    "finetune": 53.74,
+    "pretrain": 81.14,
+    "distill": 137.84,
+    "note": "Previously recorded English held-out run; not a correction-quality or multilingual metric."
+  },
+  "fresh_replay": {
+    "language_data_sha256": "ff095aaa6e15b1c92d1d992f6d0a9a453921428f3fd49d107debcdaba3ab4b26",
+    "cases_per_slice": 250,
+    "seed": 7,
+    "forced_gold_insertion": false,
+    "neural_weight": 0.7,
+    "ngram_weight": 0.3,
+    "neural_score": "summed_sentencepiece_log_probability",
+    "one_edit": {
+      "ngram_top1": 0.804,
+      "ngram_top3": 0.976,
+      "finetune_top1": 0.844,
+      "finetune_top3": 0.992,
+      "oracle_recall": 1.0,
+      "cpu_ms_per_case_p50": 43.525625,
+      "cpu_ms_per_case_p95": 81.548958
+    },
+    "two_edit": {
+      "ngram_top1": 0.732,
+      "ngram_top3": 0.848,
+      "finetune_top1": 0.784,
+      "finetune_top3": 0.852,
+      "oracle_recall": 0.856,
+      "cpu_ms_per_case_p50": 35.270396,
+      "cpu_ms_per_case_p95": 75.278625
+    },
+    "test_slice_sweep": {
+      "best_weight": 0.5,
+      "length_normalized": true,
+      "top1": 0.884,
+      "top3": 0.984,
+      "eligible_for_promotion": false,
+      "reason": "Weight and normalization were selected on the evaluated synthetic slice."
+    }
+  },
+  "coreml_research_export": {
+    "coremltools_version": "9.0",
+    "minimum_deployment_target": "iOS18",
+    "w8_size_bytes": 10829234,
+    "w8a8_size_bytes": 10883126,
+    "int8_weight_storage_op": "constexpr_blockwise_shift_scale",
+    "int8_weight_storage_op_count": 26,
+    "activation_quantize_op_count": 52,
+    "activation_dequantize_op_count": 52,
+    "w8a8_is_calibrated_ptq_not_qat": true,
+    "independent_verifier": {
+      "candidate_max_abs_error": 0.31980323791503906,
+      "candidate_top1_agreement": 1.0,
+      "mean_logit_correlation": 0.9997133432702365,
+      "minimum_logit_correlation": 0.9992133868710811,
+      "next_top1_agreement": 0.96875,
+      "next_top5_overlap": 0.9765625
+    },
+    "package_location": "/Users/meher/Downloads/qwen_lm_distil/artifacts/coreml_internal",
+    "included_in_xcode_target": false
+  },
+  "limitations": [
+    "Synthetic typo generation is not a user-separated blind dataset.",
+    "There are no already-correct cases, so false-correction rate is not measurable.",
+    "CPU/PyTorch timing is not physical-iPhone Core ML latency.",
+    "The tokenizer has no Telugu-script pieces and the checkpoint is English-only.",
+    "The two-edit candidate oracle of 85.6 percent caps any post-hoc reranker.",
+    "The W8A8 package is calibrated PTQ and is not the forthcoming QAT checkpoint."
+  ],
+  "verdict": "Do not ship. Keep n-gram in Release; retain W8 and W8A8 packages only for internal physical-device profiling until QAT, blind quality, false-correction, ANE, latency, memory, energy, and thermal gates pass."
+}

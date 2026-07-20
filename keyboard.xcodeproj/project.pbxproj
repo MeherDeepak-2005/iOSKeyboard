@@ -49,6 +49,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A10000012FE821180014EA39 /* Extension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Extension.xcconfig; sourceTree = "<group>"; };
+		A10000022FE821180014EA39 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
 		83C6F2B92FE7B47E0014EA39 /* keyboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = keyboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F2CB2FE7B4800014EA39 /* keyboardTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = keyboardTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F2D52FE7B4800014EA39 /* keyboardUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = keyboardUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -61,25 +63,39 @@
 			membershipExceptions = (
 				emoji.bin,
 				Engine/DecodeContract.swift,
+				Engine/CoreMLNeuralLanguagePrior.swift,
 				Engine/GlidePath.swift,
 				Engine/Keyboardengine.swift,
 				Engine/LangData.swift,
 				Engine/Lexicon.swift,
 				Engine/NgramScorer.swift,
 				Engine/SpatialModel.swift,
+				Engine/TeluguComposer.swift,
+				Engine/TeluguLexicon.swift,
+				Engine/TenglishTransliterator.swift,
 				Engine/Trie.swift,
 				Engine/UserModel.swift,
 				langdata.bin,
 				safety.kbguard,
 				Shared/KBDiagnostics.swift,
+				Shared/KBKlipy.swift,
+				Shared/LanguagePackHealth.swift,
+				Shared/KBMediaCache.swift,
 				Shared/KBPersonalData.swift,
 				Shared/KBSafetyLexicon.swift,
 				Shared/KBSettings.swift,
+				Shared/KBStats.swift,
 				"Shared/UIColor+Hex.swift",
+				telugu_langdata.bin,
+				telugu_layout.kbpack,
+				telugu_pack_manifest.json,
+				tenglish_lexicon.bin,
 				Views/Emoji.swift,
 				Views/Keyboard.swift,
+				Views/KeyboardLayout.swift,
 				Views/KeyboardTheme.swift,
 				Views/KeyButton.swift,
+				Views/MediaPanel.swift,
 				Views/SuggestionBar.swift,
 			);
 			target = 83C6F3052FE821180014EA39 /* demo_keyboard */;
@@ -87,7 +103,6 @@
 		837F01AF2FEE99820033ED99 /* Exceptions for "keyboard" folder in "keyboard" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				emoji.bin,
 				langdata.bin,
 				safety.kbguard,
 			);
@@ -167,12 +182,22 @@
 		83C6F2B02FE7B47E0014EA39 = {
 			isa = PBXGroup;
 			children = (
+				A10000032FE821180014EA39 /* Config */,
 				83C6F2BB2FE7B47E0014EA39 /* keyboard */,
 				83C6F2CE2FE7B4800014EA39 /* keyboardTests */,
 				83C6F2D82FE7B4800014EA39 /* keyboardUITests */,
 				83C6F3072FE821180014EA39 /* demo_keyboard */,
 				83C6F2BA2FE7B47E0014EA39 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		A10000032FE821180014EA39 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A10000012FE821180014EA39 /* Extension.xcconfig */,
+				A10000022FE821180014EA39 /* Secrets.xcconfig.example */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		83C6F2BA2FE7B47E0014EA39 /* Products */ = {
@@ -266,6 +291,7 @@
 				83C6F3022FE821180014EA39 /* Sources */,
 				83C6F3032FE821180014EA39 /* Frameworks */,
 				83C6F3042FE821180014EA39 /* Resources */,
+				A10000042FE821180014EA39 /* Install Internal Neural Model */,
 			);
 			buildRules = (
 			);
@@ -359,6 +385,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A10000042FE821180014EA39 /* Install Internal Neural Model */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Install Internal Neural Model";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"${CONFIGURATION}\" = \"Debug\" ] || [ \"${INTERNAL_NEURAL_ENABLED:-NO}\" = \"YES\" ]; then\n    \"${SRCROOT}/tools/lm/install_internal_coreml.sh\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		83C6F2B52FE7B47E0014EA39 /* Sources */ = {
@@ -462,7 +510,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -520,7 +568,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -548,7 +596,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -574,7 +622,9 @@
 				CODE_SIGN_ENTITLEMENTS = keyboard/keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
@@ -583,7 +633,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -592,6 +642,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				STRIP_INSTALLED_PRODUCT = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -608,7 +659,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -629,7 +680,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -649,7 +700,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -669,7 +720,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -685,16 +736,18 @@
 		};
 		83C6F30F2FE821180014EA39 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000012FE821180014EA39 /* Extension.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = demo_keyboard/demo_keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -715,16 +768,21 @@
 		};
 		83C6F3102FE821180014EA39 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000012FE821180014EA39 /* Extension.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = demo_keyboard/demo_keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEPLOYMENT_POSTPROCESSING = YES;
 				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				ENABLE_CODE_COVERAGE = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -735,6 +793,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				STRIP_INSTALLED_PRODUCT = YES;
+				STRIP_SWIFT_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;

@@ -1,0 +1,68 @@
+roman	native	weight	review_status	note
+nenu	నేను	10.0	approved	core pronoun
+neenu	నేను	9.0	approved	common alias
+meeru	మీరు	10.0	approved	core pronoun
+miru	మీరు	9.0	approved	common alias
+nuvvu	నువ్వు	10.0	approved	core pronoun
+memu	మేము	10.0	approved	core pronoun
+manam	మనం	10.0	approved	core pronoun
+vallu	వాళ్లు	9.0	approved	common alias
+vaallu	వాళ్లు	10.0	approved	core pronoun
+idi	ఇది	10.0	approved	core demonstrative
+idhi	ఇది	11.0	approved	common phonetic demonstrative
+adi	అది	10.0	approved	core demonstrative
+adhi	అది	9.0	approved	common alias
+ivi	ఇవి	10.0	approved	core demonstrative
+avi	అవి	10.0	approved	core demonstrative
+enti	ఏంటి	10.0	approved	core question
+emiti	ఏమిటి	10.0	approved	core question
+ela	ఎలా	10.0	approved	core question
+enduku	ఎందుకు	10.0	approved	core question
+eppudu	ఎప్పుడు	10.0	approved	core question
+ekkada	ఎక్కడ	10.0	approved	core question
+evaru	ఎవరు	10.0	approved	core question
+avunu	అవును	10.0	approved	core response
+kaadu	కాదు	10.0	approved	core response
+kadu	కాదు	9.0	approved	common alias
+sare	సరే	10.0	approved	core response
+ledu	లేదు	10.0	approved	core response
+undi	ఉంది	10.0	approved	core verb
+unnadi	ఉన్నది	9.0	approved	core verb
+ippudu	ఇప్పుడు	10.0	approved	core time word
+ivala	ఇవాళ	10.0	approved	core time word
+repu	రేపు	10.0	approved	core time word
+ninna	నిన్న	10.0	approved	core time word
+inka	ఇంకా	10.0	approved	core connector
+kuda	కూడా	10.0	approved	core connector
+aithe	అయితే	10.0	approved	core connector
+kani	కానీ	10.0	approved	core connector
+mari	మరి	10.0	approved	core connector
+chala	చాలా	9.0	approved	common alias
+chaala	చాలా	10.0	approved	core modifier
+konchem	కొంచెం	10.0	approved	core modifier
+bagundi	బాగుంది	9.0	approved	common alias
+baagundi	బాగుంది	10.0	approved	core phrase
+amma	అమ్మ	10.0	approved	core family word
+nanna	నాన్న	10.0	approved	core family word
+anna	అన్న	10.0	approved	core family word
+akka	అక్క	10.0	approved	core family word
+tammudu	తమ్ముడు	10.0	approved	core family word
+chelli	చెల్లి	10.0	approved	core family word
+cheppu	చెప్పు	10.0	approved	core verb
+cheppandi	చెప్పండి	10.0	approved	core verb
+vastanu	వస్తాను	9.0	approved	common alias
+vasthanu	వస్తాను	10.0	approved	core verb
+vellali	వెళ్లాలి	10.0	approved	core verb
+chesanu	చేశాను	10.0	approved	core verb
+chestanu	చేస్తాను	10.0	approved	core verb
+nachindi	నచ్చింది	10.0	approved	core phrase
+nachaledu	నచ్చలేదు	10.0	approved	core phrase
+dhanyavadalu	ధన్యవాదాలు	10.0	approved	core courtesy
+namaste	నమస్తే	10.0	approved	core greeting
+subhodayam	శుభోదయం	10.0	approved	core greeting
+prema	ప్రేమ	10.0	approved	core noun
+pelli	పెళ్లి	10.0	approved	core noun
+intiki	ఇంటికి	10.0	approved	core phrase
+manchi	మంచి	10.0	approved	core modifier
+chudu	చూడు	9.0	approved	common alias
+choodandi	చూడండి	10.0	approved	core verb

@@ -4,12 +4,14 @@ import Foundation
 
 final class KBSafetyLexicon {
 	enum Action: UInt8 { case allow = 0, demote = 1, suppressSuggest = 2, suppressAlways = 3 }
+	enum Language: UInt8 { case english = 1, telugu = 2, tenglish = 3 }
 
 	private let data: Data
 	private let count: Int
 	private let blobBase: Int
 	private static let indexBase = 24
 	private static let entrySize = 24
+	var entryCount: Int { count }
 
 	/// nil unless `safety.kbguard` is in the bundle (extension only ships it).
 	static func bundled(name: String = "safety") -> KBSafetyLexicon? {
@@ -24,8 +26,16 @@ final class KBSafetyLexicon {
 		func u32(_ o: Int) -> Int { Int(UInt32(littleEndian: d.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: o, as: UInt32.self) })) }
 		guard u16(8) == 1, u16(10) == Self.entrySize else { return nil }
 		count = u32(12)
+		let blobBytes = u32(16)
+		guard count <= (d.count - Self.indexBase) / Self.entrySize else { return nil }
 		blobBase = Self.indexBase + count * Self.entrySize
-		guard blobBase <= d.count else { return nil }
+		guard blobBase <= d.count, blobBytes == d.count - blobBase else { return nil }
+		for index in 0..<count {
+			let base = Self.indexBase + index * Self.entrySize
+			let offset = u32(base + 8)
+			let length = u16(base + 12)
+			guard offset <= blobBytes, length <= blobBytes - offset else { return nil }
+		}
 		data = d
 	}
 
@@ -64,9 +74,15 @@ final class KBSafetyLexicon {
 		let raw = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: Self.indexBase + i * Self.entrySize + 15, as: UInt8.self) }
 		return Action(rawValue: raw) ?? .allow
 	}
+	private func entryLanguage(_ i: Int) -> Language? {
+		let raw = data.withUnsafeBytes {
+			$0.loadUnaligned(fromByteOffset: Self.indexBase + i * Self.entrySize + 14,
+				as: UInt8.self)
+		}
+		return Language(rawValue: raw)
+	}
 
-	/// The blocklist action for a single term (exact match, collision-checked).
-	func action(for word: String) -> Action {
+	private func matchingIndex(for word: String) -> Int? {
 		let norm = Self.normalize(word)
 		let h = Self.hash(norm)
 		var lo = 0, hi = count - 1
@@ -77,15 +93,24 @@ final class KBSafetyLexicon {
 			else if hv > h { hi = mid - 1 }
 			else {
 				var i = mid
-				while i > 0, entryHash(i - 1) == h { i -= 1 }   // rewind to the first equal hash
+				while i > 0, entryHash(i - 1) == h { i -= 1 }
 				while i < count, entryHash(i) == h {
-					if entryTerm(i) == norm { return entryAction(i) }   // confirm bytes → no collision
+					if entryTerm(i) == norm { return i }
 					i += 1
 				}
-				return .allow
+				return nil
 			}
 		}
-		return .allow
+		return nil
+	}
+
+	/// The blocklist action for a single term (exact match, collision-checked).
+	func action(for word: String) -> Action {
+		matchingIndex(for: word).map(entryAction) ?? .allow
+	}
+
+	func language(for word: String) -> Language? {
+		matchingIndex(for: word).flatMap(entryLanguage)
 	}
 
 	/// True when the term should never be suggested or corrected TO.
@@ -96,4 +121,3 @@ final class KBSafetyLexicon {
 		}
 	}
 }
-

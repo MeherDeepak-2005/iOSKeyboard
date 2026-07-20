@@ -19,6 +19,8 @@ and replace `user_id` with a study-local opaque identifier.
     "suggestions": ["correction", "connection", "collection"],
     "candidates": ["correction", "connection", "collection", "condition"],
     "correction": "correction",
+    "confidence": 0.93,
+    "keystrokes_saved": 2,
     "latency_ms": 8.4
   },
   "baseline": {
@@ -34,6 +36,11 @@ Required event fields are `case_id`, `user_id`, `split`, `typed`, `intended`,
 `engine`, and `baseline`. `category` and `context` are optional. Each result must
 contain `suggestions`; `candidates`, `correction`, and `latency_ms` are optional.
 An absent or null correction means the typed token was preserved.
+
+For release reports, always include the candidate list before any forced-gold
+debugging injection, a calibrated `confidence` in `[0, 1]`, and non-negative
+`keystrokes_saved`. Missing candidate, confidence, or savings fields are reported as
+`n/a`, never silently treated as success.
 
 Use user-level splits. Every `user_id` may occur in only one split across the
 input file. Tune weights on `train` or `validation`; publish only one untouched
@@ -54,5 +61,7 @@ python3 tools/evaluation/replay_report.py study.jsonl --split test
 The script rejects duplicate case IDs, malformed results, and cross-split users.
 It reports confidence intervals by resampling users rather than individual events.
 That prevents prolific typists from making a small study look more certain than it
-is. The report intentionally does not claim production readiness; physical-device
-memory, energy, and jetsam tests remain separate release gates.
+is. False-correction rate is conditioned on already-correct input; missed-correction
+rate is conditioned on actual typo input, so neither denominator is diluted by
+ineligible cases. The report intentionally does not claim production readiness;
+physical-device memory, energy, and jetsam tests remain separate release gates.

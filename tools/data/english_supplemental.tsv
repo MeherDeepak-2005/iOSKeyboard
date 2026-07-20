@@ -2,6 +2,7 @@
 # Format: lowercase_word approximate_frequency. Frequencies are deliberately low:
 # exact typing is accepted, while these entries cannot dominate ordinary suggestions
 # without supporting context or personalization.
+haptic 2500
 might've 12000
 must've 12000
 shan't 9000

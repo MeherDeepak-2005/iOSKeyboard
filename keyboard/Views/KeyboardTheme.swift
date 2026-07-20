@@ -25,7 +25,19 @@ struct KeyboardTheme {
 		if KBSettings.customThemeEnabled, let c = KBSettings.customTheme(dark: dark) {
 			return custom(c)
 		}
-		let accent = KBSettings.accent
+		return accentTheme(dark: dark, accent: KBSettings.accent)
+	}
+
+	/// Pure resolver used by the companion app's live editor. It deliberately does
+	/// not read or mutate App Group settings, so an uncommitted draft cannot leak into
+	/// the running extension.
+	static func preview(dark: Bool, accent: KBAccent,
+		customTheme: KBCustomTheme?) -> KeyboardTheme {
+		if let customTheme { return custom(customTheme) }
+		return accentTheme(dark: dark, accent: accent)
+	}
+
+	private static func accentTheme(dark: Bool, accent: KBAccent) -> KeyboardTheme {
 		let g = accent.gradient(dark: dark)
 		let accentHSL = KBHSL(g.endColor)
 		let highContrast = UIAccessibility.isDarkerSystemColorsEnabled
@@ -39,17 +51,19 @@ struct KeyboardTheme {
 			lightness: dark ? min(accentHSL.lightness + 0.22, 0.76) : max(accentHSL.lightness - 0.03, 0.38),
 			alpha: highContrast ? (dark ? 0.58 : 0.44) : (dark ? 0.34 : 0.24)
 		)
-		let actionStart = KBHSL(g.startColor).color(
+		let proposedActionStart = KBHSL(g.startColor).color(
 			saturation: KBHSL(g.startColor).saturation * 0.88,
 			lightness: dark ? min(KBHSL(g.startColor).lightness + 0.06, 0.64)
 				: max(KBHSL(g.startColor).lightness - 0.02, 0.38),
 			alpha: 0.94)
-		let actionEnd = KBHSL(g.endColor).color(
+		let proposedActionEnd = KBHSL(g.endColor).color(
 			saturation: KBHSL(g.endColor).saturation * 0.90,
 			lightness: dark ? min(KBHSL(g.endColor).lightness + 0.08, 0.62)
 				: max(KBHSL(g.endColor).lightness, 0.36),
 			alpha: 0.96)
-		let actionText = bestContrastingText(over: [actionStart, actionEnd])
+		let actionText = bestContrastingText(over: [proposedActionStart, proposedActionEnd])
+		let actionStart = ensuringContrast(proposedActionStart, against: actionText)
+		let actionEnd = ensuringContrast(proposedActionEnd, against: actionText)
 		// The owned tint is deliberately translucent: it preserves the host's system
 		// material while preventing a clear-only deck from becoming arbitrarily black
 		// or muddy. Accessibility settings replace it with the opaque fallback below.
@@ -101,9 +115,11 @@ struct KeyboardTheme {
 		let specialFill = UIColor(hex: c.special)
 		// Glyph on the action key: follow the accent's own brightness, not the theme's
 		// dark flag — a pale mint action key needs dark text even in a dark theme.
-		let accentStart = UIColor(hex: c.accentStart)
-		let accentEnd = UIColor(hex: c.accentEnd)
-		let accentGlyph = bestContrastingText(over: [accentStart, accentEnd])
+		let proposedAccentStart = UIColor(hex: c.accentStart)
+		let proposedAccentEnd = UIColor(hex: c.accentEnd)
+		let accentGlyph = bestContrastingText(over: [proposedAccentStart, proposedAccentEnd])
+		let accentStart = ensuringContrast(proposedAccentStart, against: accentGlyph)
+		let accentEnd = ensuringContrast(proposedAccentEnd, against: accentGlyph)
 		let softAccent = mix(specialFill, accentEnd, accentAmount: 0.30)
 		return KeyboardTheme(name: "Custom",
 			backgroundTop: UIColor(hex: c.bgStart),
@@ -143,12 +159,32 @@ struct KeyboardTheme {
 	}
 
 	private static func bestContrastingText(over fills: [UIColor]) -> UIColor {
-		let black = UIColor(hex: 0x141416)
-		let white = UIColor(hex: 0xFAFAFC)
+		// Pure endpoints guarantee that one choice reaches WCAG 4.5:1 for every
+		// opaque sRGB fill. Near-black/near-white leave a small mid-luminance gap.
+		let black = UIColor.black
+		let white = UIColor.white
 		func worstContrast(_ foreground: UIColor) -> Double {
 			fills.map { contrastRatio(foreground, $0) }.min() ?? 1
 		}
 		return worstContrast(black) >= worstContrast(white) ? black : white
+	}
+
+	private static func ensuringContrast(_ fill: UIColor, against foreground: UIColor,
+		minimum: Double = 4.55) -> UIColor {
+		guard contrastRatio(fill, foreground) < minimum else { return fill }
+		let foregroundIsBlack = contrastRatio(foreground, .black) < 2
+		let target: UIColor = foregroundIsBlack ? .white : .black
+		var low: CGFloat = 0
+		var high: CGFloat = 1
+		for _ in 0..<18 {
+			let amount = (low + high) / 2
+			if contrastRatio(mix(fill, target, accentAmount: amount), foreground) >= minimum {
+				high = amount
+			} else {
+				low = amount
+			}
+		}
+		return mix(fill, target, accentAmount: high)
 	}
 
 	static func contrastRatio(_ a: UIColor, _ b: UIColor) -> Double {
@@ -233,7 +269,7 @@ private struct KBHSL {
 
 // MARK: - Model
 
-enum KeyboardPage { case letters, numbers, symbols, emoji }
+enum KeyboardSurfacePage { case letters, alternateLetters, numbers, symbols, emoji, media }
 enum KeyboardInputKind: Equatable {
 	case standard, email, url, webSearch, twitter
 	case numbersAndPunctuation, numberPad, decimalPad, phonePad
@@ -256,6 +292,7 @@ struct KeySpec {
 	var repeats: Bool = false        // fires continuously while held (delete)
 	var popup: Bool = false          // show the stock-style character balloon on press
 	var letterBase: String? = nil    // lowercase base letter → enables in-place shift relabelling
+	var committedText: String? = nil // literal inserted before a long-press replacement
 	var isShift: Bool = false        // the shift key, whose glyph updates on shift changes
 	var isInputModeSwitch: Bool = false
 	var isSpace: Bool = false

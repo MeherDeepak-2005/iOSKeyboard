@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://glyph.example/schemas/corpus-manifest-v1.json",
+  "title": "Glyph Language Corpus Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "sources"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/source" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "path", "url", "license", "licenseURL", "sha256",
+        "sourceRevision", "attribution", "split", "purpose", "language",
+        "domain", "format", "countWeight", "maxSentences", "researchOnly",
+        "releaseEligible"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "license": { "type": "string", "minLength": 1 },
+        "licenseURL": { "type": "string", "format": "uri" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sourceRevision": { "type": "string", "minLength": 1 },
+        "attribution": { "type": "string", "minLength": 1 },
+        "split": { "const": "train" },
+        "purpose": { "const": "training" },
+        "language": { "enum": ["telugu", "roman_telugu"] },
+        "domain": {
+          "enum": ["conversational", "formal", "news", "synthetic", "mixed"]
+        },
+        "format": { "enum": ["text", "jsonl", "tatoeba_tsv"] },
+        "textField": { "type": "string", "minLength": 1 },
+        "countWeight": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "maxSentences": { "type": "integer", "minimum": 1, "maximum": 500000 },
+        "researchOnly": { "type": "boolean" },
+        "releaseEligible": { "type": "boolean" }
+      }
+    }
+  }
+}

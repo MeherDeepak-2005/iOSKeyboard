@@ -48,10 +48,12 @@ include:
 python prepare_data.py
 python train_tokenizer.py
 python train_lm.py
-python eval_harness.py
+python eval_harness.py --dataset /path/to/user-separated.jsonl --require-user-separated
+python train_ranker.py /path/to/candidate-traces.jsonl --output artifacts/ranker.json
 python compare_scorers.py --help
 python export_coreml.py --help
 python verify_coreml.py --help
+python -m unittest discover -s . -p 'test_*.py'
 ```
 
 Consult each script before running it. Several scripts reference large local data

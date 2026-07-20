@@ -7,38 +7,40 @@ dictionaries on the heap: the pages are clean/file-backed, the OS evicts them
 under pressure, and they barely count against the extension's ~60-70 MB kill
 limit (dirty heap counts fully; mapped read-only file pages effectively don't).
 
-FORMAT v4 — v3's open-addressing tables and static trie plus sentence starters, so the
-Swift side can run its fuzzy-search DP and prefix completions directly over the
-mapped file instead of materializing a ~60k-word heap trie at every keyboard
-launch (that trie was most of the extension's fixed dirty footprint). Context
-lookup (bigram: word id; trigram: word-id pair) stays O(1) expected — one
-splitmix64 hash + a short linear probe. The Swift reader (LangData in
-Keyboardengine.swift) and the eval-harness mirror this format identically.
+FORMAT v5 replaces v4's sparse open-addressing context tables with sorted packed
+records. The reader performs mmap-backed binary search without materializing a
+Swift dictionary. Word identifiers are UInt16 (0xffff is reserved), continuation
+records are six bytes, and trie nodes are twelve bytes. This retains every v4
+word and n-gram while removing more than 10 MB of empty trigram hash buckets.
 
 Layout (all fields u32 LE unless noted; entry ranges are [start, start+count)):
 
-  header   magic 'KBLM', version=4, W, biBuckets, BE, triBuckets, TE, trieNodes,
+  header   magic 'KBLM', version=5, W, biContexts, BE, triContexts, TE, trieNodes,
            starterCount
   freq     u32 x W                                 word frequencies, id = index
   offsets  u32 x (W+1)                             byte offsets into blob, per id
-  biHash   (ctx, total, entStart, entCount) x biBuckets    empty slot: ctx=0xFFFFFFFF
-  biEnt    (word, count) x BE                      per-ctx, count desc
-  triHash  (w1, w2, total, entStart, entCount) x triBuckets  empty slot: w1=0xFFFFFFFF
-  triEnt   (word, count) x TE
-  trie     (label u8, childCount u8, firstChild u32, wordID u32, maxFreq u32)
-           x trieNodes — 14 B packed. BFS order, node 0 = root (label 0);
+  biCtx    (ctx u16, entCount u16, total u32, entStart u32) x biContexts
+  biEnt    (word u16, count u32) x BE               per-ctx, count desc
+  triCtx   (packedKey u32, total u32, entStart u32) x triContexts
+           packedKey = (w1 << 16) | w2; entCount is inferred from next entStart
+  triEnt   (word u16, count u32) x TE
+  trie     (label u8, childCount u8, firstChild u32, wordID u16, maxFreq u32)
+           x trieNodes — 12 B packed. BFS order, node 0 = root (label 0);
            children contiguous from firstChild, sorted by label byte;
-           wordID 0xFFFFFFFF = not a word; maxFreq = max corpus frequency in
+           wordID 0xFFFF = not a word; maxFreq = max corpus frequency in
            the node's subtree, so top-k completion is a best-first walk that
            emits words in exact frequency order without visiting the subtree.
-  starters (wordID, count) x starterCount
+  starters (wordID u16, count u32) x starterCount
   blob     utf8 word bytes
 
 `total` is the TRUE context total (pre-truncation) so probabilities stay honest
 even though only the top predictions per context are kept.
 
 Release inputs are deliberately immutable and checksum-verified:
-  - Vocabulary: hermitdave/FrequencyWords at a pinned Git commit (CC BY-SA 4.0).
+  - Vocabulary validity: ESDB v2 size 60, plus frequency-gated size 70
+    (MIT-like/BSD-compatible combined work).
+  - Vocabulary frequency: hermitdave/FrequencyWords at a pinned Git commit
+    (CC BY-SA 4.0).
   - Bi/trigrams: the vendored Tatoeba English CC0 sentence export snapshot dated
     2026-07-18. It is committed under tools/data so a rebuild never silently
     changes when an upstream nightly export changes.
@@ -62,9 +64,12 @@ DICT_URL = (
 )
 DICT_SHA256 = "7fea67ab954e2c01df6c608c9826e594cf36f8823b3243554f88245fb75dc506"
 TATOEBA_SHA256 = "14f975533e2f15257f674d6099b95cf6b2c3458a8baf7496935081ad862f4b91"
+ESDB_COMMIT = "1e5b7d3a72f47a71da5d28686c1dd4b397178485"
+ESDB_SHA256 = "b24c7392b4aec4adfea0b9322f80f86ab14a3ce13b74825ba2453af38c49ec28"
 
 DICT_SIZE = 60_000
 MIN_WORD_FREQ = 5          # drop one-off OCR/subtitle junk from the long tail
+ESDB70_MIN_FREQ = 50       # size-70 entries require independent frequency evidence
 # Keep the complete observed successor distributions. The tables are mmap-backed,
 # and this corpus is small enough that truncating before measuring recall buys little
 # while permanently deleting valid continuations.
@@ -74,8 +79,19 @@ TRI_MIN_COUNT = 1
 STARTERS_KEEP = 256        # sentence-initial words kept for the cold-start bar
 CONTRACTIONS_KEEP = 500    # corpus-harvested interior-apostrophe words merged into vocab
 CONTRACTIONS_MIN = 2       # the CC0 snapshot is intentionally small and curated
-HASH_LOAD = 0.7            # hash-table load factor (buckets = nextPow2(n / load))
 EMPTY = 0xFFFFFFFF         # empty-bucket sentinel (word ids are < DICT_SIZE)
+EMPTY16 = 0xFFFF
+
+# Empty-context suggestions are product priors, not Tatoeba character-name counts.
+# Keep this small and reviewable until a licensed, source-capped messaging corpus is
+# promoted. Ordinary proper names are intentionally absent.
+COLD_START_PRIORS = [
+    ("i", 10_000), ("the", 9_500), ("you", 9_000), ("what", 8_000),
+    ("how", 7_500), ("hey", 7_000), ("we", 6_500), ("can", 6_000),
+    ("are", 5_500), ("do", 5_000), ("is", 4_800), ("when", 4_600),
+    ("where", 4_400), ("why", 4_200), ("thanks", 4_000), ("please", 3_800),
+    ("good", 3_600), ("this", 3_400), ("that", 3_200), ("it", 3_000),
+]
 
 # Informal apostrophe-less forms frequent in the subtitle corpus. If these ship
 # as vocabulary words the engine can never correct them (dictionary words are
@@ -93,11 +109,9 @@ TOKEN = re.compile(r"[a-z']+")
 ROOT = Path(__file__).resolve().parent
 CACHE = ROOT / ".cache"
 CORPUS = ROOT / "data" / "tatoeba-eng-cc0-2026-07-18.tsv.bz2"
+ESDB = ROOT / "data" / "esdb-v2-en-60-70-2026-07-20.tsv.bz2"
 SUPPLEMENTAL = ROOT / "data" / "english_supplemental.tsv"
 OUT = ROOT.parent / "keyboard" / "langdata.bin"
-
-MASK64 = (1 << 64) - 1
-
 
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -138,9 +152,28 @@ def corpus_sentences():
                 yield tokens[:128]
 
 
+def load_esdb_tiers() -> dict[str, int]:
+    """Load the pinned ESDB validity tiers without retaining upstream metadata."""
+    require_hash(ESDB, ESDB_SHA256)
+    result: dict[str, int] = {}
+    with bz2.open(ESDB, "rt", encoding="utf-8", errors="strict") as handle:
+        for line_number, raw in enumerate(handle, 1):
+            if raw.startswith("#") or not raw.strip():
+                continue
+            fields = raw.rstrip("\n").split("\t")
+            if len(fields) != 2 or fields[1] not in {"60", "70"} \
+                    or not WORD.fullmatch(fields[0]):
+                sys.exit(f"invalid ESDB snapshot row {line_number}")
+            result[fields[0]] = int(fields[1])
+    if not result:
+        sys.exit("ESDB snapshot is empty")
+    return result
+
+
 def build_vocab() -> list[tuple[str, int]]:
     vocab: list[tuple[str, int]] = []
     seen: set[str] = set()
+    esdb_tiers = load_esdb_tiers()
     for line in fetch(DICT_URL, "en_full.txt", DICT_SHA256).read_text(errors="replace").splitlines():
         parts = line.split()
         if len(parts) != 2 or not parts[1].isdigit():
@@ -150,6 +183,9 @@ def build_vocab() -> list[tuple[str, int]]:
             continue
         if len(w) == 1 and w not in ("a", "i"):
             continue                     # stray single letters aren't words
+        tier = esdb_tiers.get(w)
+        if tier is None or (tier == 70 and freq < ESDB70_MIN_FREQ):
+            continue
         if w in EXCLUDE or w.startswith("'") or w.endswith("'") or w in seen:
             continue
         seen.add(w)
@@ -185,12 +221,9 @@ def build_ngrams(ids: dict[str, int]):
         sys.exit(f"missing immutable corpus snapshot: {CORPUS}")
     by_ctx_bi: dict[int, Counter] = defaultdict(Counter)
     tri_counts: Counter = Counter()
-    starter_counts: Counter = Counter()
-    print(f"counting bi/trigrams + starters over {CORPUS.name} ...", flush=True)
+    print(f"counting bi/trigrams over {CORPUS.name} ...", flush=True)
     for toks in corpus_sentences():
         ti = [ids.get(t) for t in toks]
-        if ti and ti[0] is not None:
-            starter_counts[ti[0]] += 1
         # OOV tokens are hard boundaries. Deleting them first would invent an
         # adjacency between words that never touched in the source sentence.
         for i in range(len(ti) - 1):
@@ -205,39 +238,9 @@ def build_ngrams(ids: dict[str, int]):
         if n >= TRI_MIN_COUNT:
             by_ctx_tri[(a, b)].append((c, n))
     trigrams = {k: sorted(v, key=lambda e: -e[1]) for k, v in by_ctx_tri.items()}
-    starters = [(w, n) for w, n in starter_counts.most_common(STARTERS_KEEP)]
+    starters = [(ids[word], count) for word, count in COLD_START_PRIORS
+                if word in ids][:STARTERS_KEEP]
     return bigrams, trigrams, starters
-
-
-def next_pow2(n: int) -> int:
-    p = 1
-    while p < n:
-        p <<= 1
-    return p
-
-
-def mix64(x: int) -> int:
-    """splitmix64 finalizer — must match LangData.mix64 in Swift/Python readers."""
-    x &= MASK64
-    x ^= x >> 30
-    x = (x * 0xBF58476D1CE4E5B9) & MASK64
-    x ^= x >> 27
-    x = (x * 0x94D049BB133111EB) & MASK64
-    x ^= x >> 31
-    return x
-
-
-def build_table(rows: list[tuple], key_of) -> tuple[int, list]:
-    """Open-addressing (linear-probe) hash table over `rows`. Returns (buckets, table)
-    where table[b] is a row tuple or None (empty)."""
-    buckets = max(1, next_pow2(int(len(rows) / HASH_LOAD) + 1))
-    table: list = [None] * buckets
-    for row in rows:
-        b = mix64(key_of(row)) & (buckets - 1)
-        while table[b] is not None:
-            b = (b + 1) & (buckets - 1)
-        table[b] = row
-    return buckets, table
 
 
 def build_trie(vocab) -> list[list[int]]:
@@ -293,59 +296,67 @@ def build_trie(vocab) -> list[list[int]]:
 
 
 def write_bin(vocab, bigrams, trigrams, starters) -> None:
+    if len(vocab) > EMPTY16 - 1:
+        sys.exit(f"v5 supports at most {EMPTY16 - 1} words; got {len(vocab)}")
+
     blob = bytearray()
     offsets = [0]
     for w, _ in vocab:
         blob += w.encode()
         offsets.append(len(blob))
 
-    # Entry arrays + per-context (ctx.., total, entStart, entCount) rows.
+    # Keep context and continuation arrays in the same sorted order. Trigram
+    # continuation counts can then be inferred from the next context's start.
     bi_rows, bi_ent = [], []
-    for ctx, ent in bigrams.items():
+    for ctx in sorted(bigrams):
+        ent = bigrams[ctx]
         total = sum(c for _, c in ent)
         kept = ent if BI_PER_CTX is None else ent[:BI_PER_CTX]
-        bi_rows.append((ctx, min(total, 0xFFFFFFFF), len(bi_ent), len(kept)))
+        if len(kept) > EMPTY16:
+            sys.exit(f"bigram context {ctx} has too many continuations: {len(kept)}")
+        bi_rows.append((ctx, len(kept), min(total, 0xFFFFFFFF), len(bi_ent)))
         bi_ent += [(w, min(c, 0xFFFFFFFF)) for w, c in kept]
 
     tri_rows, tri_ent = [], []
-    for (a, b), ent in trigrams.items():
+    for a, b in sorted(trigrams):
+        ent = trigrams[(a, b)]
         total = sum(c for _, c in ent)
         kept = ent if TRI_PER_CTX is None else ent[:TRI_PER_CTX]
-        tri_rows.append((a, b, min(total, 0xFFFFFFFF), len(tri_ent), len(kept)))
+        key = (a << 16) | b
+        tri_rows.append((key, min(total, 0xFFFFFFFF), len(tri_ent)))
         tri_ent += [(w, min(c, 0xFFFFFFFF)) for w, c in kept]
 
-    bi_buckets, bi_table = build_table(bi_rows, key_of=lambda r: r[0])
-    tri_buckets, tri_table = build_table(tri_rows, key_of=lambda r: (r[0] << 32) | r[1])
     trie = build_trie(vocab)
 
     temporary = OUT.with_suffix(".bin.tmp")
     with temporary.open("wb") as f:
-        # v4 = v3 + a sentence-starters section (starterCount in the header, an array of
-        # (wordId, count) sorted by count desc, placed between the trie and the blob).
-        f.write(struct.pack("<9I", 0x4B424C4D, 4, len(vocab),
-                            bi_buckets, len(bi_ent), tri_buckets, len(tri_ent), len(trie),
+        f.write(struct.pack("<9I", 0x4B424C4D, 5, len(vocab),
+                            len(bi_rows), len(bi_ent), len(tri_rows), len(tri_ent), len(trie),
                             len(starters)))
         f.write(struct.pack(f"<{len(vocab)}I", *(c for _, c in vocab)))
         f.write(struct.pack(f"<{len(offsets)}I", *offsets))
-        for row in bi_table:
-            f.write(struct.pack("<4I", *(row if row else (EMPTY, 0, 0, 0))))
+        for row in bi_rows:
+            f.write(struct.pack("<HHII", *row))
         for row in bi_ent:
-            f.write(struct.pack("<2I", *row))
-        for row in tri_table:
-            f.write(struct.pack("<5I", *(row if row else (EMPTY, 0, 0, 0, 0))))
+            f.write(struct.pack("<HI", *row))
+        for row in tri_rows:
+            f.write(struct.pack("<III", *row))
         for row in tri_ent:
-            f.write(struct.pack("<2I", *row))
+            f.write(struct.pack("<HI", *row))
         for rec in trie:
-            f.write(struct.pack("<BBIII", *rec))
+            label, child_count, first_child, word_id, max_freq = rec
+            packed_word = EMPTY16 if word_id == EMPTY else word_id
+            f.write(struct.pack("<BBIHI", label, child_count, first_child,
+                                packed_word, max_freq))
         for w, n in starters:
-            f.write(struct.pack("<2I", w, min(n, 0xFFFFFFFF)))
+            f.write(struct.pack("<HI", w, min(n, 0xFFFFFFFF)))
         f.write(blob)
     temporary.replace(OUT)
     mb = OUT.stat().st_size / 1e6
     top = ", ".join(vocab[w][0] for w, _ in starters[:6])
     print(f"wrote {OUT} ({mb:.1f} MB): {len(vocab)} words, "
-          f"{len(bi_ent)} bigrams/{len(bi_rows)} ctx ({bi_buckets} buckets), "
-          f"{len(tri_ent)} trigrams/{len(tri_rows)} ctx ({tri_buckets} buckets), "
+          f"{len(bi_ent)} bigrams/{len(bi_rows)} ctx, "
+          f"{len(tri_ent)} trigrams/{len(tri_rows)} ctx, "
           f"{len(trie)} trie nodes, {len(starters)} starters [{top} ...]")
 
 

@@ -39,6 +39,8 @@ Products/
 GoogleService-Info.plist
 *Secret*.swift
 *Config*.plist
+Config/Secrets.xcconfig
+Config/Klipy.xcconfig
 
 ## --- OS / System Files ---
 ## Folder attributes created by macOS
@@ -59,6 +61,8 @@ __pycache__/
 *.bin
 !keyboard/emoji.bin
 !keyboard/langdata.bin
+!keyboard/telugu_langdata.bin
+!keyboard/tenglish_lexicon.bin
 *.kbguard
 !keyboard/safety.kbguard
 *.mlpackage/
@@ -71,3 +75,4 @@ graphify-out/
 
 *.txt
 !keyboard/ThirdPartyNotices.txt
+!tools/data/google_profanity_en.txt

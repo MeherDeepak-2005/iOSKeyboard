@@ -9,14 +9,14 @@ import CoreGraphics
 /// A snapshot of the letter-key layout at the moment a swipe lifts, so the decoder
 /// can map the swipe's VIEW-space points into grid space. Built by KeyboardView
 /// (which knows the on-screen frames); consumed by the engine (which knows KB.pos).
-struct GlideLayout {
+nonisolated struct GlideLayout {
 	let centers: [(letter: Character, point: CGPoint)]   // view-space key centers
 	let xPitch: CGFloat                                  // key column pitch (view units)
 	let yPitch: CGFloat                                  // key row pitch (view units)
 }
 
 /// A preprocessed swipe in grid space.
-struct ProcessedGlide {
+nonisolated struct ProcessedGlide {
 	let points: [CGPoint]        // evenly spaced, grid coordinates
 	let pivots: [Int]            // indices into `points` at direction turns AND velocity minima
 	/// Letters the finger DWELLED on — a velocity minimum sustained near a key center (needs
@@ -26,7 +26,92 @@ struct ProcessedGlide {
 	let dwellKeys: [Character]
 }
 
-enum GlidePreprocess {
+/// Arc-length resampler that consumes only points appended since the previous
+/// gesture update. It is intentionally independent of UIKit touch objects so the
+/// engine can retain it for one Glide session on its serial preview queue.
+nonisolated struct IncrementalGlideResampler {
+	let spacing: CGFloat
+	private(set) var samples: [CGPoint] = []
+	private var lastPoint: CGPoint?
+	private var distanceSinceSample: CGFloat = 0
+
+	init(spacing: CGFloat = 0.5) { self.spacing = spacing }
+
+	mutating func append(_ points: ArraySlice<CGPoint>) -> [CGPoint] {
+		guard spacing > 0 else { return [] }
+		var emitted: [CGPoint] = []
+		for target in points {
+			guard var cursor = lastPoint else {
+				lastPoint = target
+				samples.append(target)
+				emitted.append(target)
+				continue
+			}
+			var remaining = hypot(target.x - cursor.x, target.y - cursor.y)
+			while remaining > 0, distanceSinceSample + remaining >= spacing {
+				let step = spacing - distanceSinceSample
+				let ratio = step / remaining
+				cursor = CGPoint(x: cursor.x + (target.x - cursor.x) * ratio,
+					y: cursor.y + (target.y - cursor.y) * ratio)
+				samples.append(cursor)
+				emitted.append(cursor)
+				distanceSinceSample = 0
+				remaining = hypot(target.x - cursor.x, target.y - cursor.y)
+			}
+			distanceSinceSample += remaining
+			lastPoint = target
+		}
+		return emitted
+	}
+}
+
+/// One online DTW row per lexical candidate. Updating a preview costs O(M) for
+/// each newly resampled point, where M is the fixed ideal-path length; prior path
+/// samples are never rescored.
+nonisolated struct OnlineGlideCandidate {
+	let word: String
+	let ideal: [CGPoint]
+	private var previous: [Double]
+	private(set) var sampleCount = 0
+
+	init?(word: String, idealPointCount: Int = 24) {
+		guard let path = GlideDecoder.idealPath(for: word, pointCount: idealPointCount),
+			!path.isEmpty else { return nil }
+		self.word = word
+		self.ideal = path
+		self.previous = [0] + Array(repeating: .infinity, count: path.count)
+	}
+
+	mutating func consume(_ samples: [CGPoint]) {
+		guard !samples.isEmpty else { return }
+		for sample in samples {
+			var current = Array(repeating: Double.infinity, count: ideal.count + 1)
+			for index in 1...ideal.count {
+				let point = ideal[index - 1]
+				let distance = hypot(Double(sample.x - point.x), Double(sample.y - point.y))
+				current[index] = distance + min(previous[index], current[index - 1], previous[index - 1])
+			}
+			previous = current
+			sampleCount += 1
+		}
+	}
+
+	/// Prefix score permits the finger to be part-way through a word. A small suffix
+	/// penalty stops very long words winning every early prefix while still allowing
+	/// the ranking to evolve continuously as the path grows.
+	var prefixCost: Double {
+		guard sampleCount > 0 else { return .infinity }
+		var best = Double.infinity
+		for index in 1...ideal.count where previous[index].isFinite {
+			let normalized = previous[index] / Double(max(1, sampleCount + index))
+			let suffixPenalty = Double(ideal.count - index) * 0.018
+			best = min(best, normalized + suffixPenalty)
+		}
+		return best
+	}
+}
+
+nonisolated enum GlidePreprocess {
 
 	/// View-space raw trajectory → grid space, resampled, with pivots marked. When per-sample
 	/// `times` are supplied, velocity minima add pivots and feed dwell (double-letter) detection;
@@ -207,7 +292,7 @@ enum GlidePreprocess {
 // real words emit (trie constraint); doubles cost nothing (path needn't move); the ' is a
 // geometry-free letter so contractions ride their apostrophe-less swipe.
 
-enum GlideDecoder {
+nonisolated enum GlideDecoder {
 
 	private static let N = 32                        // both paths resampled to this many points
 	static let defaultBand = 4                       // DTW warp window (grid-searched in glide_eval)
@@ -414,6 +499,19 @@ enum GlideDecoder {
 		guard letters.count >= 1 else { return nil }
 		let obsTan = dirWeight > 0 ? tangents(obs) : []
 		return shapeCost(obs, obsTan, letters, band: band, dirWeight: dirWeight)
+	}
+
+	static func idealPath(for word: String, pointCount: Int) -> [CGPoint]? {
+		guard pointCount >= 2 else { return nil }
+		var letters: [CGPoint] = []
+		for character in word.lowercased() {
+			if character == "'" { continue }
+			guard let center = gridCenter(character) else { return nil }
+			letters.append(center)
+		}
+		guard !letters.isEmpty else { return nil }
+		if letters.count == 1 { return Array(repeating: letters[0], count: pointCount) }
+		return resampleN(letters, pointCount)
 	}
 
 	/// Band-limited DTW between the swipe and a word's ideal path (both resampled to N
