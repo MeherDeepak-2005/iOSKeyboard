@@ -49,12 +49,12 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A10000012FE821180014EA39 /* Extension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Extension.xcconfig; sourceTree = "<group>"; };
-		A10000022FE821180014EA39 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
 		83C6F2B92FE7B47E0014EA39 /* keyboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = keyboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F2CB2FE7B4800014EA39 /* keyboardTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = keyboardTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F2D52FE7B4800014EA39 /* keyboardUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = keyboardUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F3062FE821180014EA39 /* demo_keyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = demo_keyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000012FE821180014EA39 /* Extension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Extension.xcconfig; sourceTree = "<group>"; };
+		A10000022FE821180014EA39 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -62,8 +62,8 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				emoji.bin,
-				Engine/DecodeContract.swift,
 				Engine/CoreMLNeuralLanguagePrior.swift,
+				Engine/DecodeContract.swift,
 				Engine/GlidePath.swift,
 				Engine/Keyboardengine.swift,
 				Engine/LangData.swift,
@@ -77,19 +77,21 @@
 				Engine/UserModel.swift,
 				langdata.bin,
 				safety.kbguard,
+				Shared/KBClipboard.swift,
 				Shared/KBDiagnostics.swift,
 				Shared/KBKlipy.swift,
-				Shared/LanguagePackHealth.swift,
 				Shared/KBMediaCache.swift,
 				Shared/KBPersonalData.swift,
 				Shared/KBSafetyLexicon.swift,
 				Shared/KBSettings.swift,
 				Shared/KBStats.swift,
+				Shared/LanguagePackHealth.swift,
 				"Shared/UIColor+Hex.swift",
 				telugu_langdata.bin,
 				telugu_layout.kbpack,
 				telugu_pack_manifest.json,
 				tenglish_lexicon.bin,
+				Views/ClipboardPanel.swift,
 				Views/Emoji.swift,
 				Views/Keyboard.swift,
 				Views/KeyboardLayout.swift,
@@ -191,15 +193,6 @@
 			);
 			sourceTree = "<group>";
 		};
-		A10000032FE821180014EA39 /* Config */ = {
-			isa = PBXGroup;
-			children = (
-				A10000012FE821180014EA39 /* Extension.xcconfig */,
-				A10000022FE821180014EA39 /* Secrets.xcconfig.example */,
-			);
-			path = Config;
-			sourceTree = "<group>";
-		};
 		83C6F2BA2FE7B47E0014EA39 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -209,6 +202,15 @@
 				83C6F3062FE821180014EA39 /* demo_keyboard.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A10000032FE821180014EA39 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				A10000012FE821180014EA39 /* Extension.xcconfig */,
+				A10000022FE821180014EA39 /* Secrets.xcconfig.example */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */

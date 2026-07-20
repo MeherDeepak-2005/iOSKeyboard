@@ -1084,6 +1084,49 @@ struct KeyboardTests {
 		}
 	}
 
+	/// The re-added clipboard store (afda5b4 UX) with its P0 hardening: dedupe-resurface,
+	/// pin/unpinned caps, sensitive-content rejection (OTP / Luhn card numbers), and a
+	/// retention TTL that expires unpinned items on disk while pins survive.
+	@Test func clipboardStoreDedupesCapsAndHardensPrivacy() throws {
+		let url = FileManager.default.temporaryDirectory
+			.appendingPathComponent("clip-\(UUID().uuidString).json")
+		defer { try? FileManager.default.removeItem(at: url) }
+
+		// Basic add + dedupe-resurface (re-adding moves to front, keeps one copy).
+		#expect(KBClipboard.add("hello", at: url))
+		#expect(KBClipboard.add("world", at: url))
+		#expect(KBClipboard.add("hello", at: url))
+		let items = KBClipboard.all(at: url)
+		#expect(items.map(\.text) == ["hello", "world"])
+
+		// Sensitive content is never stored: OTP-shaped codes and Luhn-valid cards.
+		#expect(!KBClipboard.isSensitive("hello world"))
+		#expect(KBClipboard.isSensitive("123456"))              // 6-digit OTP
+		#expect(KBClipboard.isSensitive("4242 4242 4242 4242")) // Luhn-valid test card
+		#expect(!KBClipboard.isSensitive("4242 4242 4242 4241"))// fails Luhn -> kept
+		#expect(!KBClipboard.add("008041", at: url))            // OTP rejected by add
+		#expect(!KBClipboard.all(at: url).contains { $0.text == "008041" })
+
+		// Retention TTL: an unpinned item older than the window is pruned on read; a
+		// pinned item of the same age survives.
+		let old = Date().addingTimeInterval(-(KBClipboard.retentionInterval + 60))
+		let seeded = [KBClipboardItem(text: "stale", pinned: false, date: old),
+					  KBClipboardItem(text: "kept", pinned: true, date: old)]
+		try JSONEncoder().encode(seeded).write(to: url)
+		let live = KBClipboard.all(at: url)
+		#expect(live.map(\.text) == ["kept"])
+		// Prune persisted: a fresh read of the file no longer contains the stale item.
+		let reencoded = try JSONDecoder().decode([KBClipboardItem].self,
+			from: Data(contentsOf: url))
+		#expect(!reencoded.contains { $0.text == "stale" })
+
+		// Unpinned cap holds; pins ride above it.
+		for i in 0..<(KBClipboard.maxItems + 20) { KBClipboard.add("row\(i)", at: url) }
+		let capped = KBClipboard.all(at: url)
+		#expect(capped.filter { !$0.pinned }.count <= KBClipboard.maxItems)
+		#expect(capped.contains { $0.text == "kept" && $0.pinned })
+	}
+
 	@Test func safetyArtifactUsesExactNormalizedMatches() throws {
 		let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 			.deletingLastPathComponent().appendingPathComponent("keyboard/safety.kbguard")
@@ -1184,6 +1227,33 @@ struct KeyboardTests {
 		palette.backgroundColor = UIColor(hex: 0xE8E6EC)
 		palette.layoutIfNeeded()
 		try writePNG(of: palette, name: "emoji_palette_atlas")
+	}
+
+	/// The re-added clipboard panel builds and lays out its Pinned/Recent sections,
+	/// per-row delete accessories, and bottom bar with injected items (no App Group or
+	/// Full Access needed). Renders both appearances for eyeballing.
+	@MainActor @Test func renderClipboardPanel() throws {
+		let items = [
+			KBClipboardItem(text: "meeting at 3pm tomorrow", pinned: true, date: Date()),
+			KBClipboardItem(text: "https://example.com/very/long/link/that/wraps", pinned: false, date: Date()),
+			KBClipboardItem(text: "call the dentist", pinned: false, date: Date()),
+		]
+		for dark in [false, true] {
+			let theme = KeyboardTheme.system(dark: dark)
+			let panel = ClipboardPanelView(theme: theme, showsGlobe: true,
+				hasFullAccess: true, items: items)
+			panel.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
+			panel.backgroundColor = dark ? UIColor(hex: 0x2A2A2E) : UIColor(hex: 0xE8E6EC)
+			panel.layoutIfNeeded()
+			try writePNG(of: panel, name: dark ? "clipboard_panel_dark" : "clipboard_panel_light")
+		}
+		// Empty + no-access state renders its guidance instead of rows.
+		let empty = ClipboardPanelView(theme: .system(dark: false), showsGlobe: true,
+			hasFullAccess: false, items: [])
+		empty.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
+		empty.backgroundColor = UIColor(hex: 0xE8E6EC)
+		empty.layoutIfNeeded()
+		try writePNG(of: empty, name: "clipboard_panel_empty")
 	}
 
     @MainActor @Test func renderEmojiPalette() throws {

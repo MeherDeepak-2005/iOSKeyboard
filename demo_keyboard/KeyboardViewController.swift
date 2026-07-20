@@ -231,6 +231,12 @@ final class KeyboardViewController: UIInputViewController {
 			guard let self, let kb, self.keyboard === kb else { return }
 			kb.showMedia(kind: kind, hasFullAccess: self.hasFullAccess)
 		}
+		kb.onOpenClipboard = { [weak self, weak kb] in
+			guard let self, let kb, self.keyboard === kb else { return }
+			self.captureClipboardIfNeeded()
+			kb.showClipboard(hasFullAccess: self.hasFullAccess)
+		}
+		kb.onClipboardPick = { [weak self] in self?.handleClipboardPick($0) }
 		kb.onGlideBegan     = { [weak self] in self?.beginGlidePreview() }
 		kb.onGlidePreview   = { [weak self] path, times, layout in
 			self?.handleGlidePreview(path, times, layout)
@@ -577,6 +583,45 @@ final class KeyboardViewController: UIInputViewController {
 		// before the host edit.
 		textDocumentProxy.insertText(text)
 		#endif
+	}
+
+	// MARK: Clipboard — capture on panel open, insert from saved history
+
+	/// Capture the current system pasteboard into history. Called ONLY when the user
+	/// opens the clipboard panel — a deliberate action, so iOS's one "pasted from" notice
+	/// reads as expected (there is no banner-free way to read arbitrary text; `changeCount`
+	/// dedupe means at most one read per distinct copy). We never read on the type path,
+	/// so copying elsewhere raises no banner and never stalls layout.
+	///
+	/// Hardening over afda5b4 (Improvements.md P0 §3): (1) never capture while a secure
+	/// field is focused — password managers paste into those; (2) advance
+	/// `consumedChangeCount` only AFTER a confirmed non-empty read, so a transient read
+	/// failure retries on the next open instead of silently dropping the copy (the old
+	/// code consumed first). Sensitive-content rejection (OTP / card numbers) and the
+	/// retention TTL live in `KBClipboard.add`.
+	private func captureClipboardIfNeeded() {
+		guard hasFullAccess, !isSecureField else { return }
+		let pb = UIPasteboard.general
+		let count = pb.changeCount
+		guard count != KBClipboard.consumedChangeCount else { return }
+		guard pb.hasStrings else { KBClipboard.consumedChangeCount = count; return }
+		guard let text = pb.string,
+			  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+		KBClipboard.consumedChangeCount = count      // only after a confirmed read
+		KBClipboard.add(text)
+	}
+
+	/// A history row from the clipboard panel. Inserts and stays on the panel
+	/// (multi-paste, Gboard-style). Never learned — clips aren't typing.
+	private func handleClipboardPick(_ text: String) {
+		noteProxyEdit()
+		resolveCorrectionAsAccepted()
+		resolveGlideUnverified()
+		resetEraseTracking()
+		wordTaps.removeAll(keepingCapacity: true)
+		insertIntoHost(text)
+		lastCorrection = nil
+		updateAutoShift()
 	}
 
 	private func invalidateDocumentSession() {

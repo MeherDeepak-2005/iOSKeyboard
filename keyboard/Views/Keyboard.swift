@@ -117,6 +117,11 @@ final class KeyboardView: UIView {
 	/// this revision in decode requests so no touch model survives a geometry change.
 	var onGeometryChange: (() -> Void)?
 	var onOpenMedia: ((KlipyKind) -> Void)?
+	/// The suggestion strip's clipboard icon was tapped. The controller captures the
+	/// pasteboard (once, explicitly) and calls back into `showClipboard(hasFullAccess:)`.
+	var onOpenClipboard: (() -> Void)?
+	/// A history row was picked in the clipboard panel.
+	var onClipboardPick: ((String) -> Void)?
 
 	/// Set to the tapped key's landing offset for the duration of `key.action()`, so
 	/// the char closures can attach it to `onInsert`. nil outside a live letter tap.
@@ -138,6 +143,7 @@ final class KeyboardView: UIView {
 	private var rows: [[KeyButton]] = []
 	private var emojiView: EmojiKeyboardView?
 	private var mediaView: MediaPanelView?
+	private var clipboardView: ClipboardPanelView?
 	private var mediaSearchHeader: EmojiSearchHeader?
 	private var isMediaSearching = false
 	private var mediaQuery = ""
@@ -310,6 +316,7 @@ final class KeyboardView: UIView {
 		addSubview(suggestionBar)
 		suggestionBar.isHidden = !showsSuggestions    // start collapsed until the host is known
 		suggestionBar.onPick = { [weak self] in self?.onPickSuggestion?($0) }
+		suggestionBar.onOpenClipboard = { [weak self] in self?.onOpenClipboard?() }
 		reload()
 	}
 	required init?(coder: NSCoder) { fatalError() }
@@ -478,6 +485,38 @@ final class KeyboardView: UIView {
 		onHeightChange?()
 	}
 
+	// MARK: Clipboard panel (overlay at deck height — the emoji-page pattern)
+
+	func showClipboard(hasFullAccess: Bool) {
+		if isEmojiSearching { tearDownEmojiSearch() }
+		if isMediaSearching { tearDownMediaSearch() }
+		emojiView?.removeFromSuperview(); emojiView = nil
+		discardMediaPanel()
+		guard page != .clipboard else { return }
+		page = .clipboard
+		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
+		rows = []
+		suggestionBar.isHidden = true
+		let panel = ClipboardPanelView(theme: theme, showsGlobe: showsGlobe, hasFullAccess: hasFullAccess)
+		panel.onPick = { [weak self] in self?.onClipboardPick?($0) }
+		panel.onABC = { [weak self] in self?.hideClipboard() }
+		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
+		addSubview(panel)
+		clipboardView = panel
+		onHeightChange?()
+		setNeedsLayout()
+	}
+
+	private func hideClipboard() {
+		clipboardView?.removeFromSuperview()
+		clipboardView = nil
+		page = .letters
+		shift = .on
+		suggestionBar.isHidden = !showsSuggestions
+		reload()
+		onHeightChange?()
+	}
+
 	private func showMediaSearch(kind: KlipyKind) {
 		guard page == .media, !isMediaSearching else { return }
 		discardMediaPanel()
@@ -582,6 +621,7 @@ final class KeyboardView: UIView {
 		if isMediaSearching { tearDownMediaSearch(); page = .letters; reload(); return true }
 		if page == .emoji { hideEmoji(); return true }
 		if page == .media { hideMedia(); return true }
+		if page == .clipboard { hideClipboard(); return true }
 		return false
 	}
 
@@ -674,6 +714,10 @@ final class KeyboardView: UIView {
 		}
 		if page == .media {
 			mediaView?.frame = bounds
+			return
+		}
+		if page == .clipboard {
+			clipboardView?.frame = bounds
 			return
 		}
 		if isEmojiSearching {
@@ -1539,8 +1583,8 @@ final class KeyboardView: UIView {
 				[switchKey("123", to: .numbers)] + [".",",","?","!","'"].map(punct) + [del],
 				bottom(switchKey("ABC", to: .letters))
 			]
-		case .emoji, .media:
-			return []   // emoji uses its collection-view overlay, not a key grid
+		case .emoji, .media, .clipboard:
+			return []   // these use a full-bounds overlay, not a key grid
 		}
 	}
 }
