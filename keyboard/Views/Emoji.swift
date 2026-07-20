@@ -547,7 +547,7 @@ private final class EmojiHeader: UICollectionReusableView {
 // MARK: - Emoji page (browse palette)
 //
 // Gboard-style: a search pill on top, a VERTICALLY scrolling category-sectioned grid
-// in the middle, and a bottom bar (ABC / globe / category tabs / delete). Shown as an
+// in the middle, and a bottom bar (ABC / input mode / category tabs / delete). Shown as an
 // overlay by KeyboardView. The grid is a compositional layout with an exact per-row
 // column count, so rows are always full — the old horizontal flow layout dropped
 // items when cell rounding disagreed with the column height.
@@ -777,12 +777,12 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		if let section = sectionAtTop() { setSelectedSection(section) }
 	}
 
-	// MARK: Bottom bar — ABC | (globe) | category tabs | delete
+	// MARK: Bottom bar — ABC | (input mode) | category tabs | delete
 
 	private func buildBottomBar() {
 		bottomBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
 		var leading: [UIButton] = [barButton(title: "ABC") { [weak self] in self?.onABC?() }]
-		if showsGlobe { leading.append(barButton(symbol: "globe") { [weak self] in self?.onNextKeyboard?() }) }
+		if showsGlobe { leading.append(barButton(symbol: "keyboard") { [weak self] in self?.onNextKeyboard?() }) }
 
 		let nav = UIStackView()
 		nav.axis = .horizontal
@@ -886,7 +886,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 				.withRenderingMode(.alwaysTemplate), for: .normal)
 		}
 		if title == "ABC" { b.accessibilityLabel = "Letters" }
-		if symbol == "globe" { b.accessibilityLabel = "Next Keyboard" }
+		if symbol == "keyboard" { b.accessibilityLabel = "Next Keyboard" }
 		if symbol == "delete.left" { b.accessibilityLabel = "Delete" }
 		b.tintColor = theme.specialKeyText.withAlphaComponent(0.5)
 		b.setTitleColor(theme.specialKeyText, for: .normal)

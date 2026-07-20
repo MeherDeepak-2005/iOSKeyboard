@@ -59,19 +59,21 @@ final class KlipyClient {
 	}
 
 	static func requestURL(apiKey key: String, kind: KlipyKind, query: String?, page: Int) -> URL? {
-		// Search-only integration: ad endpoints and ad-targeting parameters are never used.
+		// Trending + search only: ad endpoints and ad-targeting parameters are never used.
 		guard !key.isEmpty, (1...100).contains(page),
 			key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) else { return nil }
-		guard let query else { return nil }
-		let trimmed = String(query.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80))
-		guard !trimmed.isEmpty else { return nil }
+		// No query → the `trending` feed, so opening the GIF/Sticker panel shows content
+		// immediately instead of a blank grid; a query → `search`.
+		let trimmed = query.map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(80)) } ?? ""
+		let endpoint = trimmed.isEmpty ? "trending" : "search"
 		guard var components = URLComponents(string:
-			"https://api.klipy.com/api/v1/\(key)/\(kind.rawValue)/search") else { return nil }
-		components.queryItems = [
+			"https://api.klipy.com/api/v1/\(key)/\(kind.rawValue)/\(endpoint)") else { return nil }
+		var queryItems = [
 			URLQueryItem(name: "page", value: String(page)),
 			URLQueryItem(name: "per_page", value: "20"),
-			URLQueryItem(name: "q", value: trimmed),
 		]
+		if !trimmed.isEmpty { queryItems.append(URLQueryItem(name: "q", value: trimmed)) }
+		components.queryItems = queryItems
 		return components.url
 	}
 

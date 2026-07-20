@@ -36,6 +36,12 @@ compact bi/trigram records. It also projects native sentences through the best
 attested Aksharantar forms and appends a Roman Telugu bi/trigram tail to `KBXL v3`.
 Roman mode therefore has its own mmap prior and never falls through to English.
 No Telugu glyph, conversion, vocabulary, or context table is generated from Swift.
+
+Inspect the exact artifacts currently shipped by both targets:
+
+```bash
+python3 tools/language_packs/inspect_runtime_packs.py
+```
 The pack exposes separate `tenglish_to_telugu`, `roman_telugu`, and native `telugu`
 input modes.
 
@@ -49,6 +55,10 @@ python3 tools/language_packs/build_telugu_pack.py \
   --max-words 22000 \
   --max-roman-keys 12000 \
   --max-variants 3 \
+  --native-bigram-byte-budget 114688 \
+  --native-trigram-byte-budget 114688 \
+  --roman-bigram-byte-budget 49152 \
+  --roman-trigram-byte-budget 49152 \
   --license-ack
 python3 tools/language_packs/validate_manifest.py keyboard/telugu_pack_manifest.json
 ```
@@ -59,6 +69,68 @@ so source ordering cannot determine starters when a cap is reached. Plain text,
 JSONL, and Tatoeba TSV inputs can provide native Telugu or direct Roman Telugu
 sentences. Unknown words break n-gram context instead of connecting unrelated
 tokens across an OOV gap. See `corpus-manifest.schema.json`.
+
+The native and Roman bi/trigram sections also have independent byte budgets. Within
+each budget, contexts are retained by weighted evidence and each continuation list
+is capped. A 15 GB source can therefore improve which records are selected without
+silently increasing the extension artifact or resident heap.
+
+### Preparing large Telugu corpora
+
+Do not point the pack builder at raw web documents. `prepare_telugu_corpus.py`
+streams local text, JSONL, or Parquet shards; splits documents into sentences;
+rejects URLs, email addresses, phone-like strings, script-mixed rows, repetition,
+and unreasonable lengths; deduplicates; and keeps a deterministic hash sample. The
+output and every input shard are SHA-256 recorded in a reviewable report.
+
+IndicCorpV2 publishes Telugu as one 15.76 GB text object. The range sampler takes
+one deterministic, jittered byte range from each equal-size stratum, records every
+range hash, and avoids downloading a biased prefix or the entire corpus:
+
+```bash
+python3 tools/language_packs/sample_hf_text_ranges.py \
+  --repository ai4bharat/IndicCorpV2 --filename data/te.txt \
+  --revision 2d7285e6ce14fdb3fb2449c9f89427b9f582ac3f \
+  --source-bytes 15760603733 \
+  --source-sha256 60693a4fd501b4a37ce57c76d6057a224fd6434bf6580eb134382cbe4ba1799a \
+  --range-count 64 --range-bytes 1048576 \
+  --output tools/.cache/indiccorpv2-te-ranges.txt \
+  --report tools/.cache/indiccorpv2-te-ranges.report.json
+```
+
+```bash
+python3 tools/language_packs/prepare_telugu_corpus.py \
+  --input tools/.cache/sangraha/verified/tel/data-0.parquet \
+  --format parquet --text-field text --language telugu \
+  --source-id sangraha_verified_tel_0 \
+  --max-sentences 150000 \
+  --output tools/data/sangraha-tel-verified.txt.bz2 \
+  --report tools/data/sangraha-tel-verified.report.json
+
+python3 tools/language_packs/prepare_telugu_corpus.py \
+  --input tools/.cache/sangraha/synthetic/tel_Latn/wiki_tel_Latn_0000_of_0063.parquet \
+  --format parquet --text-field text --language roman_telugu \
+  --source-id sangraha_synthetic_tel_latn_0 \
+  --max-sentences 100000 \
+  --output tools/data/sangraha-tel-latn.txt.bz2 \
+  --report tools/data/sangraha-tel-latn.report.json
+```
+
+Dataset roles are deliberately separate:
+
+- IndicCorpV2 (`tel_Telu`, CC0) and Sangraha Verified (`tel`, CC BY 4.0)
+  are native-LM candidates. Their web/news domains receive lower weights than a
+  future reviewed conversational corpus.
+- Aksharantar training rows supply attested word transliterations. They do not
+  provide sentence context.
+- Sangraha `synthetic/tel_Latn` can bootstrap Roman Telugu context at low weight,
+  but remains synthetic and must not be the blind evaluation source.
+- Dakshina training text/lexicon can supplement native and attested Roman forms;
+  its development and test sentences remain evaluation-only.
+- Samanantar is parallel translation data and the public distribution is marked
+  CC BY-NC 4.0. It is excluded from a commercial Release pack.
+- MILU, IndicQuest, and IndicParam are benchmarks; IndicVoices and Kathbath are
+  speech data. None belongs in the tap-prediction training stream.
 
 The tracked manifest intentionally contains only the small Tatoeba bootstrap. Its
 318 sentences are enough to validate the complete binary/runtime path but not to

@@ -48,12 +48,16 @@ struct ThemeStudioView: View {
 
 			ForEach(KBPalette.groups, id: \.title) { group in
 				Section(group.title) {
-					LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], spacing: 12) {
+					ScrollView(.horizontal) {
+						HStack(spacing: 10) {
 						ForEach(group.accents) { option in
 							presetButton(option)
 						}
+						}
+						.padding(.vertical, 2)
 					}
-					.padding(.vertical, 6)
+					.scrollIndicators(.hidden)
+					.listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 0))
 				}
 			}
 
@@ -106,26 +110,59 @@ struct ThemeStudioView: View {
 			accentID = option.id
 			usesCustom = false
 		} label: {
-			VStack(spacing: 7) {
-				ZStack {
-					RoundedRectangle(cornerRadius: 8, style: .continuous)
-						.fill(option.linearGradient(dark: systemScheme == .dark))
-						.frame(height: 42)
+			VStack(spacing: 6) {
+				themeMiniature(option)
+				HStack(spacing: 4) {
 					if selected {
-						Image(systemName: "checkmark.circle.fill")
-							.font(.title3)
-							.foregroundStyle(.white)
+						Image(systemName: "checkmark")
+							.font(.caption2.weight(.bold))
+							.foregroundStyle(Color(uiColor: .systemBlue))
 					}
+					Text(option.name)
+						.font(.caption.weight(selected ? .semibold : .regular))
+						.foregroundStyle(selected ? .primary : .secondary)
+						.lineLimit(1)
 				}
-				Text(option.name)
-					.font(.caption)
-					.foregroundStyle(.primary)
-					.lineLimit(1)
+			}
+			.padding(7)
+			.frame(width: 108, height: 98)
+			.background(Color(uiColor: .secondarySystemGroupedBackground),
+				in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+			.overlay {
+				RoundedRectangle(cornerRadius: 8, style: .continuous)
+					.stroke(selected ? Color(uiColor: .systemBlue) : .clear,
+						lineWidth: selected ? 2 : 0)
 			}
 			.contentShape(Rectangle())
 		} .buttonStyle(.plain)
 		.accessibilityLabel("\(option.name) theme")
 		.accessibilityValue(selected ? "Selected" : "")
+	}
+
+	private func themeMiniature(_ option: KBAccent) -> some View {
+		let dark = systemScheme == .dark
+		let theme = KeyboardTheme.preview(dark: dark, accent: option, customTheme: nil)
+		let key = Color(uiColor: theme.key)
+		let special = Color(uiColor: theme.specialKey)
+		return VStack(spacing: 4) {
+			HStack(spacing: 3) {
+				ForEach(0..<4, id: \.self) { _ in
+					RoundedRectangle(cornerRadius: 3).fill(key)
+				}
+			}
+			HStack(spacing: 3) {
+				RoundedRectangle(cornerRadius: 3).fill(special).frame(width: 16)
+				RoundedRectangle(cornerRadius: 3).fill(key)
+				RoundedRectangle(cornerRadius: 3)
+					.fill(LinearGradient(colors: [Color(uiColor: theme.accentStart),
+						Color(uiColor: theme.accentEnd)], startPoint: .leading, endPoint: .trailing))
+					.frame(width: 18)
+			}
+		}
+		.padding(9)
+		.frame(height: 58)
+		.background(Color(uiColor: theme.fallbackBackgroundTop),
+			in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 	}
 
 	@ViewBuilder private var colorRows: some View {

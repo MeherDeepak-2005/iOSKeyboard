@@ -53,7 +53,9 @@ nonisolated final class TeluguLexicon {
 			return
 		}
 		do {
-			let mapped = try Data(contentsOf: url, options: [.mappedIfSafe])
+			// Language packs are immutable for this process. Force a file mapping so a
+			// larger corpus changes clean, evictable pages rather than Swift heap usage.
+			let mapped = try Data(contentsOf: url, options: .alwaysMapped)
 			let parsed = try Self.parseHeader(mapped)
 			data = mapped
 			header = parsed
@@ -109,18 +111,18 @@ nonisolated final class TeluguLexicon {
 
 	private func contextSuggestions(_ context: [String], data: Data, header: Header,
 		limit: Int) -> [String] {
-		let ids = context.suffix(2).compactMap {
+		let ids = context.suffix(2).map {
 			wordID($0.precomposedStringWithCanonicalMapping, data: data, header: header)
 		}
-		if ids.count >= 2 {
-			let key = UInt32(ids[ids.count - 2]) << 16 | UInt32(ids[ids.count - 1])
+		if ids.count == 2, let first = ids[0], let second = ids[1] {
+			let key = UInt32(first) << 16 | UInt32(second)
 			if let range = trigramRange(key, data: data, header: header) {
 				let words = continuationWords(range, offset: header.trigramContinuationOffset,
 					data: data, header: header, limit: limit)
 				if !words.isEmpty { return words }
 			}
 		}
-		if let last = ids.last,
+		if let last = ids.last ?? nil,
 		   let range = bigramRange(last, data: data, header: header) {
 			return continuationWords(range, offset: header.bigramContinuationOffset,
 				data: data, header: header, limit: limit)

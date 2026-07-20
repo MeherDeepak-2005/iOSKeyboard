@@ -1,0 +1,34 @@
+{
+  "filters": {
+    "maxFragmentCharacters": 2000,
+    "maxTokens": 40,
+    "minScriptRatio": 0.75,
+    "minTokens": 2,
+    "rejectsURLsEmailsPhones": true,
+    "sampling": "lowest SHA-256 ranks over normalized unique sentences"
+  },
+  "inputs": [
+    {
+      "bytes": 33493011,
+      "format": "text",
+      "path": "tools/.cache/indiccorpv2-te-ranges.txt",
+      "sha256": "5ccc07cc46b227ffca6c436ce40a8b5eef186c8b2f74ca73e90af2027d554f23"
+    }
+  ],
+  "language": "telugu",
+  "output": {
+    "bytes": 2615659,
+    "path": "tools/.cache/indiccorpv2-te-prepared.txt.bz2",
+    "sentences": 100000,
+    "sha256": "744556a1da885bba747c629add17599d926c9bcc924d0dfbb60d750181d62230"
+  },
+  "schemaVersion": 1,
+  "sourceID": "indiccorpv2_telugu_stratified_64x1m",
+  "stats": {
+    "documents": 91990,
+    "duplicates": 6504,
+    "fragments": 304297,
+    "rejected_filter": 143546,
+    "sample_admissions": 143042
+  }
+}

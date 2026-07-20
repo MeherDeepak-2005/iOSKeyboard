@@ -50,6 +50,7 @@ nonisolated final class TenglishTransliterator {
 
 	private let data: Data?
 	private let header: Header?
+	private let starterCandidates: [RomanTeluguCandidate]
 	let loadError: String?
 	var isAvailable: Bool { data != nil && header != nil }
 	var keyCount: Int { header?.keyCount ?? 0 }
@@ -58,19 +59,25 @@ nonisolated final class TenglishTransliterator {
 		guard let url else {
 			data = nil
 			header = nil
+			starterCandidates = []
 			loadError = "missing-transliteration-data"
 			Self.log.error("Tenglish transliteration data is missing")
 			return
 		}
 		do {
-			let mapped = try Data(contentsOf: url, options: [.mappedIfSafe])
+			// Keep the transliteration FST/LM file-backed. Only decoded result strings
+			// enter the heap, and those are bounded by the requested candidate limit.
+			let mapped = try Data(contentsOf: url, options: .alwaysMapped)
 			let parsed = try Self.parseHeader(mapped)
 			data = mapped
 			header = parsed
+			starterCandidates = Self.makeRomanStarters(data: mapped,
+				header: parsed, limit: 24)
 			loadError = nil
 		} catch {
 			data = nil
 			header = nil
+			starterCandidates = []
 			loadError = String(describing: error)
 			Self.log.error("Tenglish data rejected: \(String(describing: error), privacy: .public)")
 		}
@@ -139,8 +146,13 @@ nonisolated final class TenglishTransliterator {
 	}
 
 	func romanPredictions(context: [String], limit: Int = 3) -> [RomanTeluguCandidate] {
-		guard limit > 0, let data, let header, header.version >= 3,
-			let range = romanContextRange(context, data: data, header: header) else { return [] }
+		guard limit > 0, let data, let header, header.version >= 3 else { return [] }
+		guard let range = romanContextRange(context, data: data, header: header)
+			?? bigramRange(.max, data: data, header: header).map({
+				ContinuationRange(offset: header.bigramContinuationOffset, range: $0)
+			}) else {
+			return Array(starterCandidates.prefix(limit))
+		}
 		var result: [RomanTeluguCandidate] = []
 		for (rank, index) in range.prefix(limit).enumerated() {
 			let record = range.offset + index * Self.continuationSize
@@ -318,11 +330,49 @@ nonisolated final class TenglishTransliterator {
 			.replacingOccurrences(of: "’", with: "'")
 			.replacingOccurrences(of: "‘", with: "'")
 			.trimmingCharacters(in: CharacterSet(charactersIn: "'"))
-		guard (2...48).contains(normalized.count),
+		guard (1...48).contains(normalized.count),
 			  normalized.unicodeScalars.allSatisfy({
 				$0.isASCII && (CharacterSet.letters.contains($0) || $0 == "'")
 			  }) else { return nil }
 		return normalized
+	}
+
+	/// The current bootstrap corpus has very sparse Roman context tables. Keep a tiny
+	/// immutable starter list derived from the highest-confidence attested forms so an
+	/// unknown context does not leave the strip empty. This scan runs once at pack load.
+	private static func makeRomanStarters(data: Data, header: Header,
+		limit: Int) -> [RomanTeluguCandidate] {
+		var best: [RomanTeluguCandidate] = []
+		best.reserveCapacity(limit + 1)
+		for index in 0..<header.keyCount {
+			let keyRecord = header.keyOffset + index * header.keyRecordSize
+			guard let relative = data.readU32(keyRecord),
+				let length = data.readU16(keyRecord + 4),
+				let variantCount = data.readU16(keyRecord + 6), variantCount > 0,
+				let firstVariant = data.readU32(keyRecord + 8) else { continue }
+			let start = header.blobOffset + Int(relative)
+			let end = start + Int(length)
+			guard start >= header.blobOffset,
+				end <= header.blobOffset + header.blobBytes,
+				let key = String(data: data[start..<end], encoding: .utf8) else { continue }
+			var weight = -Double.infinity
+			for offset in 0..<Int(variantCount) {
+				let variant = header.variantOffset
+					+ (Int(firstVariant) + offset) * header.variantRecordSize
+				if let value = data.readFloat32(variant + 8) {
+					weight = max(weight, Double(value))
+				}
+			}
+			guard weight.isFinite else { continue }
+			best.append(RomanTeluguCandidate(text: key, score: weight,
+				confidence: weight >= 8 ? 0.82 : 0.62))
+			best.sort {
+				if $0.score != $1.score { return $0.score > $1.score }
+				return $0.text < $1.text
+			}
+			if best.count > limit { best.removeLast(best.count - limit) }
+		}
+		return best
 	}
 
 	/// Bounded weighted arcs for common conversational spelling equivalences. Exact

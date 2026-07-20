@@ -9,9 +9,16 @@ final class SuggestionBar: UIView {
 	/// chip meant reading UIPasteboard on the type path, which stalls layout and fires
 	/// iOS's paste banner on every copy).
 	var onOpenClipboard: (() -> Void)?
+	/// Tap on the "Paste" offer that replaces the suggestion columns when the field is
+	/// empty and there is fresh clipboard text. The controller reads the pasteboard
+	/// ONLY here (one deliberate paste = one iOS banner); showing the offer uses
+	/// metadata alone, so it never banners.
+	var onPaste: (() -> Void)?
 
 	private var buttons: [UIButton] = []
 	private let clipButton = UIButton(type: .system)
+	private let pasteButton = UIButton(type: .system)
+	private var showingPasteOffer = false
 	private static let clipWidth: CGFloat = 34
 	private let primaryBackground = UIView()
 	private let sep1 = UIView(), sep2 = UIView()
@@ -43,13 +50,28 @@ final class SuggestionBar: UIView {
 		primaryBackground.layer.borderColor = primaryBorder.cgColor
 		primaryBackground.isHidden = true
 		addSubview(primaryBackground)
-		clipButton.setImage(UIImage(systemName: "doc.on.clipboard",
-			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium)), for: .normal)
+		clipButton.setImage(UIImage(systemName: "list.clipboard",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .regular)), for: .normal)
 		clipButton.tintColor = theme.specialKeyText.withAlphaComponent(0.55)
 		clipButton.accessibilityLabel = "Clipboard"
 		clipButton.accessibilityIdentifier = "suggestion.clipboard"
 		clipButton.addAction(UIAction { [weak self] _ in self?.onOpenClipboard?() }, for: .touchUpInside)
 		addSubview(clipButton)
+
+		var pasteConfig = UIButton.Configuration.plain()
+		pasteConfig.image = UIImage(systemName: "doc.on.clipboard",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+		pasteConfig.imagePadding = 6
+		pasteConfig.attributedTitle = AttributedString("Paste", attributes: AttributeContainer([
+			.font: UIFont.systemFont(ofSize: 16, weight: .medium)]))
+		pasteConfig.baseForegroundColor = theme.keyText
+		pasteButton.configuration = pasteConfig
+		pasteButton.isHidden = true
+		pasteButton.accessibilityIdentifier = "suggestion.paste"
+		pasteButton.accessibilityLabel = "Paste from clipboard"
+		pasteButton.addAction(UIAction { [weak self] _ in self?.onPaste?() }, for: .touchUpInside)
+		addSubview(pasteButton)
+
 		for i in 0..<3 {
 			let b = UIButton(type: .custom)
 			let base = UIFont.systemFont(ofSize: 17,
@@ -82,6 +104,8 @@ final class SuggestionBar: UIView {
 		// baseline nudge): an icon reads centered, and staying inside bounds keeps the
 		// whole 44pt target hittable above the strip's bottom pass-through band.
 		clipButton.frame = CGRect(x: 0, y: 0, width: clipW, height: bounds.height)
+		// The Paste offer, when shown, spans the whole suggestion area (after the icon).
+		pasteButton.frame = CGRect(x: clipW, y: 0, width: max(0, bounds.width - clipW), height: bounds.height)
 		let w = max(0, (bounds.width - clipW) / 3)
 		for (index, button) in buttons.enumerated() {
 			button.frame = CGRect(x: clipW + CGFloat(index) * w, y: visualOffsetY,
@@ -113,7 +137,24 @@ final class SuggestionBar: UIView {
 	/// text: the part the user already typed renders solid, the completion remainder
 	/// dims — the closest an iOS keyboard extension can get to in-field grey preview
 	/// (the host text field is off-limits to us).
+	/// Show the "Paste" offer in place of the three suggestion columns (or hide it and
+	/// restore them). The controller drives this from metadata only — see `onPaste`.
+	func setPasteOffer(_ show: Bool) {
+		guard showingPasteOffer != show else { return }
+		showingPasteOffer = show
+		updatePasteVisibility()
+	}
+
+	private func updatePasteVisibility() {
+		pasteButton.isHidden = !showingPasteOffer
+		for b in buttons { b.isHidden = showingPasteOffer }
+		sep1.isHidden = showingPasteOffer
+		sep2.isHidden = showingPasteOffer
+		if showingPasteOffer { setPrimaryHighlighted(false) }
+	}
+
 	func setSuggestions(_ s: [String], typedPrefix: String? = nil, highlightPrimary: Bool = false) {
+		if showingPasteOffer { showingPasteOffer = false; updatePasteVisibility() }
 		stableGlideResult = nil
 		rankedSuggestions = s
 		currentPrefix = typedPrefix
@@ -125,6 +166,7 @@ final class SuggestionBar: UIView {
 	/// crossed letters occupy the primary (middle) slot until decoding replaces them.
 	func setGlidePreview(_ preview: String?, alternatives: [String] = [],
 		confident: Bool = true) {
+		if showingPasteOffer { showingPasteOffer = false; updatePasteVisibility() }
 		guard let preview, !preview.isEmpty else {
 			renderStablePresentation()
 			return
@@ -145,6 +187,7 @@ final class SuggestionBar: UIView {
 	/// Keep the word that was actually committed in the shaded middle slot. The two
 	/// nearest alternatives remain available on either side for one-tap correction.
 	func setGlideResult(_ winner: String, alternatives: [String]) {
+		if showingPasteOffer { showingPasteOffer = false; updatePasteVisibility() }
 		stableGlideResult = (winner, alternatives)
 		renderGlideResult(winner, alternatives: alternatives)
 	}

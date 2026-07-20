@@ -10,9 +10,11 @@ benchmark are added to the same manifest.
 from __future__ import annotations
 
 import argparse
+import collections
 import csv
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import struct
@@ -20,6 +22,8 @@ import tempfile
 import unicodedata
 import zipfile
 from pathlib import Path
+
+from ngram_compaction import compact_contexts
 
 MAGIC = b"KBXL"
 VERSION = 2
@@ -33,6 +37,10 @@ VARIANT_RECORD = struct.Struct("<IHHf")
 BIGRAM_CONTEXT = struct.Struct("<HII")
 TRIGRAM_CONTEXT = struct.Struct("<III")
 CONTINUATION = struct.Struct("<HI")
+DEFAULT_BIGRAM_BYTE_BUDGET = 48 * 1024
+DEFAULT_TRIGRAM_BYTE_BUDGET = 48 * 1024
+DEFAULT_MAX_CONTINUATIONS = 12
+ROMAN_START_CONTEXT = 0xFFFF
 ROMAN = re.compile(r"^[a-z']{2,48}$")
 SOURCE_BITS = {
     "Dakshina": 1 << 0,
@@ -188,18 +196,35 @@ def ingest_reviewed_core(path: Path,
     return len(rows), sha256(path)
 
 
-def select_keys(database: sqlite3.Connection, max_keys: int) -> None:
+def select_keys(database: sqlite3.Connection, max_keys: int,
+                corpus_sentences: list[tuple[list[str], int]] | None = None) -> None:
     database.executescript("""
         CREATE TEMP TABLE key_quality AS
         SELECT roman, MAX(weight) AS quality, COUNT(*) AS variants
         FROM pairs GROUP BY roman;
         CREATE INDEX key_quality_rank ON key_quality(quality DESC, variants DESC, roman);
+        CREATE TEMP TABLE corpus_frequency (
+            roman TEXT PRIMARY KEY,
+            boost REAL NOT NULL
+        ) WITHOUT ROWID;
     """)
+    if corpus_sentences:
+        counts: collections.Counter[str] = collections.Counter()
+        for words, weight in corpus_sentences:
+            for word in words:
+                counts[word] += weight
+        database.executemany(
+            "INSERT INTO corpus_frequency(roman, boost) VALUES (?, ?)",
+            ((word, min(6.0, math.log1p(count) * 1.25))
+             for word, count in counts.items()),
+        )
     database.execute("CREATE TEMP TABLE selected (roman TEXT PRIMARY KEY) WITHOUT ROWID")
     database.execute("""
         INSERT INTO selected
-        SELECT roman FROM key_quality
-        ORDER BY quality DESC, variants DESC, roman ASC LIMIT ?
+        SELECT q.roman FROM key_quality q
+        LEFT JOIN corpus_frequency c ON c.roman = q.roman
+        ORDER BY q.quality + COALESCE(c.boost, 0) DESC,
+                 q.variants DESC, q.roman ASC LIMIT ?
     """, (max_keys,))
 
 
@@ -207,10 +232,15 @@ def _group_roman_ngrams(
     sentences: list[tuple[list[str], int]], key_ids: dict[str, int]
 ) -> tuple[dict[int, list[tuple[int, int]]], dict[int, list[tuple[int, int]]]]:
     """Count only contiguous in-vocabulary arcs; unknown words break context."""
+    unigrams: dict[int, int] = {}
     bigrams: dict[tuple[int, int], int] = {}
     trigrams: dict[tuple[int, int, int], int] = {}
     for words, weight in sentences:
         ids = [key_ids.get(word) for word in words]
+        for word_id in ids:
+            if word_id is not None:
+                unigrams[word_id] = min(
+                    0xFFFFFFFF, unigrams.get(word_id, 0) + weight)
         for index in range(len(ids) - 1):
             first, second = ids[index:index + 2]
             if first is not None and second is not None:
@@ -223,7 +253,12 @@ def _group_roman_ngrams(
                 trigrams[key] = min(0xFFFFFFFF, trigrams.get(key, 0) + weight)
 
     def group_bigram() -> dict[int, list[tuple[int, int]]]:
-        grouped: dict[int, list[tuple[int, int]]] = {}
+        # Key IDs stop at 65,533, leaving UInt16.max available as an immutable
+        # sentence-start/unknown-context record without changing KBXL-v3.
+        grouped: dict[int, list[tuple[int, int]]] = {
+            ROMAN_START_CONTEXT: sorted(
+                unigrams.items(), key=lambda item: (-item[1], item[0]))
+        } if unigrams else {}
         for (previous, word), count in bigrams.items():
             grouped.setdefault(previous, []).append((word, count))
         return {context: sorted(values, key=lambda item: (-item[1], item[0]))
@@ -255,7 +290,10 @@ def _encode_contexts(groups: dict[int, list[tuple[int, int]]],
 
 def _write_binary(database: sqlite3.Connection, output: Path,
                   max_variants: int,
-                  sentences: list[tuple[list[str], int]] | None) \
+                  sentences: list[tuple[list[str], int]] | None,
+                  bigram_byte_budget: int = DEFAULT_BIGRAM_BYTE_BUDGET,
+                  trigram_byte_budget: int = DEFAULT_TRIGRAM_BYTE_BUDGET,
+                  max_continuations: int = DEFAULT_MAX_CONTINUATIONS) \
         -> tuple[int, int, dict[str, int]]:
     rows = database.execute("""
         SELECT p.roman, p.native, p.weight, p.source_bits
@@ -318,6 +356,20 @@ def _write_binary(database: sqlite3.Connection, output: Path,
     else:
         key_ids = {roman: index for index, (roman, _) in enumerate(grouped)}
         bigrams, trigrams = _group_roman_ngrams(sentences, key_ids)
+        bigrams, bigram_compaction = compact_contexts(
+            bigrams,
+            context_record_bytes=BIGRAM_CONTEXT.size,
+            continuation_record_bytes=CONTINUATION.size,
+            byte_budget=bigram_byte_budget,
+            max_continuations=max_continuations,
+        )
+        trigrams, trigram_compaction = compact_contexts(
+            trigrams,
+            context_record_bytes=TRIGRAM_CONTEXT.size,
+            continuation_record_bytes=CONTINUATION.size,
+            byte_budget=trigram_byte_budget,
+            max_continuations=max_continuations,
+        )
         bigram_contexts, bigram_continuations, bigram_count = _encode_contexts(
             bigrams, BIGRAM_CONTEXT)
         trigram_contexts, trigram_continuations, trigram_count = _encode_contexts(
@@ -343,6 +395,10 @@ def _write_binary(database: sqlite3.Connection, output: Path,
             "roman_bigram_continuation_count": bigram_count,
             "roman_trigram_context_count": len(trigrams),
             "roman_trigram_continuation_count": trigram_count,
+            **{f"roman_bigram_{key}": value
+               for key, value in bigram_compaction.items()},
+            **{f"roman_trigram_{key}": value
+               for key, value in trigram_compaction.items()},
         }
     with output.open("wb") as handle:
         handle.write(header)
@@ -362,9 +418,17 @@ def write_binary(database: sqlite3.Connection, output: Path,
 
 def write_binary_with_lm(database: sqlite3.Connection, output: Path,
                          max_variants: int,
-                         sentences: list[tuple[list[str], int]]) \
+                         sentences: list[tuple[list[str], int]], *,
+                         bigram_byte_budget: int = DEFAULT_BIGRAM_BYTE_BUDGET,
+                         trigram_byte_budget: int = DEFAULT_TRIGRAM_BYTE_BUDGET,
+                         max_continuations: int = DEFAULT_MAX_CONTINUATIONS) \
         -> tuple[int, int, dict[str, int]]:
-    return _write_binary(database, output, max_variants, sentences=sentences)
+    return _write_binary(
+        database, output, max_variants, sentences=sentences,
+        bigram_byte_budget=bigram_byte_budget,
+        trigram_byte_budget=trigram_byte_budget,
+        max_continuations=max_continuations,
+    )
 
 
 def build_pack(args: argparse.Namespace) -> Path:

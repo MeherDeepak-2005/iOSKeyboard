@@ -2,6 +2,26 @@
   "schemaVersion": 1,
   "sources": [
     {
+      "id": "indiccorpv2_telugu_stratified_2026_07_20",
+      "name": "IndicCorpV2 Telugu deterministic stratified sample",
+      "path": "../../../data/indiccorpv2-te-stratified-2026-07-20.txt.bz2",
+      "url": "https://huggingface.co/datasets/ai4bharat/IndicCorpV2/blob/2d7285e6ce14fdb3fb2449c9f89427b9f582ac3f/data/te.txt",
+      "license": "CC0-1.0",
+      "licenseURL": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "sha256": "744556a1da885bba747c629add17599d926c9bcc924d0dfbb60d750181d62230",
+      "sourceRevision": "2d7285e6ce14fdb3fb2449c9f89427b9f582ac3f",
+      "attribution": "AI4Bharat IndicCorpV2; 32 deterministic 1 MiB strata recorded in the preparation reports",
+      "split": "train",
+      "purpose": "training",
+      "language": "telugu",
+      "domain": "news",
+      "format": "text",
+      "countWeight": 1,
+      "maxSentences": 100000,
+      "researchOnly": false,
+      "releaseEligible": true
+    },
+    {
       "id": "tatoeba_telugu_2026_07_19",
       "name": "Tatoeba Telugu detailed sentences",
       "path": "../../../data/tatoeba-tel-ccby-2026-07-19.tsv.bz2",
@@ -16,7 +36,7 @@
       "language": "telugu",
       "domain": "mixed",
       "format": "tatoeba_tsv",
-      "countWeight": 1,
+      "countWeight": 2,
       "maxSentences": 50000,
       "researchOnly": false,
       "releaseEligible": true

@@ -246,7 +246,7 @@ final class KeyButton: UIView {
 		case "shift", "shift.fill": return "Shift"
 		case "capslock.fill": return "Caps Lock"
 		case "face.smiling": return "Emoji"
-		case "globe": return "Next Keyboard"
+		case "globe", "keyboard": return "Next Keyboard"
 		default: return nil
 		}
 	}

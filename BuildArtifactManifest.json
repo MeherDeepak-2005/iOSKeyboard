@@ -3,9 +3,9 @@
   "failures": [],
   "files": [
     {
-      "bytes": 1164,
+      "bytes": 1231,
       "path": "Info.plist",
-      "sha256": "40969c961579f66ef01778cd06cc16f970daf2534342bf82737f083cea06a186"
+      "sha256": "08710812bbcad021adefe51d5f58c358ee5e545e2182ea0d8463b8e7067d140f"
     },
     {
       "bytes": 1033,
@@ -13,9 +13,9 @@
       "sha256": "271853104efc3a57ac3331a013f9337749683c8d4197c6e31268a87ca01cc1d6"
     },
     {
-      "bytes": 1267888,
+      "bytes": 1318408,
       "path": "demo_keyboard",
-      "sha256": "384f675ed8b0b6fa22742804ce95faaf29d34a3523f48dc5c0623b90af295479"
+      "sha256": "2de43a7aebb33579c29c7c2b0b6fc56ca451efd3d1bfb3db69dac368a0cd7230"
     },
     {
       "bytes": 41541,
@@ -35,7 +35,7 @@
     {
       "bytes": 1924776,
       "path": "telugu_langdata.bin",
-      "sha256": "6f887cc3b8eb7b50f7fabae17705dc3b356888de09187ccce53b4ac19ada4557"
+      "sha256": "38daf3af2312e6f630d7a38529177c191ebc6a216d511d344a4e80bf2cf9b210"
     },
     {
       "bytes": 4288,
@@ -45,17 +45,17 @@
     {
       "bytes": 5948,
       "path": "telugu_pack_manifest.json",
-      "sha256": "7c6308c9611bb47b3966f5cfca43e7807163091d9755258a9da322053a893b38"
+      "sha256": "20eceeb4b1f55553051ab6d4f642803dce5a0d0ace41ca6e98fda984f1b75d0b"
     },
     {
       "bytes": 871171,
       "path": "tenglish_lexicon.bin",
-      "sha256": "e70b56a4bbb77f9c8ed39570a446691b3ba963cc6e7a97787d4ef195f7a967c7"
+      "sha256": "43a287d98b7e314266eb1af92c483b0002d6ceab47a4114e76f8ec6b921cbc49"
     }
   ],
   "gateBytes": 14000000,
   "gatePassed": true,
   "neuralArtifactsAllowed": false,
   "schemaVersion": 1,
-  "totalBytes": 13541033
+  "totalBytes": 13591620
 }

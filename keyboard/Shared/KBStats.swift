@@ -169,17 +169,21 @@ enum KBStats {
 	}
 
 	static let trophies: [KBTrophy] = [
-		KBTrophy(id: "first-steps", name: "First Steps", detail: "Enter 100 words",
-			symbol: "figure.walk", metric: \KBStatsData.totalTyped, threshold: 100),
-		KBTrophy(id: "wordsmith", name: "Wordsmith", detail: "Enter 10,000 words",
-			symbol: "pencil.and.outline", metric: \KBStatsData.totalTyped, threshold: 10_000),
-		KBTrophy(id: "glide", name: "Glide", detail: "Glide 500 words",
-			symbol: "hand.draw.fill", metric: \KBStatsData.totalGlided, threshold: 500),
+		KBTrophy(id: "first-words", name: "First Words", detail: "First word",
+			symbol: "textformat", metric: \KBStatsData.totalTyped, threshold: 1),
+		KBTrophy(id: "wordsmith", name: "Wordsmith", detail: "1,000 words",
+			symbol: "pencil.and.outline", metric: \KBStatsData.totalTyped, threshold: 1_000),
+		KBTrophy(id: "lexicon", name: "Lexicon", detail: "10,000 words",
+			symbol: "book.closed", metric: \KBStatsData.totalTyped, threshold: 10_000),
+		KBTrophy(id: "glide-starter", name: "Glide Starter", detail: "First glide",
+			symbol: "hand.draw", metric: \KBStatsData.totalGlided, threshold: 1),
 		KBTrophy(id: "week", name: "Week Streak", detail: "Reach a 7-day streak",
 			symbol: "flame.fill", metric: \KBStatsData.bestStreak, threshold: 7),
 		KBTrophy(id: "month", name: "Month Streak", detail: "Reach a 30-day streak",
 			symbol: "calendar", metric: \KBStatsData.bestStreak, threshold: 30),
 		KBTrophy(id: "best-day", name: "Big Day", detail: "Enter 1,000 words in one day",
 			symbol: "bolt.fill", metric: \KBStatsData.bestDay, threshold: 1_000),
+		KBTrophy(id: "glide-pro", name: "Glide Pro", detail: "500 glides",
+			symbol: "scribble.variable", metric: \KBStatsData.totalGlided, threshold: 500),
 	]
 }

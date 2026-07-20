@@ -57,13 +57,8 @@ struct ContentView: View {
 
 	var body: some View {
 		NavigationStack {
-			List {
-				if !hasUsedKeyboard {
-					Section {
-						EnableKeyboardRow()
-					}
-				}
-				if hasUsedKeyboard {
+			if hasUsedKeyboard {
+				List {
 					Section {
 						CommercialHomeCarousel(commercial: commercial)
 							.listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
@@ -73,7 +68,6 @@ struct ContentView: View {
 					Section("Progress") {
 						AchievementBanner()
 					}
-				}
 				Section("Status") {
 					NavigationLink {
 						SetupSupportView()
@@ -108,15 +102,13 @@ struct ContentView: View {
 					Text("Haptics require a physical iPhone and follow the device's system haptic settings. The status page shows the last state observed by the keyboard.")
 				}
 
-				if hasUsedKeyboard {
-					Section("Rewards") {
-						NavigationLink {
-							RewardCenterView(store: commercial)
-						} label: {
-							SettingRow(icon: "gift.fill",
-									   tint: Color(uiColor: .systemPink),
-									   title: "Offers & Theme Rewards")
-						}
+				Section("Rewards") {
+					NavigationLink {
+						RewardCenterView(store: commercial)
+					} label: {
+						SettingRow(icon: "gift.fill",
+								   tint: Color(uiColor: .systemPink),
+								   title: "Offers & Theme Rewards")
 					}
 				}
 
@@ -161,10 +153,13 @@ struct ContentView: View {
 					}
 				}
 				#endif
+				}
+				.listStyle(.insetGrouped)
+				.navigationTitle("Glyph")
+				.navigationBarTitleDisplayMode(.large)
+			} else {
+				FirstRunView()
 			}
-			.listStyle(.insetGrouped)
-			.navigationTitle("Glyph")
-			.navigationBarTitleDisplayMode(.large)
 		}
 		.environmentObject(store)
 		.tint(Color(uiColor: .systemBlue))
@@ -688,6 +683,108 @@ private struct LanguagePickerRow: View {
 }
 
 // MARK: - Enable-keyboard onboarding (app target only — uses UIApplication)
+
+private struct FirstRunView: View {
+	@Environment(\.colorScheme) private var scheme
+
+	var body: some View {
+		GeometryReader { geometry in
+			ScrollView {
+				VStack(spacing: 0) {
+					Spacer(minLength: 46)
+					appMark
+						.padding(.bottom, 22)
+					Text("Meet Glyph")
+						.font(.system(size: 34, weight: .bold))
+					Text("Better corrections, glide typing, and\nthemes - in every app you type in.")
+						.font(.system(size: 17))
+						.foregroundStyle(.secondary)
+						.multilineTextAlignment(.center)
+						.lineSpacing(4)
+						.padding(.top, 16)
+						.padding(.bottom, 34)
+
+					VStack(spacing: 0) {
+						Button(action: openSettings) {
+							step(number: 1, text: "Open Settings and go to Keyboards")
+						}
+						.buttonStyle(.plain)
+						Divider().padding(.leading, 64)
+						step(number: 2, text: "Turn on Glyph", emphasized: "Glyph")
+						Divider().padding(.leading, 64)
+						step(number: 3, text: "In any app, hold the globe and pick Glyph")
+						Divider().padding(.leading, 64)
+						step(number: 4, text: "Optional: allow Full Access for haptics",
+							isOptional: true)
+					}
+					.background(Color(uiColor: .secondarySystemGroupedBackground),
+						in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+					.padding(.horizontal, 24)
+
+					Spacer(minLength: 72)
+					Label("Your typing stays on your iPhone.", systemImage: "shield")
+						.font(.footnote)
+						.foregroundStyle(.tertiary)
+						.padding(.bottom, 18)
+				}
+				.frame(maxWidth: .infinity, minHeight: geometry.size.height)
+			}
+		}
+		.background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
+		.toolbar(.hidden, for: .navigationBar)
+		.accessibilityIdentifier("onboarding.firstRun")
+	}
+
+	private var appMark: some View {
+		ZStack {
+			LinearGradient(colors: [Color(uiColor: .systemBlue),
+				Color(red: 0.35, green: 0.34, blue: 0.92)],
+				startPoint: .topLeading, endPoint: .bottomTrailing)
+			RoundedRectangle(cornerRadius: 8, style: .continuous)
+				.fill(Color(uiColor: .systemBackground).opacity(scheme == .dark ? 0.92 : 0.88))
+				.frame(width: 48, height: 48)
+			Text("G")
+				.font(.system(size: 24, weight: .bold, design: .rounded))
+				.foregroundStyle(Color(red: 0.14, green: 0.22, blue: 0.42))
+		}
+		.frame(width: 96, height: 96)
+		.clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+		.shadow(color: Color(uiColor: .systemBlue).opacity(0.18), radius: 18, y: 9)
+		.accessibilityHidden(true)
+	}
+
+	private func step(number: Int, text: String, emphasized: String? = nil,
+		isOptional: Bool = false) -> some View {
+		HStack(spacing: 14) {
+			Text("\(number)")
+				.font(.system(size: 15, weight: .bold))
+				.foregroundStyle(isOptional ? Color.secondary : Color.white)
+				.frame(width: 30, height: 30)
+				.background(isOptional ? Color(uiColor: .systemFill)
+					: Color(uiColor: .systemBlue), in: Circle())
+			if let emphasized, let range = text.range(of: emphasized) {
+				(Text(text[..<range.lowerBound])
+					+ Text(text[range]).bold()
+					+ Text(text[range.upperBound...]))
+					.foregroundStyle(isOptional ? .secondary : .primary)
+					.frame(maxWidth: .infinity, alignment: .leading)
+			} else {
+				Text(text)
+					.foregroundStyle(isOptional ? .secondary : .primary)
+					.frame(maxWidth: .infinity, alignment: .leading)
+			}
+		}
+		.font(.system(size: 16))
+		.padding(.horizontal, 16)
+		.padding(.vertical, 14)
+		.contentShape(Rectangle())
+	}
+
+	private func openSettings() {
+		guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+		UIApplication.shared.open(url)
+	}
+}
 
 struct EnableKeyboardRow: View {
 	var body: some View {

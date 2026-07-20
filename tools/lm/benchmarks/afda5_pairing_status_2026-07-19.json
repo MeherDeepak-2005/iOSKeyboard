@@ -21,7 +21,7 @@
     "language_data_sha256": "a5accdb6100bf782637b91b522a33af20d199e7c85cc39e9a0da21ff4cbfc0d8",
     "w8_weight_sha256": "a4c42d86904f5cc1c26efd519784baf8db4e8d6419b7ab75ce043c009344e248",
     "tokenizer_sha256": "c2fea4a790c16a25537c81d226b47c0ddc6911f20f1895022676d68a4d70753c",
-    "shipping_artifact_manifest_sha256": "f63cc0a96caffa096dfd0f99aeb103d2cb659d66be0ee92093806baf51d66c04",
+    "shipping_artifact_manifest_sha256": "a07c79a42417ef4bbef1df809c9133d72f9bfb013edbaf103730ffcea976d5d0",
     "internal_w8_artifact_manifest_sha256": "f51fc3905e4f38ef5b9fb0135781a81c66b7b5953fad3b88e7b5be62e4de5f25"
   },
   "incremental_generator_verification": {
