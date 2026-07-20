@@ -1,0 +1,14 @@
+// Tracked extension defaults. Local partner credentials and research-model paths
+// belong in the ignored Secrets.xcconfig file beside this one.
+KLIPY_API_KEY =
+KLIPY_CONTENT_FILTER_APPROVED = NO
+KLIPY_MEDIA_ENABLED = NO
+INTERNAL_NEURAL_MODEL_PACKAGE =
+INTERNAL_NEURAL_TOKENIZER_MODEL =
+// Set only for an explicitly opt-in, optimized internal profiling build.
+// Ordinary Release builds remain n-gram-only and the artifact verifier rejects
+// any accidentally bundled neural files.
+INTERNAL_NEURAL_ENABLED = NO
+
+#include? "Secrets.xcconfig"
+#include? "Klipy.xcconfig"

@@ -1,9 +1,70 @@
 # Third-Party Notices
 
+## Google Profanity Words English List
+
+`keyboard/safety.kbguard` contains a normalized, exact-match transformation of the
+English list from `coffee-and-fun/google-profanity-words`, pinned at commit
+`0ae3460863120bc671361b9403cc65d5f2075b89`. The keyboard uses it only to suppress
+automatic suggestions and corrections; it does not censor text entered by a user.
+
+- Source: https://github.com/coffee-and-fun/google-profanity-words/blob/0ae3460863120bc671361b9403cc65d5f2075b89/data/en.txt
+- License: MIT
+
+MIT License
+
+Copyright (c) Robert James Gabriel / Coffee & Fun LLC
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## Reviewed Telugu and Tenglish Safety Policy
+
+`keyboard/safety.kbguard` also preserves 804 terms recovered from the project's
+previous reviewed production artifact, including 26 Telugu-script entries. Their
+reviewed actions and language IDs are tracked in
+`tools/data/safety_recovered_reviewed.tsv`; they are internal project policy, not
+third-party training data.
+
+Review candidates are mined from the CC-BY-4.0 Telugu Hate Speech training split;
+exact Roman aliases are joined from AI4Bharat Aksharantar. They remain in
+`tools/data/safety_tenglish_candidates.tsv` with `candidate` review status and are
+not included in runtime policy until native-speaker adjudication approves each
+exact form. No source sentence is copied into the review artifact.
+
+- Telugu Hate Speech source: https://huggingface.co/datasets/mounikaiiith/Telugu-Hatespeech
+- License: https://creativecommons.org/licenses/by/4.0/
+
+## English Speller Database (ESDB)
+
+`keyboard/langdata.bin` admits automatic vocabulary only from the vetted ESDB v2
+American-English size-60 tier or from size-70 entries with independent frequency
+evidence. Project-reviewed supplemental terms are tracked separately. The generated
+tier snapshot is pinned to commit `1e5b7d3a72f47a71da5d28686c1dd4b397178485`.
+
+ESDB is derived from BSD-compatible sources and the combined work is available under
+an MIT-like license. The upstream `Copyright` file remains the authoritative notice.
+
+- Source: https://github.com/en-wl/wordlist/tree/v2
+- Copyright: https://github.com/en-wl/wordlist/blob/v2/Copyright
+
 ## FrequencyWords English 2018
 
-`keyboard/langdata.bin` contains a transformed subset of the FrequencyWords
-English frequency list by hermitdave, pinned at commit
+`keyboard/langdata.bin` uses a transformed subset of the FrequencyWords English
+frequency list to rank ESDB-validated entries. The source is pinned at commit
 `525f9b560de45753a5ea01069454e72e9aa541c6`.
 
 The FrequencyWords repository code is MIT licensed and its generated frequency
@@ -23,6 +84,42 @@ sentences, counts bounded context tables, and does not ship sentence text in the
 
 - Source: https://tatoeba.org/en/downloads
 - Public-domain dedication: https://creativecommons.org/publicdomain/zero/1.0/
+
+## AI4Bharat Aksharantar Telugu
+
+`keyboard/tenglish_lexicon.bin` and the vocabulary/trie portion of
+`keyboard/telugu_langdata.bin` contain transformed records from the Telugu training
+split of AI4Bharat Aksharantar. The pack preserves source weights, normalizes output
+to NFC, selects a bounded vocabulary, and does not include validation or test rows.
+
+Aksharantar uses source-dependent licensing: manually collected data is CC BY and
+mined/existing-source data is CC0. The exact archive and member hashes are recorded
+in `keyboard/telugu_pack_manifest.json` and `ARTIFACTS.json`.
+
+- Source and citation: https://huggingface.co/datasets/ai4bharat/Aksharantar
+- Licensing: https://huggingface.co/datasets/ai4bharat/Aksharantar#licensing-information
+
+## Tatoeba Telugu Sentences
+
+The compact bi- and trigram records in `keyboard/telugu_langdata.bin` are derived
+from the Tatoeba Telugu detailed sentence export snapshot dated July 19, 2026. The
+keyboard ships aggregate counts, not sentence text. The source is licensed under
+Creative Commons Attribution 2.0 France.
+
+Contributors in this snapshot: AlphaSteppeNomad, Balamax, bharath, cntrational,
+epraneeth98, frpzzd, Hari, NigerianSmiths, nurendra, ramanirudh, rarmdhyymm, simley,
+and strykerami.
+
+- Source: https://tatoeba.org/en/downloads
+- License: https://creativecommons.org/licenses/by/2.0/fr/
+
+## Unicode CLDR Telugu Keyboard Data
+
+The external Telugu layout source is cross-checked against the Unicode CLDR Apple
+Telugu keyboard chart. Unicode data is used under the Unicode License v3.
+
+- Layout chart: https://www.unicode.org/cldr/charts/41/keyboards/layouts/te.html
+- License: https://www.unicode.org/license.txt
 
 ## Unicode Character Data
 

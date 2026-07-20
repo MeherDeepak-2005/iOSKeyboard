@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "status": "repaired_synthetic_preflight_not_release_evidence",
+  "generated_date": "2026-07-19",
+  "dataset": {
+    "source": "tools/.cache/eng_news_2024_1M.tar.gz",
+    "source_sha256": "8f1d4d07b9771f8a7fc219ad587d5382eabf5009ef563f1bc4c12a467a8e3a97",
+    "cases": 250,
+    "seed": 7,
+    "synthetic_edits": 1,
+    "user_separated": false,
+    "clean_input_cases": 0,
+    "forced_gold_insertion": false
+  },
+  "decoder": {
+    "language_data_sha256": "de48be323e36a0240664fd7266e842b036624b4f5d353e963ebe479d11952955",
+    "candidate_generator": "python-trie-approximation",
+    "score_cap": 32,
+    "ngram": "fresh-install Witten-Bell",
+    "neural_weight": 0.7,
+    "ngram_weight_in_neural_blend": 0.3,
+    "neural_word_score": "summed SentencePiece log probability",
+    "frequency_weight": 0.3
+  },
+  "results": [
+    {
+      "name": "ngram",
+      "top1": 0.804,
+      "top3": 0.976,
+      "oracle_recall_before_cap": 1.0,
+      "oracle_recall_after_cap": 1.0,
+      "cpu_case_p50_ms": 8.27125,
+      "cpu_case_p95_ms": 44.356708
+    },
+    {
+      "name": "pretrain",
+      "stage": "pretrain",
+      "parameters": 10601472,
+      "checkpoint_sha256": "68bed8e8584d4df500eb58b067965dd91685568653004063b9d969e13d2437ba",
+      "tokenizer_sha256": "c2fea4a790c16a25537c81d226b47c0ddc6911f20f1895022676d68a4d70753c",
+      "top1": 0.868,
+      "top3": 0.992,
+      "oracle_recall_before_cap": 1.0,
+      "oracle_recall_after_cap": 1.0,
+      "cpu_case_p50_ms": 36.870375,
+      "cpu_case_p95_ms": 70.538209
+    },
+    {
+      "name": "distill",
+      "stage": "distill",
+      "parameters": 10601472,
+      "checkpoint_sha256": "f2fafcce320400353a42cd98ce587298427abbefec47be05883ecbba29ec34af",
+      "tokenizer_sha256": "c2fea4a790c16a25537c81d226b47c0ddc6911f20f1895022676d68a4d70753c",
+      "top1": 0.872,
+      "top3": 0.984,
+      "oracle_recall_before_cap": 1.0,
+      "oracle_recall_after_cap": 1.0,
+      "cpu_case_p50_ms": 36.1251455,
+      "cpu_case_p95_ms": 69.429667
+    }
+  ],
+  "checkpoint_folder_audit": {
+    "stage_a_train_rows": 15950158,
+    "stage_a_dev_rows": 81448,
+    "stage_b_train_rows": 1739916,
+    "stage_b_dev_rows": 99677,
+    "teacher_a_shards": 8,
+    "merged_teacher_a_cache_present": false,
+    "teacher_b_training_cache_present": false,
+    "teacher_b_heldout_cache_present": false,
+    "finetune_checkpoint_present": false,
+    "qat_checkpoint_present": false,
+    "coreml_package_present": false
+  },
+  "limitations": [
+    "Synthetic one-edit cases are not real-user labels.",
+    "There are no already-correct cases, so false-correction rate is not measurable.",
+    "The candidate generator omits production completion and context-injection sources.",
+    "CPU/PyTorch latency is not Core ML or physical-iPhone latency.",
+    "Neither checkpoint completed Stage-B fine-tuning or W8A8 QAT."
+  ],
+  "verdict": "Do not ship. Distill narrowly wins synthetic top-1 while pretrain wins top-3; train both complete branches and decide on a user-separated blind set plus physical-device gates."
+}

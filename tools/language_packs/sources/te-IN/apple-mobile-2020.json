@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "identifier": "te-IN-apple-mobile",
+  "version": 2,
+  "locale": "te_IN",
+  "normalization": "NFC",
+  "releaseStatus": "beta",
+  "nativeSpeakerReviewed": false,
+  "source": {
+    "name": "Apple Telugu mobile layout cross-checked with Unicode CLDR Apple Telugu",
+    "url": "https://medium.com/@pravynandas/telugu-typing-in-iphone-%E0%B0%90%E0%B0%AB%E0%B1%8B%E0%B0%A8%E0%B1%8D-%E0%B0%B2%E0%B1%8B-%E0%B0%A4%E0%B1%86%E0%B0%B2%E0%B1%81%E0%B0%97%E0%B1%81-2d6669344b6f",
+    "cldrURL": "https://www.unicode.org/cldr/charts/41/keyboards/layouts/te.html",
+    "note": "Five-row alphabetic geometry observed on current iOS and cross-checked against Unicode Telugu coverage. Native-speaker approval is still required before removing the beta label."
+  },
+  "composition": {
+    "scriptRanges": [[3072, 3199]],
+    "consonants": [3093, 3094, 3095, 3096, 3097, 3098, 3099, 3100, 3101, 3102, 3103, 3104, 3105, 3106, 3107, 3108, 3109, 3110, 3111, 3112, 3114, 3115, 3116, 3117, 3118, 3119, 3120, 3121, 3122, 3123, 3124, 3125, 3126, 3127, 3128, 3129, 3130, 3131, 3160, 3161],
+    "dependentVowelSigns": [3134, 3135, 3136, 3137, 3138, 3139, 3140, 3142, 3143, 3144, 3146, 3147, 3148, 3150, 3151, 3170, 3171],
+    "marks": [3073, 3074, 3075, 3157, 3158],
+    "virama": 3149,
+    "joiners": [8204, 8205]
+  },
+  "pages": [
+    {
+      "id": "alphabetic",
+      "rows": [
+        [
+          {"label": "క", "accessibilityLabel": "Telugu ka", "kind": "consonant", "text": "క", "alternatives": ["క్ష"]},
+          {"label": "ఖ", "accessibilityLabel": "Telugu kha", "kind": "consonant", "text": "ఖ"},
+          {"label": "గ", "accessibilityLabel": "Telugu ga", "kind": "consonant", "text": "గ"},
+          {"label": "ఘ", "accessibilityLabel": "Telugu gha", "kind": "consonant", "text": "ఘ"},
+          {"label": "ఙ", "accessibilityLabel": "Telugu nga", "kind": "consonant", "text": "ఙ"},
+          {"label": "అ", "accessibilityLabel": "Telugu a", "kind": "vowel", "text": "అ"},
+          {"label": "ఆ", "accessibilityLabel": "Telugu aa", "kind": "vowel", "text": "ఆ", "dependentText": "ా"},
+          {"label": "ఇ", "accessibilityLabel": "Telugu i", "kind": "vowel", "text": "ఇ", "dependentText": "ి"},
+          {"label": "ఈ", "accessibilityLabel": "Telugu ii", "kind": "vowel", "text": "ఈ", "dependentText": "ీ"},
+          {"label": "ఉ", "accessibilityLabel": "Telugu u", "kind": "vowel", "text": "ఉ", "dependentText": "ు"}
+        ],
+        [
+          {"label": "చ", "accessibilityLabel": "Telugu ca", "kind": "consonant", "text": "చ"},
+          {"label": "ఛ", "accessibilityLabel": "Telugu cha", "kind": "consonant", "text": "ఛ"},
+          {"label": "జ", "accessibilityLabel": "Telugu ja", "kind": "consonant", "text": "జ", "alternatives": ["జ్ఞ"]},
+          {"label": "ఝ", "accessibilityLabel": "Telugu jha", "kind": "consonant", "text": "ఝ"},
+          {"label": "ఞ", "accessibilityLabel": "Telugu nya", "kind": "consonant", "text": "ఞ"},
+          {"label": "ఊ", "accessibilityLabel": "Telugu uu", "kind": "vowel", "text": "ఊ", "dependentText": "ూ"},
+          {"label": "ఋ", "accessibilityLabel": "Telugu vocalic r", "kind": "vowel", "text": "ఋ", "dependentText": "ృ"},
+          {"label": "ఎ", "accessibilityLabel": "Telugu e", "kind": "vowel", "text": "ఎ", "dependentText": "ె"},
+          {"label": "ఏ", "accessibilityLabel": "Telugu ee", "kind": "vowel", "text": "ఏ", "dependentText": "ే"},
+          {"label": "ఐ", "accessibilityLabel": "Telugu ai", "kind": "vowel", "text": "ఐ", "dependentText": "ై"}
+        ],
+        [
+          {"label": "ట", "accessibilityLabel": "Telugu tta", "kind": "consonant", "text": "ట"},
+          {"label": "ఠ", "accessibilityLabel": "Telugu ttha", "kind": "consonant", "text": "ఠ"},
+          {"label": "డ", "accessibilityLabel": "Telugu dda", "kind": "consonant", "text": "డ"},
+          {"label": "ఢ", "accessibilityLabel": "Telugu ddha", "kind": "consonant", "text": "ఢ"},
+          {"label": "ణ", "accessibilityLabel": "Telugu nna", "kind": "consonant", "text": "ణ"},
+          {"label": "ఒ", "accessibilityLabel": "Telugu o", "kind": "vowel", "text": "ఒ", "dependentText": "ొ"},
+          {"label": "ఓ", "accessibilityLabel": "Telugu oo", "kind": "vowel", "text": "ఓ", "dependentText": "ో"},
+          {"label": "ఔ", "accessibilityLabel": "Telugu au", "kind": "vowel", "text": "ఔ", "dependentText": "ౌ"},
+          {"label": "అం", "accessibilityLabel": "Telugu a with anusvara", "kind": "vowel", "text": "అం", "dependentText": "ం"},
+          {"label": "అః", "accessibilityLabel": "Telugu a with visarga", "kind": "vowel", "text": "అః", "dependentText": "ః"}
+        ],
+        [
+          {"label": "త", "accessibilityLabel": "Telugu ta", "kind": "consonant", "text": "త"},
+          {"label": "థ", "accessibilityLabel": "Telugu tha", "kind": "consonant", "text": "థ"},
+          {"label": "ద", "accessibilityLabel": "Telugu da", "kind": "consonant", "text": "ద"},
+          {"label": "ధ", "accessibilityLabel": "Telugu dha", "kind": "consonant", "text": "ధ"},
+          {"label": "న", "accessibilityLabel": "Telugu na", "kind": "consonant", "text": "న"},
+          {"label": "య", "accessibilityLabel": "Telugu ya", "kind": "consonant", "text": "య"},
+          {"label": "ర", "accessibilityLabel": "Telugu ra", "kind": "consonant", "text": "ర", "alternatives": ["ఱ"]},
+          {"label": "ల", "accessibilityLabel": "Telugu la", "kind": "consonant", "text": "ల"},
+          {"label": "వ", "accessibilityLabel": "Telugu va", "kind": "consonant", "text": "వ"},
+          {"label": "శ", "accessibilityLabel": "Telugu sha", "kind": "consonant", "text": "శ"}
+        ],
+        [
+          {"label": "ప", "accessibilityLabel": "Telugu pa", "kind": "consonant", "text": "ప"},
+          {"label": "ఫ", "accessibilityLabel": "Telugu pha", "kind": "consonant", "text": "ఫ"},
+          {"label": "బ", "accessibilityLabel": "Telugu ba", "kind": "consonant", "text": "బ"},
+          {"label": "భ", "accessibilityLabel": "Telugu bha", "kind": "consonant", "text": "భ"},
+          {"label": "మ", "accessibilityLabel": "Telugu ma", "kind": "consonant", "text": "మ"},
+          {"label": "ష", "accessibilityLabel": "Telugu ssa", "kind": "consonant", "text": "ష"},
+          {"label": "స", "accessibilityLabel": "Telugu sa", "kind": "consonant", "text": "స"},
+          {"label": "హ", "accessibilityLabel": "Telugu ha", "kind": "consonant", "text": "హ"},
+          {"label": "ళ", "accessibilityLabel": "Telugu lla", "kind": "consonant", "text": "ళ"}
+        ]
+      ]
+    },
+    {
+      "id": "numbers",
+      "rows": [[
+        {"label": "1", "accessibilityLabel": "One", "kind": "text", "text": "1", "alternatives": ["౧"]},
+        {"label": "2", "accessibilityLabel": "Two", "kind": "text", "text": "2", "alternatives": ["౨"]},
+        {"label": "3", "accessibilityLabel": "Three", "kind": "text", "text": "3", "alternatives": ["౩"]},
+        {"label": "4", "accessibilityLabel": "Four", "kind": "text", "text": "4", "alternatives": ["౪"]},
+        {"label": "5", "accessibilityLabel": "Five", "kind": "text", "text": "5", "alternatives": ["౫"]},
+        {"label": "6", "accessibilityLabel": "Six", "kind": "text", "text": "6", "alternatives": ["౬"]},
+        {"label": "7", "accessibilityLabel": "Seven", "kind": "text", "text": "7", "alternatives": ["౭"]},
+        {"label": "8", "accessibilityLabel": "Eight", "kind": "text", "text": "8", "alternatives": ["౮"]},
+        {"label": "9", "accessibilityLabel": "Nine", "kind": "text", "text": "9", "alternatives": ["౯"]},
+        {"label": "0", "accessibilityLabel": "Zero", "kind": "text", "text": "0", "alternatives": ["౦"]}
+      ]]
+    }
+  ],
+  "bottomKeys": [
+    {"label": "◌్", "accessibilityLabel": "Telugu virama", "kind": "virama", "text": "్", "alternatives": ["అ", "్‌", "్‍"]}
+  ]
+}

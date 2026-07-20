@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import StoreKit
 import os
 
 // ⚠️ This file must be a member of the APP target ONLY — never the keyboard
@@ -25,15 +26,18 @@ extension KBAccent {
 final class SettingsStore: ObservableObject {
 	@Published var accentID: String     { didSet { KBSettings.accentID = accentID } }
 	@Published var haptics:  Bool       { didSet { KBSettings.haptics = haptics } }
+	@Published var languageMode: KBLanguageMode { didSet { KBSettings.preferredLanguageMode = languageMode } }
 
 	init() {
 		accentID = KBSettings.accentID
 		haptics  = KBSettings.haptics
+		languageMode = KBSettings.preferredLanguageMode
 	}
 
 	func reload() {
 		accentID = KBSettings.accentID
 		haptics = KBSettings.haptics
+		languageMode = KBSettings.preferredLanguageMode
 	}
 
 	var accent: KBAccent { KBPalette.accent(id: accentID) }
@@ -43,7 +47,9 @@ final class SettingsStore: ObservableObject {
 
 struct ContentView: View {
 	@StateObject private var store = SettingsStore()
+	@StateObject private var commercial = CommercialStore()
 	@Environment(\.colorScheme) private var scheme
+	@Environment(\.displayScale) private var displayScale
 	@Environment(\.scenePhase) private var scenePhase
 	@State private var showResetConfirm = false
 	@State private var showDeleteAllConfirm = false
@@ -55,6 +61,17 @@ struct ContentView: View {
 				if !hasUsedKeyboard {
 					Section {
 						EnableKeyboardRow()
+					}
+				}
+				if hasUsedKeyboard {
+					Section {
+						CommercialHomeCarousel(commercial: commercial)
+							.listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+							.listRowBackground(Color.clear)
+							.listRowSeparator(.hidden)
+					}
+					Section("Progress") {
+						AchievementBanner()
 					}
 				}
 				Section("Status") {
@@ -69,6 +86,7 @@ struct ContentView: View {
 				}
 
 				Section {
+					LanguagePickerRow(selection: $store.languageMode)
 					NavigationLink {
 						ThemeStudioView()
 					} label: {
@@ -87,7 +105,19 @@ struct ContentView: View {
 				} header: {
 					Text("Keyboard")
 				} footer: {
-					Text("Haptics require a physical iPhone and may require Full Access. The status page shows the last state observed by the keyboard.")
+					Text("Haptics require a physical iPhone and follow the device's system haptic settings. The status page shows the last state observed by the keyboard.")
+				}
+
+				if hasUsedKeyboard {
+					Section("Rewards") {
+						NavigationLink {
+							RewardCenterView(store: commercial)
+						} label: {
+							SettingRow(icon: "gift.fill",
+									   tint: Color(uiColor: .systemPink),
+									   title: "Offers & Theme Rewards")
+						}
+					}
 				}
 
 				Section("Personalization") {
@@ -120,7 +150,7 @@ struct ContentView: View {
 				}
 			}
 
-				#if DEBUG
+				#if DEBUG || INTERNAL_NEURAL
 				Section("Developer") {
 					NavigationLink {
 						DiagnosticsView()
@@ -138,7 +168,16 @@ struct ContentView: View {
 		}
 		.environmentObject(store)
 		.tint(Color(uiColor: .systemBlue))
+		.task(id: displayScale) {
+			// CoreText retains every rendered color glyph. Generate the immutable atlas
+			// in the host app, then let the extension map its clean file-backed pages.
+			let scale = displayScale
+			_ = await Task.detached(priority: .utility) {
+				EmojiAtlas.generateIfNeeded(scale: scale)
+			}.value
+		}
 		.onAppear { refreshInstallState() }
+		.task { await commercial.refresh() }
 		.onChange(of: scenePhase) { _, phase in
 			if phase == .active { refreshInstallState() }
 		}
@@ -174,6 +213,104 @@ struct ContentView: View {
 		store.reload()
 	}
 
+}
+
+private struct CommercialHomeCarousel: View {
+	@ObservedObject var commercial: CommercialStore
+
+	var body: some View {
+		ScrollView(.horizontal) {
+			HStack(spacing: 10) {
+				NavigationLink {
+					RewardCenterView(store: commercial)
+				} label: {
+					carouselCard(title: "Theme rewards", subtitle: "Offers and unlocks",
+						symbol: "gift.fill", colors: [.pink, .purple])
+				}
+				NavigationLink {
+					ThemeStudioView()
+				} label: {
+					carouselCard(title: "Theme collection", subtitle: "Browse appearance",
+						symbol: "paintpalette.fill", colors: [.teal, .blue])
+				}
+			}
+			.padding(.horizontal, 20)
+		}
+		.scrollIndicators(.hidden)
+		.frame(height: 108)
+	}
+
+	private func carouselCard(title: String, subtitle: String, symbol: String,
+						  colors: [Color]) -> some View {
+		HStack(spacing: 14) {
+			Image(systemName: symbol)
+				.font(.system(size: 24, weight: .semibold))
+				.frame(width: 36)
+			VStack(alignment: .leading, spacing: 4) {
+				Text(title).font(.headline)
+				Text(subtitle).font(.subheadline).opacity(0.82)
+			}
+			Spacer(minLength: 4)
+			Image(systemName: "chevron.right").font(.caption.weight(.bold)).opacity(0.7)
+		}
+		.foregroundStyle(.white)
+		.padding(16)
+		.frame(width: 270, height: 100)
+		.background(
+			LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing),
+			in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+		)
+	}
+}
+
+private struct RewardCenterView: View {
+	@ObservedObject var store: CommercialStore
+
+	var body: some View {
+		List {
+			Section("Available") {
+				if store.products.isEmpty && store.campaigns.isEmpty {
+					Text(store.storeError ?? "No offers available right now.")
+						.foregroundStyle(.secondary)
+				}
+				ForEach(store.products, id: \.id) { product in
+					Button {
+						Task { await store.purchase(product) }
+					} label: {
+						HStack {
+							VStack(alignment: .leading, spacing: 3) {
+								Text(product.displayName).foregroundStyle(.primary)
+								Text(product.description).font(.footnote).foregroundStyle(.secondary)
+							}
+							Spacer()
+							Text(store.purchasedProductIDs.contains(product.id)
+								 ? "Owned" : product.displayPrice)
+								.font(.subheadline.weight(.semibold))
+						}
+					}
+					.disabled(store.purchasedProductIDs.contains(product.id))
+				}
+			}
+
+			Section {
+				ForEach(OfferInterest.allCases) { interest in
+					Toggle(isOn: Binding(
+						get: { store.interests.contains(interest) },
+						set: { store.setInterest(interest, enabled: $0) }
+					)) {
+						Label(interest.title, systemImage: interest.symbol)
+					}
+				}
+			} header: {
+				Text("Interests")
+			} footer: {
+				Text("Offer matching uses only choices made here, saved merchants, and confirmed offer activity. Typed text, host-app identity, and installed apps are never used.")
+			}
+		}
+		.navigationTitle("Offers & Rewards")
+		.navigationBarTitleDisplayMode(.inline)
+		.refreshable { await store.refresh() }
+	}
 }
 
 private struct SetupSupportView: View {
@@ -263,7 +400,7 @@ private struct PrivacyDataView: View {
 				privacyRow("Diagnostics", "Release builds store only aggregate latency, memory, and storage-health counters. Typed text is never included.")
 			}
 			Section("Full Access") {
-				Text("The keyboard remains usable without Full Access. Full Access enables shared settings, on-device learning persistence, and haptics. It does not enable remote processing of typed text.")
+				Text("The keyboard remains usable without Full Access. Full Access enables shared settings, on-device learning persistence, and media search. Haptics stay local. Only a GIF or Sticker query you explicitly submit is sent to KLIPY; surrounding typed text is never included.")
 			}
 			Section("Control") {
 				Text("Use Reset learned words to remove language personalization, or Delete all keyboard data to remove all user-generated data in the shared container. You can revoke Full Access at any time in iOS Settings.")
@@ -314,6 +451,10 @@ struct DiagnosticsView: View {
 	@State private var snap = KBDiagnostics.read()
 	@State private var verbose = KBDiagnostics.verbose
 	@State private var glideCapture = KBSettings.glideCapture
+	// NEURAL_DEBUG_TELEMETRY_REMOVE
+	#if DEBUG || INTERNAL_NEURAL
+	@State private var neural = KBDiagnostics.readNeuralDebug()
+	#endif
 	private let log = Logger(subsystem: KBSettings.appGroup, category: "diag-app")
 
 	var body: some View {
@@ -337,6 +478,61 @@ struct DiagnosticsView: View {
 				row("Glide final p95", latency(snap.glideFinalLatencyBins, 0.95))
 				row("Lift to insert p95", latency(snap.glideCommitLatencyBins, 0.95))
 			}
+
+			// NEURAL_DEBUG_TELEMETRY_REMOVE
+			#if DEBUG || INTERNAL_NEURAL
+			Section {
+				if let neural {
+					row("State", neural.state)
+					if let detail = neural.detail, !detail.isEmpty {
+						Text(detail)
+							.font(.caption)
+							.foregroundStyle(.secondary)
+							.textSelection(.enabled)
+					}
+					row("Tier", neural.modelTier)
+					row("Active", neural.isActive ? "Yes" : "No")
+					row("Model ready", neural.isReady ? "Yes" : "No")
+					row("Top-pick changes", "\(neural.topPickChangeCount)")
+					row("Last ranking", neural.updated.formatted(
+						date: .abbreviated, time: .standard))
+					if let ngram = neural.ngramTopPick, let final = neural.finalTopPick {
+						row("Top pick", "\(ngram) → \(final)")
+					}
+					if let typed = neural.typedWord { row("Last input", typed) }
+					if !neural.contextTail.isEmpty {
+						row("Context", neural.contextTail.joined(separator: " "))
+					}
+					ForEach(neural.rows.prefix(8)) { candidate in
+						VStack(alignment: .leading, spacing: 4) {
+							HStack {
+								Text("#\(candidate.finalRank) \(candidate.word)")
+									.font(.subheadline.weight(.semibold))
+								Spacer()
+								Text("n-gram #\(candidate.ngramRank)")
+									.font(.caption.monospacedDigit())
+									.foregroundStyle(.secondary)
+							}
+							Text(String(format:
+								"score %.2f → %.2f · spatial %.2f · LM %.2f · neural %.2f",
+								candidate.ngramScore, candidate.finalScore,
+								candidate.spatialCost, candidate.ngramLogProbability,
+								candidate.neuralLogProbability))
+								.font(.caption2.monospacedDigit())
+								.foregroundStyle(.secondary)
+						}
+					}
+				} else {
+					Text("No neural ranking has been recorded in this Debug build.")
+						.foregroundStyle(.secondary)
+				}
+			} header: {
+				Text("Neural model (DEBUG)")
+			} footer: {
+				Text("Debug-only App Group telemetry. It stores the latest input, short context, and candidate scores locally. Remove this section and the marked DEBUG hooks before model promotion.")
+					.textSelection(.enabled)
+			}
+			#endif
 
 			Section {
 				Toggle("Verbose ranking log", isOn: $verbose)
@@ -376,7 +572,7 @@ struct DiagnosticsView: View {
 					row("Updated", snap.updated.formatted(date: .abbreviated, time: .shortened))
 				}
 				Button("Refresh") { reload() }
-				Button("Reset", role: .destructive) { KBDiagnostics.reset(); snap = KBDiagnostics.read() }
+				Button("Reset", role: .destructive) { resetDiagnostics() }
 			}
 		}
 		.navigationTitle("Keyboard health")
@@ -386,7 +582,15 @@ struct DiagnosticsView: View {
 
 	private func reload() {
 		snap = KBDiagnostics.read()
+		// NEURAL_DEBUG_TELEMETRY_REMOVE
+		#if DEBUG || INTERNAL_NEURAL
+		neural = KBDiagnostics.readNeuralDebug()
+		#endif
 		log.notice("diag peakMB=\(Int(snap.peakFootprintMB)) limitMB=\(Int(snap.limitMB)) warn=\(snap.warningCount) crit=\(snap.criticalCount)")
+	}
+	private func resetDiagnostics() {
+		KBDiagnostics.reset()
+		reload()
 	}
 	private func row(_ title: String, _ value: String) -> some View {
 		HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
@@ -438,6 +642,46 @@ struct SettingRow: View {
 			}
 			if let trailingGradient {
 				Circle().fill(trailingGradient).frame(width: 18, height: 18)
+			}
+		}
+	}
+}
+
+private struct LanguagePickerRow: View {
+	@Binding var selection: KBLanguageMode
+	private var selectedHealth: LanguagePackHealth {
+		KBSettings.languagePackHealth(for: selection)
+	}
+
+	var body: some View {
+		VStack(alignment: .leading, spacing: 4) {
+			HStack(spacing: 12) {
+				Image(systemName: "character.book.closed.fill")
+					.font(.system(size: 15, weight: .semibold))
+					.foregroundStyle(.white)
+					.frame(width: 30, height: 30)
+					.background(Color(uiColor: .systemTeal),
+						in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+				Text("Language")
+				Spacer()
+				Picker("Language", selection: $selection) {
+					ForEach(KBLanguageMode.allCases) { mode in
+						let health = KBSettings.languagePackHealth(for: mode)
+						Text(health.isReady ? mode.displayName
+							 : "\(mode.displayName) · \(health.conciseDetail)")
+							.tag(mode)
+							.accessibilityIdentifier("language.\(mode.rawValue)")
+					}
+				}
+				.labelsHidden()
+				.pickerStyle(.menu)
+				.accessibilityIdentifier("settings.language")
+			}
+			if !selectedHealth.isReady {
+				Text(selectedHealth.detail)
+					.font(.caption)
+					.foregroundStyle(.secondary)
+					.padding(.leading, 42)
 			}
 		}
 	}

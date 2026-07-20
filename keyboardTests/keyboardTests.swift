@@ -59,6 +59,224 @@ struct KeyboardTests {
             .appendingPathComponent("keyboard/langdata.bin")
     }
 
+	private func keyboardResourceURL(_ name: String) -> URL {
+		URL(fileURLWithPath: #filePath)
+			.deletingLastPathComponent()
+			.deletingLastPathComponent()
+			.appendingPathComponent("keyboard/\(name)")
+	}
+
+	@Test func bundledLanguageDataUsesCompactV5() throws {
+		let url = langdataURL()
+		let data = try #require(LangData(url: url))
+		let bytes = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
+		#expect(data.formatVersion == 5)
+		#expect(bytes <= 11_000_000)
+		#expect(data.wordCount == 60_450)
+	}
+
+	@Test func languagePackHealthReportsConcreteFailureReasons() throws {
+		let resources = LanguagePackResourceSet(
+			manifestURL: keyboardResourceURL("telugu_pack_manifest.json"),
+			layoutURL: keyboardResourceURL("telugu_layout.kbpack"),
+			teluguLanguageDataURL: keyboardResourceURL("telugu_langdata.bin"),
+			tenglishLexiconURL: keyboardResourceURL("tenglish_lexicon.bin"))
+		#expect(LanguagePackHealthInspector.inspect(mode: .telugu,
+			resources: resources).state == .ready)
+		#expect(LanguagePackHealthInspector.inspect(mode: .tenglishToTelugu,
+			resources: resources).state == .ready)
+		#expect(LanguagePackHealthInspector.inspect(mode: .romanTelugu,
+			resources: resources).state == .ready)
+		let transliterationOnly = LanguagePackResourceSet(
+			manifestURL: resources.manifestURL, layoutURL: resources.layoutURL,
+			teluguLanguageDataURL: nil,
+			tenglishLexiconURL: resources.tenglishLexiconURL)
+		#expect(LanguagePackHealthInspector.inspect(mode: .tenglishToTelugu,
+			resources: transliterationOnly).state == .missingResource)
+		#expect(LanguagePackHealthInspector.inspect(mode: .romanTelugu,
+			resources: transliterationOnly).state == .ready)
+
+		let missing = LanguagePackResourceSet(manifestURL: nil, layoutURL: nil,
+			teluguLanguageDataURL: nil, tenglishLexiconURL: nil)
+		#expect(LanguagePackHealthInspector.inspect(mode: .telugu,
+			resources: missing).state == .missingResource)
+
+		let temporary = FileManager.default.temporaryDirectory
+			.appendingPathComponent("language-health-\(UUID().uuidString)",
+				isDirectory: true)
+		try FileManager.default.createDirectory(at: temporary,
+			withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: temporary) }
+		let invalidManifest = temporary.appendingPathComponent("manifest.json")
+		try Data("{}".utf8).write(to: invalidManifest)
+		let invalid = LanguagePackResourceSet(manifestURL: invalidManifest,
+			layoutURL: resources.layoutURL,
+			teluguLanguageDataURL: resources.teluguLanguageDataURL,
+			tenglishLexiconURL: resources.tenglishLexiconURL)
+		#expect(LanguagePackHealthInspector.inspect(mode: .telugu,
+			resources: invalid).state == .invalidSchemaOrHeader)
+
+		let tamperedLayout = temporary.appendingPathComponent("telugu_layout.kbpack")
+		try Data("tampered".utf8).write(to: tamperedLayout)
+		let tampered = LanguagePackResourceSet(manifestURL: resources.manifestURL,
+			layoutURL: tamperedLayout,
+			teluguLanguageDataURL: resources.teluguLanguageDataURL,
+			tenglishLexiconURL: resources.tenglishLexiconURL)
+		#expect(LanguagePackHealthInspector.inspect(mode: .telugu,
+			resources: tampered).state == .hashMismatch)
+	}
+
+	@Test func languageHealthReconciliationPreservesPreferenceAndSurfacesExtensionFailure() {
+		let local = LanguagePackHealth(languageMode: .telugu, state: .ready,
+			detail: "ready", marketingVersion: "1.0", buildVersion: "7",
+			packIdentifier: "te", packVersion: 1, resourceHashes: ["layout": "abc"])
+		#expect(KBSettings.reconciledLanguagePackHealth(local: local,
+			extensionReport: nil, hasUsedKeyboard: false) == local)
+		#expect(KBSettings.reconciledLanguagePackHealth(local: local,
+			extensionReport: nil, hasUsedKeyboard: true).state
+			== .appExtensionBuildMismatch)
+
+		let failed = local.replacingState(.invalidSchemaOrHeader,
+			detail: "Telugu layout rejected: invalid header")
+		let failedReport = KeyboardExtensionLanguageReport(observedAt: .now,
+			marketingVersion: "1.0", buildVersion: "7",
+			healthByLanguage: [KBLanguageMode.telugu.rawValue: failed])
+		#expect(KBSettings.reconciledLanguagePackHealth(local: local,
+			extensionReport: failedReport, hasUsedKeyboard: true) == failed)
+
+		let oldReport = KeyboardExtensionLanguageReport(observedAt: .now,
+			marketingVersion: "1.0", buildVersion: "6",
+			healthByLanguage: [KBLanguageMode.telugu.rawValue: local])
+		#expect(KBSettings.reconciledLanguagePackHealth(local: local,
+			extensionReport: oldReport, hasUsedKeyboard: true).state
+			== .appExtensionBuildMismatch)
+
+		let localFailure = local.replacingState(.hashMismatch, detail: "bad hash")
+		#expect(KBSettings.reconciledLanguagePackHealth(local: localFailure,
+			extensionReport: nil, hasUsedKeyboard: true) == localFailure)
+	}
+
+	@Test func suggestionCasePolicyOwnsDisplayTapAndCorrectionText() throws {
+		func present(typed: String, suggestions: [String], correction: String?,
+			sentenceStart: Bool = false) -> PresentedDecodeSnapshot {
+			let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
+				wordSessionID: 1, generation: 1, layoutRevision: 1,
+				currentWord: typed, context: [], taps: nil)
+			let snapshot = DecodeSnapshot(request: request, suggestions: suggestions,
+				candidates: [], correction: correction, confidence: 1,
+				nextCharacterPriors: [:], modelTier: .ngram, completedAtUptime: 1)
+			return SuggestionCasePolicy.present(snapshot, sentenceStart: sentenceStart)
+		}
+
+		for (typed, expected) in [("mgiht", "might"), ("Mgiht", "Might"),
+			("MGIHT", "MIGHT")] {
+			let result = present(typed: typed, suggestions: ["might", "night"],
+				correction: "might")
+			#expect(result.primaryText == expected)
+			#expect(result.correction == expected)
+		}
+		let mixed = present(typed: "McDonald", suggestions: ["mcdonald"],
+			correction: nil)
+		#expect(mixed.primaryText == "McDonald")
+		#expect(mixed.suggestions.first?.isExactTypedCandidate == true)
+
+		let sentence = present(typed: "", suggestions: ["hello", "i'm", "i'll"],
+			correction: nil, sentenceStart: true)
+		#expect(sentence.suggestions.map(\.text) == ["Hello", "I'm", "I'll"])
+		let pronoun = present(typed: "i", suggestions: ["i"], correction: nil)
+		#expect(pronoun.primaryText == "I")
+	}
+
+	@MainActor @Test func suggestionPassThroughBoundaryDoesNotMoveKeyGeometry() throws {
+		for width: CGFloat in [320, 390, 440] {
+			let bar = SuggestionBar(theme: .system(dark: true))
+			bar.frame = CGRect(x: 0, y: 0, width: width, height: 44)
+			bar.setSuggestions(["one", "two", "three"], highlightPrimary: true)
+			bar.layoutIfNeeded()
+			#expect(bar.point(inside: CGPoint(x: width / 2, y: 37.9), with: nil))
+			#expect(!bar.point(inside: CGPoint(x: width / 2, y: 38), with: nil))
+			let primary = try #require(suggestionButton("suggestion.primary", in: bar))
+			#expect(primary.frame.minY == -3)
+			#expect(primary.frame.height == 44)
+			let highlight = try #require(bar.subviews.first {
+				!($0 is UIButton) && $0.layer.borderWidth > 0
+			})
+			#expect(highlight.frame.minY == 1)
+		}
+	}
+
+	@Test func klipyRequestContainsOnlyExplicitMediaQuery() throws {
+		let url = try #require(KlipyClient.requestURL(apiKey: "test-key_1", kind: .gifs,
+			query: "  Telugu reaction  ", page: 2))
+		let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+		let fields = Dictionary(uniqueKeysWithValues:
+			(components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+		#expect(url.scheme == "https")
+		#expect(fields == ["page": "2", "per_page": "20", "q": "Telugu reaction"])
+		#expect(KlipyClient.requestURL(apiKey: "key", kind: .gifs, query: nil, page: 1) == nil)
+		#expect(KlipyClient.requestURL(apiKey: "bad/key", kind: .gifs, query: "hi", page: 1) == nil)
+		#expect(KlipyClient.requestURL(apiKey: "key", kind: .gifs, query: " ", page: 1) == nil)
+	}
+
+	@Test func klipyParserRejectsUnsafeAndMalformedMedia() throws {
+		let json = """
+		{"data":{"has_next":true,"data":[
+		 {"id":7,"title":"Hello","file":{"sm":{
+		   "webp":{"url":"https://cdn.example/preview.webp","width":240,"height":180},
+		   "gif":{"url":"https://cdn.example/send.gif","width":240,"height":180}}}},
+		 {"id":8,"title":"Unsafe","file":{"sm":{
+		   "webp":{"url":"http://cdn.example/preview.webp","width":240,"height":180},
+		   "gif":{"url":"http://cdn.example/send.gif","width":240,"height":180}}}}
+		]}}
+		"""
+		let parsed = KlipyClient.parse(Data(json.utf8))
+		#expect(parsed.0.count == 1)
+		#expect(parsed.0.first?.id == "7")
+		#expect(parsed.0.first?.sendURL.scheme == "https")
+		#expect(parsed.1)
+		#expect(KlipyClient.parse(Data("not-json".utf8)).0.isEmpty)
+	}
+
+	@MainActor @Test func mediaPanelWaitsForExplicitSearch() {
+		let panel = MediaPanelView(theme: .system(dark: true), showsGlobe: false,
+			hasFullAccess: false, kind: .gifs)
+		let labels = recursiveSubviews(panel).compactMap { ($0 as? UILabel)?.text }
+		#expect(labels.contains(where: { $0.contains("Search GIFs") }))
+	}
+
+	@MainActor @Test func mediaPanelDeniesSearchedMediaWithoutFullAccess() {
+		let panel = MediaPanelView(theme: .system(dark: true), showsGlobe: false,
+			hasFullAccess: false, kind: .gifs, query: "reaction")
+		let labels = recursiveSubviews(panel).compactMap { ($0 as? UILabel)?.text }
+		#expect(labels.contains(where: { $0.contains("Full Access") }))
+	}
+
+	@Test func progressAccountingIsDeterministicAndProvisionalGlideCanCancel() throws {
+		var calendar = Calendar(identifier: .gregorian)
+		calendar.timeZone = try #require(TimeZone(secondsFromGMT: 0))
+		let first = try #require(calendar.date(from: DateComponents(
+			year: 2026, month: 7, day: 18, hour: 12)))
+		let second = try #require(calendar.date(byAdding: .day, value: 1, to: first))
+		var data = KBStatsData()
+		KBStats.apply(words: 2, glided: false, on: &data, date: first, calendar: calendar)
+		KBStats.apply(words: 1, glided: true, on: &data, date: second, calendar: calendar)
+		#expect(data.totalTyped == 2)
+		#expect(data.totalGlided == 1)
+		#expect(data.currentStreak == 2)
+		let pending = KBStats.noteProvisional(glided: true)
+		#if DEBUG
+		#expect(KBStats.isProvisionalForTesting(pending))
+		#endif
+		KBStats.cancel(pending)
+		#if DEBUG
+		#expect(!KBStats.isProvisionalForTesting(pending))
+		#endif
+	}
+
+	@MainActor private func recursiveSubviews(_ view: UIView) -> [UIView] {
+		view.subviews + view.subviews.flatMap(recursiveSubviews)
+	}
+
     // MARK: Contractions — the static trie must treat apostrophe words as first-class
     // (they're real-word-protected from autocorrect), and an OMITTED apostrophe must be
     // cheap channel noise so "whats" corrects to "what's", not "what" (stock behavior).
@@ -192,8 +410,10 @@ struct KeyboardTests {
         #expect(right.title(for: .normal) == "Right")
         #expect(!primary.isEnabled)
 
-        bar.setGlidePreview("More")
-        #expect(primary.title(for: .normal) == "More")
+		bar.setGlidePreview("More", alternatives: ["Move", "Mode"])
+		#expect(left.title(for: .normal) == "Move")
+		#expect(primary.title(for: .normal) == "More")
+		#expect(right.title(for: .normal) == "Mode")
         bar.setGlidePreview(nil)
         #expect(left.title(for: .normal) == "Night")
         #expect(primary.title(for: .normal) == "Might")
@@ -247,6 +467,65 @@ struct KeyboardTests {
         #expect(finalWord == live.word)
     }
 
+	@Test func incrementalGlideResamplingIsChunkInvariant() {
+		let raw = [
+			CGPoint(x: 0, y: 0), CGPoint(x: 0.4, y: 0.1),
+			CGPoint(x: 1.2, y: 0.2), CGPoint(x: 2.1, y: 0.8),
+			CGPoint(x: 2.8, y: 1.1),
+		]
+		var whole = IncrementalGlideResampler(spacing: 0.35)
+		_ = whole.append(raw[...])
+		var chunked = IncrementalGlideResampler(spacing: 0.35)
+		_ = chunked.append(raw[0...1])
+		_ = chunked.append(raw[2...])
+		#expect(chunked.samples.count == whole.samples.count)
+		for (lhs, rhs) in zip(chunked.samples, whole.samples) {
+			#expect(abs(lhs.x - rhs.x) < 0.000_001)
+			#expect(abs(lhs.y - rhs.y) < 0.000_001)
+		}
+	}
+
+	@MainActor @Test func streamingGlideUsesMonotonicSessionAndOneFinalRanking() async throws {
+		let centers: [(letter: Character, point: CGPoint)] =
+			"qwertyuiopasdfghjklzxcvbnm".compactMap { character in
+				KB.grid(for: character).map { (character, CGPoint(x: $0.0, y: $0.1)) }
+			}
+		let layout = GlideLayout(centers: centers, xPitch: 1, yPitch: 1)
+		let captureURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+			.deletingLastPathComponent().appendingPathComponent("tools/glide_capture.jsonl")
+		let firstLine = try #require(try String(contentsOf: captureURL, encoding: .utf8)
+			.split(separator: "\n").first)
+		let record = try #require(try JSONSerialization.jsonObject(
+			with: Data(firstLine.utf8)) as? [String: Any])
+		let path = try #require(record["path"] as? [[Double]]).compactMap { point -> CGPoint? in
+			guard point.count == 2 else { return nil }
+			return CGPoint(x: point[0], y: point[1])
+		}
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let session = engine.beginGlideSession(context: [])
+		let midpoint = max(2, path.count / 2)
+		let first = await withCheckedContinuation { continuation in
+			engine.updateGlideSession(session, path: Array(path.prefix(midpoint)), times: [],
+				layout: layout) { continuation.resume(returning: $0) }
+		}
+		let second = await withCheckedContinuation { continuation in
+			engine.updateGlideSession(session, path: path, times: [], layout: layout) {
+				continuation.resume(returning: $0)
+			}
+		}
+		let firstUpdate = try #require(first)
+		let finalUpdate = try #require(second)
+		#expect(finalUpdate.sessionID == firstUpdate.sessionID)
+		#expect(finalUpdate.revision > firstUpdate.revision)
+
+		let final = await withCheckedContinuation { continuation in
+			engine.finishGlideSession(session, path: path, times: [], layout: layout) { word, alternatives in
+				continuation.resume(returning: (word, alternatives))
+			}
+		}
+		#expect(final.0 == finalUpdate.prediction.word)
+	}
+
 	@MainActor private func suggestionButton(_ id: String, in bar: SuggestionBar) -> UIButton? {
 		bar.subviews
 			.compactMap { $0 as? UIButton }
@@ -296,10 +575,13 @@ struct KeyboardTests {
 	@Test func decodeIdentityRejectsEveryStaleRevision() {
 		func request(field: UInt64 = 1, document: UInt64 = 2, word: UInt64 = 3,
 					 generation: UInt64 = 4, layout: UInt64 = 5,
-					 current: String = "might", context: [String] = ["they"]) -> DecodeRequest {
+					 current: String = "might", context: [String] = ["they"],
+					 language: KBLanguageMode = .english,
+					 tier: DecodeModelTier = .ngram) -> DecodeRequest {
 			DecodeRequest(fieldRevision: field, documentRevision: document,
 				wordSessionID: word, generation: generation, layoutRevision: layout,
-				currentWord: current, context: context, taps: nil)
+				currentWord: current, context: context, taps: nil,
+				languageMode: language, requestedModelTier: tier)
 		}
 		let base = request()
 		let snapshot = DecodeSnapshot(request: base, suggestions: ["might"], candidates: [],
@@ -313,6 +595,284 @@ struct KeyboardTests {
 		#expect(!snapshot.isValid(for: request(layout: 6)))
 		#expect(!snapshot.isValid(for: request(current: "night")))
 		#expect(!snapshot.isValid(for: request(context: ["at"])))
+		#expect(!snapshot.isValid(for: request(language: .tenglishToTelugu)))
+		#expect(!snapshot.isValid(for: request(tier: .neuralW8)))
+	}
+
+	@Test func internalNeuralTierIsEnglishOnlyAndPublishesOneRanking() async throws {
+		let prior = TestNeuralPrior(tier: .neuralW8)
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), neuralPrior: prior)
+		#expect(engine.preferredModelTier(for: .english) == .neuralW8)
+		#expect(engine.preferredModelTier(for: .tenglishToTelugu) == .ngram)
+		#expect(engine.preferredModelTier(for: .romanTelugu) == .ngram)
+		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
+
+		func request(word: String, generation: UInt64) -> DecodeRequest {
+			DecodeRequest(fieldRevision: 1, documentRevision: generation,
+				wordSessionID: 41, generation: generation, layoutRevision: 1,
+				currentWord: word, context: ["they"], taps: nil,
+				languageMode: .english, requestedModelTier: .neuralW8)
+		}
+		func run(_ request: DecodeRequest) async -> DecodeSnapshot {
+			await withCheckedContinuation { continuation in
+				engine.decode(request) { continuation.resume(returning: $0) }
+			}
+		}
+
+		let first = await run(request(word: "migh", generation: 1))
+		let second = await run(request(word: "might", generation: 2))
+		#expect(first.modelTier == .neuralW8)
+		#expect(second.modelTier == .neuralW8)
+		#expect(!first.candidates.isEmpty)
+		#expect(first.candidates.allSatisfy { $0.neuralLogProbability != nil })
+		#expect(prior.preparedSessions == [41])
+		#expect(prior.scoredSessions == [41, 41])
+	}
+
+	@Test func teluguBinaryPacksAreVersionedAndAvailable() throws {
+		let layoutPack = TeluguLanguagePack(url:
+			keyboardResourceURL("telugu_layout.kbpack"))
+		let lexicon = TeluguLexicon(url:
+			keyboardResourceURL("telugu_langdata.bin"))
+		let transliterator = TenglishTransliterator(url:
+			keyboardResourceURL("tenglish_lexicon.bin"))
+
+		let metadata = try #require(layoutPack.metadata)
+		#expect(layoutPack.isAvailable)
+		#expect(metadata.identifier == "te-IN-apple-mobile")
+		#expect(metadata.version == 2)
+		#expect(metadata.normalization == "NFC")
+		#expect(metadata.releaseStatus == "beta")
+		#expect(!metadata.nativeSpeakerReviewed)
+		#expect(lexicon.isAvailable)
+		#expect(lexicon.vocabularyCount == 22_000)
+		#expect(transliterator.isAvailable)
+		#expect(transliterator.keyCount == 12_000)
+		#expect(KBLanguageMode(rawValue: "tenglish") == .tenglishToTelugu)
+		#expect(KBLanguageMode.tenglishToTelugu.isRuntimeAvailable)
+		#expect(KBLanguageMode.romanTelugu.isRuntimeAvailable)
+		#expect(KBLanguageMode.telugu.isRuntimeAvailable)
+	}
+
+	@Test func teluguComposerUsesAppendOnlyHostEdits() throws {
+		let rules = try #require(TeluguLanguagePack(url:
+			keyboardResourceURL("telugu_layout.kbpack")).composition)
+		let consonant = TeluguComposer.edit(for: .teluguConsonant("క"),
+			contextBeforeInput: "", rules: rules)
+		#expect(consonant == TeluguHostEdit(deleteBackwardCount: 0, insertion: "క"))
+
+		let dependentVowel = TeluguComposer.edit(for: .teluguDependentVowel("ా"),
+			contextBeforeInput: "క", rules: rules)
+		#expect(dependentVowel == TeluguHostEdit(deleteBackwardCount: 0, insertion: "ా"))
+		#expect(("క" + dependentVowel.insertion) == "కా")
+		#expect(TeluguComposer.edit(for: .teluguDependentVowel("ా"),
+			contextBeforeInput: "", rules: rules).insertion.isEmpty)
+		let contextualVowel = TeluguComposer.edit(
+			for: .teluguVowel(independent: "ఆ", dependent: "ా"),
+			contextBeforeInput: "క", rules: rules)
+		#expect(contextualVowel.insertion == "ా")
+		#expect(TeluguComposer.edit(
+			for: .teluguVowel(independent: "ఆ", dependent: "ా"),
+			contextBeforeInput: "", rules: rules).insertion == "ఆ")
+
+		let virama = TeluguComposer.edit(for: .teluguVirama("్"),
+			contextBeforeInput: "క", rules: rules)
+		#expect(virama == TeluguHostEdit(deleteBackwardCount: 0, insertion: "్"))
+		let conjunct = TeluguComposer.edit(for: .teluguConsonant("ష"),
+			contextBeforeInput: "క్", rules: rules)
+		#expect(conjunct == TeluguHostEdit(deleteBackwardCount: 0, insertion: "ష"))
+		#expect(("క్" + conjunct.insertion) == "క్ష")
+	}
+
+	@Test func teluguAmmaSequenceDoesNotDuplicateTheFinalConsonant() throws {
+		let rules = try #require(TeluguLanguagePack(url:
+			keyboardResourceURL("telugu_layout.kbpack")).composition)
+		let inputs: [KeyOutput] = [
+			.text("అ"), .teluguConsonant("మ"),
+			.teluguVirama("్"), .teluguConsonant("మ"),
+		]
+		var host = ""
+		for input in inputs {
+			let edit = TeluguComposer.edit(for: input,
+				contextBeforeInput: host, rules: rules)
+			#expect(edit.deleteBackwardCount == 0)
+			host.append(contentsOf: edit.insertion)
+		}
+		#expect(host == "అమ్మ")
+		#expect(host == host.precomposedStringWithCanonicalMapping)
+	}
+
+	@Test func teluguLayoutMatchesTheExternalAppleMobilePages() throws {
+		let pack = TeluguLanguagePack(url:
+			keyboardResourceURL("telugu_layout.kbpack"))
+		let layout = try #require(pack.layout)
+		let primary = layout.primary.rows.flatMap { $0 }
+		#expect(layout.primary.rows.map(\.count) == [10, 10, 10, 10, 9])
+		#expect(layout.alternate == nil)
+		#expect(primary.contains(where: { $0.label == "క"
+			&& $0.output == .teluguConsonant("క") }))
+		#expect(layout.bottomKeys.contains(where: { $0.output == .teluguVirama("్")
+			&& $0.alternatives == ["అ", "్‌", "్‍"] }))
+		#expect(primary.contains(where: { $0.label == "అ"
+			&& $0.output == .teluguVowel(independent: "అ", dependent: nil) }))
+		#expect(primary.contains(where: { $0.label == "ఖ"
+			&& $0.output == .teluguConsonant("ఖ") }))
+		#expect(primary.allSatisfy { !$0.accessibilityLabel.isEmpty })
+		#expect(layout.numbers.rows[0].map(\.label) ==
+			["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"])
+		#expect(layout.numbers.rows[0].map { $0.alternatives.first ?? "" } ==
+			["౧", "౨", "౩", "౪", "౫", "౬", "౭", "౮", "౯", "౦"])
+	}
+
+	@Test func everyExternalTeluguOutputIsNFC() throws {
+		let pack = TeluguLanguagePack(url:
+			keyboardResourceURL("telugu_layout.kbpack"))
+		let layout = try #require(pack.layout)
+		let keys = layout.primary.rows.flatMap { $0 }
+			+ (layout.alternate?.rows.flatMap { $0 } ?? [])
+			+ layout.numbers.rows.flatMap { $0 } + layout.bottomKeys
+		for key in keys {
+			#expect(key.output.literal
+				== key.output.literal.precomposedStringWithCanonicalMapping)
+			#expect(key.alternatives.allSatisfy {
+				$0 == $0.precomposedStringWithCanonicalMapping
+			})
+		}
+	}
+
+	@Test func swiftBackspaceRemovesACompleteTeluguCluster() {
+		var conjunct = "క్ష"
+		conjunct.removeLast()
+		#expect(conjunct.isEmpty)
+	}
+
+	@MainActor @Test func nativeTeluguKeyboardDoesNotReuseQwertyGeometry() {
+		let keyboard = KeyboardView(theme: .system(dark: false), showsGlobe: false,
+			languageMode: .telugu)
+		keyboard.frame = CGRect(x: 0, y: 0, width: 390, height: keyboard.keyboardHeight)
+		keyboard.layoutIfNeeded()
+		let labels = Set(keyboard.keyAccessibilityLabels())
+		#expect(labels.contains("Telugu ka"))
+		#expect(labels.contains("Telugu ha"))
+		#expect(!labels.contains("Q"))
+	}
+
+	@MainActor @Test func nativeTeluguKeysFitSupportedPhoneWidths() {
+		for width: CGFloat in [320, 375, 390, 430, 568] {
+			let keyboard = KeyboardView(theme: .system(dark: false), showsGlobe: false,
+				languageMode: .telugu)
+			keyboard.frame = CGRect(x: 0, y: 0, width: width, height: 400)
+			keyboard.frame.size.height = keyboard.keyboardHeight
+			keyboard.layoutIfNeeded()
+			let frames = keyboard.keyFramesForTesting()
+			#expect(!frames.isEmpty)
+			#expect(frames.allSatisfy { frame in
+				frame.width > 0 && frame.height > 0 && frame.minX >= -0.5
+					&& frame.maxX <= width + 0.5 && frame.minY >= -0.5
+					&& frame.maxY <= keyboard.bounds.height + 0.5
+			})
+		}
+	}
+
+	@Test func nativeTeluguDecodeNeverAutocorrectsWithEnglish() async throws {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
+			wordSessionID: 1, generation: 1, layoutRevision: 1,
+			currentWord: "మీ", context: [], taps: nil, languageMode: .telugu)
+		let snapshot = await withCheckedContinuation { continuation in
+			engine.decode(request) { continuation.resume(returning: $0) }
+		}
+		#expect(snapshot.correction == nil)
+		#expect(snapshot.suggestions.contains(where: { $0.hasPrefix("మీ") }))
+		#expect(snapshot.candidates.allSatisfy { $0.neuralLogProbability == nil })
+	}
+
+	@Test func commercialPolicyRejectsCashRewardedAdsAndUnsafeClicks() throws {
+		let rewardedCash = CommercialCampaign(id: "cash-ad", title: "Cash",
+			subtitle: "", merchantID: nil, interest: nil, source: .rewardedAd,
+			reward: .cashback, destination: nil)
+		#expect(!rewardedCash.isPolicyCompatible)
+
+		let affiliate = CommercialCampaign(id: "merchant-offer", title: "Offer",
+			subtitle: "", merchantID: "merchant", interest: .shopping,
+			source: .affiliate, reward: .cashback, destination: nil)
+		#expect(affiliate.isPolicyCompatible)
+		let valid = AuthenticatedOfferClick(campaignID: affiliate.id,
+			merchantID: "merchant",
+			oneTimeToken: "one-time", destination: URL(string: "https://merchant.example")!,
+			expiresAt: .now.addingTimeInterval(60))
+		#expect(try valid.validated(for: affiliate).scheme == "https")
+
+		let unsafe = AuthenticatedOfferClick(campaignID: affiliate.id,
+			merchantID: "merchant",
+			oneTimeToken: "one-time", destination: URL(string: "http://merchant.example")!,
+			expiresAt: .now.addingTimeInterval(60))
+		#expect(throws: CommercialPolicyError.self) { try unsafe.validated(for: affiliate) }
+	}
+
+	@Test func tenglishUsesReviewedFormsAndDoesNotTrustUnknownNames() throws {
+		let transliterator = TenglishTransliterator(url:
+			keyboardResourceURL("tenglish_lexicon.bin"))
+		let known = try #require(transliterator.candidates(for: "meeru", context: [] ).first)
+		#expect(known.text == "మీరు")
+		#expect(known.fromLexicon)
+		#expect(known.confidence >= 0.90)
+
+		#expect(transliterator.candidates(for: "meher", context: []).isEmpty)
+	}
+
+	@Test func tenglishDecodeKeepsSuggestionAndCommitAuthorityTogether() async throws {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
+			wordSessionID: 1, generation: 1, layoutRevision: 1,
+			currentWord: "nenu", context: [], taps: nil,
+			languageMode: .tenglishToTelugu)
+		let snapshot = await withCheckedContinuation { continuation in
+			engine.decode(request) { continuation.resume(returning: $0) }
+		}
+		#expect(snapshot.correction == "నేను")
+		#expect(snapshot.suggestions.first == snapshot.correction)
+		#expect(snapshot.request.languageMode == .tenglishToTelugu)
+		let boundary = try #require(engine.immediateBoundarySnapshot(request))
+		#expect(boundary.correction == snapshot.correction)
+		#expect(boundary.suggestions == snapshot.suggestions)
+	}
+
+	@Test func tenglishIdhiCentersTeluguAndKeepsRomanOnTheLeft() async throws {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let snapshot = await decode(engine, word: "idhi", context: [],
+			language: .tenglishToTelugu)
+		#expect(snapshot.suggestions.first == "ఇది")
+		#expect(snapshot.suggestions.dropFirst().first == "idhi")
+		#expect(snapshot.correction == "ఇది")
+	}
+
+	@Test func romanTeluguNeverEmitsTeluguScript() async throws {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let snapshot = await decode(engine, word: "idhi", context: [],
+			language: .romanTelugu)
+		#expect(snapshot.suggestions.first == "idhi")
+		#expect(snapshot.correction == nil)
+		#expect(snapshot.suggestions.allSatisfy { value in
+			value.unicodeScalars.allSatisfy(\.isASCII)
+		})
+	}
+
+	@Test func romanTeluguUsesItsOwnMemoryMappedContextModel() async throws {
+		let transliterator = TenglishTransliterator(url:
+			keyboardResourceURL("tenglish_lexicon.bin"))
+		#expect(transliterator.romanContextBonus(
+			for: "oka", context: ["idhi"]) > 0)
+		#expect(transliterator.romanPredictions(
+			context: ["idhi"], limit: 3).first?.text == "oka")
+
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let snapshot = await decode(engine, word: "", context: ["idhi"],
+			language: .romanTelugu)
+		#expect(snapshot.suggestions.first == "oka")
+		#expect(snapshot.suggestions.allSatisfy { value in
+			value.unicodeScalars.allSatisfy(\.isASCII)
+		})
 	}
 
 	@Test func firstLetterProtectionPreventsMightToNightCandidate() throws {
@@ -322,6 +882,25 @@ struct KeyboardTests {
 		#expect(!hits.contains(where: { $0.word == "night" }))
 		#expect(Trie.firstLetterPenaltyPolicy(typedLength: 5,
 			candidateFirst: UInt8(ascii: "n"), typedFirst: UInt8(ascii: "m")) == 2.5)
+	}
+
+	@Test func touchProfileLearnsBoundedRowOffsetsWithoutRawHistory() throws {
+		let suite = "touch-profile-tests-\(UUID().uuidString)"
+		let defaults = try #require(UserDefaults(suiteName: suite))
+		defer { defaults.removePersistentDomain(forName: suite) }
+		let profile = TouchSpatialProfile(defaults: defaults)
+		let sample = KeyTap(dx: 0.18, dy: -0.12)
+		for _ in 0..<8 {
+			profile.observe(word: "asdf", taps: Array(repeating: sample, count: 4),
+				defaults: defaults)
+		}
+		let adjusted = try #require(profile.adjusted([Optional(sample)], typed: "a"))
+		let value = try #require(adjusted[0])
+		#expect(abs(value.dx) < 0.02)
+		#expect(abs(value.dy) < 0.02)
+		profile.reset(defaults: defaults)
+		let reset = try #require(profile.adjusted([Optional(sample)], typed: "a"))
+		#expect(reset[0] == sample)
 	}
 
 	@Test func broadOracleCanRecoverSevereDeviation() throws {
@@ -334,9 +913,47 @@ struct KeyboardTests {
 		let data = try #require(LangData(url: langdataURL()))
 		#expect(data.wordCount >= 60_000)
 		for word in ["should've", "shouldn't've", "might've", "prolly", "idk",
-					 "rizz", "doomscrolling", "situationship"] {
+					 "rizz", "doomscrolling", "situationship", "haptic"] {
 			#expect(data.trieContains(word), "\(word) is missing from langdata.bin")
 		}
+	}
+
+	@Test func coldStartDoesNotSurfaceCorpusCharacterNames() async {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let snapshot = await decode(engine, word: "", context: [])
+		#expect(!snapshot.suggestions.map { $0.lowercased() }.contains("tom"))
+	}
+
+	@Test func multiwordAndSevereGoldensUseOneAuthoritativeRanking() async {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let split = await decode(engine, word: "thisbis", context: [])
+		#expect(split.suggestions.first == "this is")
+		#expect(split.correction == "this is")
+		let severe = await decode(engine, word: "coeevitjkn", context: [])
+		#expect(severe.suggestions.first == "correction")
+		#expect(severe.correction == "correction")
+	}
+
+	@Test func incrementalSearchMatchesFullTrieAndRetainsSevereCandidate() throws {
+		let data = try #require(LangData(url: langdataURL()))
+		let seeds = try #require(data.incrementalSeeds(
+			typedFirst: UInt8(ascii: "c"), firstTap: nil))
+		let session = IncrementalDecodeSession(seeds: seeds)
+		#expect(session.seedCount > 5_000)
+
+		let near = "correcgion"
+		#expect(session.advance(to: near))
+		let incremental = Dictionary(uniqueKeysWithValues:
+			session.candidates(maxCost: 3.6).map { ($0.word, $0.cost) })
+		let full = Dictionary(uniqueKeysWithValues:
+			data.trieSearch(near, maxCost: 3.6).map { ($0.word, $0.cost) })
+		#expect(incremental.keys == full.keys)
+		for (word, cost) in full {
+			#expect(abs((incremental[word] ?? .infinity) - cost) < 1e-9)
+		}
+
+		#expect(session.advance(to: "coeevitjkn"))
+		#expect(session.candidates(maxCost: 7.2).contains { $0.word == "correction" })
 	}
 
 	@Test func suggestionPrimaryAndCorrectionShareOneDecision() async throws {
@@ -437,28 +1054,137 @@ struct KeyboardTests {
 		#expect(KBEmojiVariants.skinToneVariants(of: "🚗").isEmpty)
 	}
 
+	@MainActor @Test func emojiCategoryHighlightFollowsEveryTap() async throws {
+		let store = try #require(EmojiStore(url: emojiBinaryURL()))
+		let palette = EmojiKeyboardView(theme: .system(dark: true), showsGlobe: false,
+			store: store)
+		palette.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
+		palette.layoutIfNeeded()
+		let tabs = recursiveSubviews(palette).compactMap { view -> (Int, UIButton)? in
+			guard let button = view as? UIButton,
+				  let identifier = button.accessibilityIdentifier,
+				  identifier.hasPrefix("emoji.category."),
+				  let index = Int(identifier.dropFirst("emoji.category.".count)) else { return nil }
+			return (index, button)
+		}.sorted { $0.0 < $1.0 }
+		#expect(tabs.count >= 3)
+		#expect(tabs.allSatisfy { $0.1.buttonType == .custom })
+
+		for target in [2, 1] {
+			tabs[target].1.sendActions(for: .touchUpInside)
+			#expect(tabs[target].1.accessibilityTraits.contains(.selected))
+			await Task.yield()
+			palette.layoutIfNeeded()
+			#expect(tabs[target].1.isSelected)
+			#expect((tabs[target].1.backgroundColor?.cgColor.alpha ?? 0) <= 0.08)
+			for (index, button) in tabs where index != target {
+				#expect(!button.isSelected)
+				#expect(!button.accessibilityTraits.contains(.selected))
+			}
+		}
+	}
+
 	@Test func safetyArtifactUsesExactNormalizedMatches() throws {
 		let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
 			.deletingLastPathComponent().appendingPathComponent("keyboard/safety.kbguard")
 		let safety = try #require(KBSafetyLexicon(url: url))
+		#expect(safety.entryCount == 997)
 		#expect(safety.isBlocked("FUCK"))
+		#expect(safety.isBlocked("5H1T"))
+		#expect(safety.isBlocked("  2 GIRLS   1 CUP "))
+		#expect(safety.isBlocked("XXX"))
+		#expect(safety.isBlocked("దెంగు"))
+		#expect(safety.language(for: "దెంగు") == .telugu)
+		#expect(safety.action(for: "కుక్క") == .demote)
+		#expect(safety.language(for: "కుక్క") == .telugu)
+		#expect(!safety.isBlocked("కుక్క"))
 		#expect(!safety.isBlocked("class"))
+		#expect(!safety.isBlocked("Meher"))
+		#expect(!safety.isBlocked("Telangana"))
+		#expect(!safety.isBlocked("prolly"))
+		#expect(safety.action(for: "kukka") == .allow)
 		#expect(KBSafetyLexicon.normalize("  It’s   Fine ") == "it's fine")
 	}
 
+	/// A loose-pool winner backed only by over-confident sparse bigrams (1-count
+	/// "receive …" successors) must NOT auto-commit: the pool is a frequency coin
+	/// flip (physician/communion/corrections separated by 0.22 nats). The strip may
+	/// still offer it; the boundary must keep the typed string.
+	@Test func coinFlipLoosePoolDoesNotAutoCommit() async {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let s = await decode(engine, word: "coeevitjkn", context: ["possibly", "receive"])
+		#expect(s.correction == nil,
+			"coin-flip pool must not commit: \(s.correction ?? "nil") sugg=\(s.suggestions)")
+	}
+
+	/// Reproduces the exact live simulator battery misses (2026-07-20): context-injected
+	/// candidates outranked near-perfect channel matches. Asserts the channel-dominance
+	/// guard: when a close (≤ realWordMaxCost) correction exists, loose candidates
+	/// (context injection / broad recovery) far outside it cannot win the boundary
+	/// decision or the primary slot.
+	@Test func looseCandidatesCannotBeatCloseChannelMatches() async {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let cases: [(typed: String, context: [String], want: String)] = [
+			("sebd", ["can", "you"], "send"),
+			("coudl", ["this", "work", "running"], "could"),
+			("recieve", ["running", "for", "definitely"], "receive"),
+		]
+		for c in cases {
+			let s = await decode(engine, word: c.typed, context: c.context)
+			#expect(s.correction == c.want,
+				"\(c.typed) after \(c.context): correction=\(s.correction ?? "nil") sugg=\(s.suggestions)")
+			#expect(s.suggestions.first == c.want,
+				"\(c.typed) after \(c.context): primary=\(s.suggestions.first ?? "nil")")
+		}
+		// The severe golden must keep working: no close candidate exists, so the loose
+		// pool still rescues and commits, context or not.
+		let severe = await decode(engine, word: "coeevitjkn",
+			context: ["for", "definitely", "decided"])
+		#expect(severe.suggestions.first == "correction",
+			"severe: sugg=\(severe.suggestions)")
+		#expect(severe.correction == "correction",
+			"severe: correction=\(severe.correction ?? "nil")")
+	}
+
 	private func decode(_ engine: KeyboardEngine, word: String,
-						context: [String]) async -> DecodeSnapshot {
+						context: [String], language: KBLanguageMode = .english)
+		async -> DecodeSnapshot {
 		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
 			wordSessionID: 1, generation: 1, layoutRevision: 1,
-			currentWord: word, context: context, taps: nil)
+			currentWord: word, context: context, taps: nil, languageMode: language)
 		return await withCheckedContinuation { continuation in
 			engine.decode(request) { continuation.resume(returning: $0) }
 		}
 	}
 
 	// MARK: Visual render checks — write PNGs of the emoji UI for eyeballing.
-    // (The app target doesn't bundle emoji.bin, so the store is injected from the
-    // repo file. PNGs land in keyboardTests/renders/, which is disposable.)
+	// Tests inject the repository store and atlas so they do not depend on a test-host
+	// bundle or App Group. PNGs land in keyboardTests/renders/, which is disposable.
+
+	@MainActor @Test func emojiAtlasRoundTripAndRender() throws {
+		let store = try #require(EmojiStore(url: emojiBinaryURL()))
+		let directory = FileManager.default.temporaryDirectory
+			.appendingPathComponent("emoji-atlas-\(UUID().uuidString)", isDirectory: true)
+		try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: directory) }
+
+		let url = try #require(EmojiAtlas.generateIfNeeded(store: store, scale: 2, in: directory))
+		let bytes = try #require((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize)
+		#expect(bytes > 0 && bytes % (72 * 72 * 4) == 0)
+		#expect(EmojiAtlas.generateIfNeeded(store: store, scale: 2, in: directory) == url)
+
+		let atlas = try #require(EmojiAtlas.load(store: store, scale: 2, in: directory))
+		#expect(atlas.image(for: store.emoji(0, 0)) != nil)
+		#expect(atlas.image(for: "not an emoji") == nil)
+		#expect(EmojiAtlas.load(store: store, scale: 1, in: directory) == nil)
+
+		let palette = EmojiKeyboardView(theme: .system(dark: false), showsGlobe: true,
+			store: store, atlas: atlas)
+		palette.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
+		palette.backgroundColor = UIColor(hex: 0xE8E6EC)
+		palette.layoutIfNeeded()
+		try writePNG(of: palette, name: "emoji_palette_atlas")
+	}
 
     @MainActor @Test func renderEmojiPalette() throws {
         let store = try #require(EmojiStore(url: emojiBinaryURL()))
@@ -512,4 +1238,38 @@ struct KeyboardTests {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try #require(img.pngData()).write(to: dir.appendingPathComponent("\(name).png"))
     }
+}
+
+private final class TestNeuralPrior: NeuralLanguagePrior {
+	let modelTier: DecodeModelTier
+	let isReady = true
+	private let lock = NSLock()
+	private var prepared: [UInt64] = []
+	private var scored: [UInt64] = []
+
+	init(tier: DecodeModelTier) { modelTier = tier }
+
+	var preparedSessions: [UInt64] {
+		lock.lock(); defer { lock.unlock() }
+		return prepared
+	}
+
+	var scoredSessions: [UInt64] {
+		lock.lock(); defer { lock.unlock() }
+		return scored
+	}
+
+	func prepareContext(_ words: [String], wordSessionID: UInt64) {
+		lock.lock(); prepared.append(wordSessionID); lock.unlock()
+	}
+
+	func score(candidates: [String], wordSessionID: UInt64,
+		completion: @escaping (Result<[String: Double], Error>) -> Void) {
+		lock.lock(); scored.append(wordSessionID); lock.unlock()
+		completion(.success(Dictionary(uniqueKeysWithValues: candidates.enumerated().map {
+			($0.element, $0.element == "might" ? 0 : -Double($0.offset + 1))
+		})))
+	}
+
+	func discardSession(_ wordSessionID: UInt64) {}
 }

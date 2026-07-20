@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "status": "research_preflight_not_release_evidence",
+  "superseded_by": "tools/lm/benchmarks/qwen_repaired_eval_2026-07-19.json",
+  "checkpoint_source": "/Users/meher/Downloads/qwen_lm_distil/artifacts",
+  "dataset": {
+    "perplexity": "2000 held-out messaging lines",
+    "correction": "250 synthetic correction cases",
+    "user_separated": false,
+    "forced_gold_insertion": false,
+    "limitations": [
+      "CPU and PyTorch measurements are not iPhone production measurements",
+      "synthetic correction cases do not establish real-user quality",
+      "the distill and pretrain checkpoints have not completed messaging fine-tuning or QAT",
+      "the old evaluation scorer was not production-equivalent; rerun with the repaired harness"
+    ]
+  },
+  "checkpoints": [
+    {
+      "name": "legacy",
+      "stage": "legacy",
+      "parameters": 4703744,
+      "messaging_perplexity": 202.45,
+      "correction_top1": 0.884,
+      "correction_top3": 0.968,
+      "cpu_case_p50_ms": 13.73
+    },
+    {
+      "name": "pretrain",
+      "stage": "pretrain",
+      "parameters": 10601472,
+      "checkpoint_sha256": "68bed8e8584d4df500eb58b067965dd91685568653004063b9d969e13d2437ba",
+      "tokenizer_sha256": "c2fea4a790c16a25537c81d226b47c0ddc6911f20f1895022676d68a4d70753c",
+      "checkpoint_bytes": 127317115,
+      "training_step": 12208,
+      "training_tokens": 200015872,
+      "messaging_perplexity": 46.62,
+      "correction_top1": 0.936,
+      "correction_top3": 0.992,
+      "cpu_case_p50_ms": 21.0
+    },
+    {
+      "name": "distill",
+      "stage": "distill",
+      "parameters": 10601472,
+      "checkpoint_sha256": "f2fafcce320400353a42cd98ce587298427abbefec47be05883ecbba29ec34af",
+      "tokenizer_sha256": "c2fea4a790c16a25537c81d226b47c0ddc6911f20f1895022676d68a4d70753c",
+      "checkpoint_bytes": 127316803,
+      "training_step": 4000,
+      "training_tokens_recorded": 0,
+      "messaging_perplexity": 51.87,
+      "correction_top1": 0.928,
+      "correction_top3": 0.968,
+      "cpu_case_p50_ms": 22.21
+    }
+  ],
+  "ngram_baseline": {
+    "correction_top1": 0.872,
+    "correction_top3": 0.976
+  },
+  "verdict": "Do not ship either checkpoint. Train and blindly compare pretrain-to-finetune-to-QAT and distill-to-finetune-to-QAT branches."
+}

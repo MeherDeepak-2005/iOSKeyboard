@@ -70,14 +70,22 @@ final class NgramScorer {
 			} else {
 				unigram = 0.5 / corpusTotal
 			}
+			// Interpolate every row that is scored in a known context — including OOV
+			// rows (id == nil, count 0). eval_harness.py's logprob() has always done
+			// this ("including when the target continuation was not observed"), and the
+			// correction margins were calibrated there. Skipping the discount for OOV
+			// rows left the typed string on a context-FREE floor while every unseen
+			// candidate paid the Witten-Bell (1-w) discount, so rescue margins shrank
+			// exactly when context was known: live 2026-07-20, "coeevitjkn" fired with
+			// empty context but stalled below the 3.0 gate after "definitely decided".
 			var probability = unigram
-			if let id, let biStats {
+			if let biStats {
 				probability = interpolate(total: biStats.total, types: biStats.types,
-					count: biStats.counts[id] ?? 0, backoff: probability)
+					count: id.flatMap { biStats.counts[$0] } ?? 0, backoff: probability)
 			}
-			if let id, let triStats {
+			if let triStats {
 				probability = interpolate(total: triStats.total, types: triStats.types,
-					count: triStats.counts[id] ?? 0, backoff: probability)
+					count: id.flatMap { triStats.counts[$0] } ?? 0, backoff: probability)
 			}
 			let unigramPersonal = lexicon?.contains(word) == true ? user.uniCount(word) : 0
 			let biPersonal = n >= 1 ? user.biLookup(context[n - 1], word).count : 0

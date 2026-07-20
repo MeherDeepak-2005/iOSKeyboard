@@ -20,7 +20,15 @@ final class KeyboardViewController: UIInputViewController {
 	private var wordSessionID: UInt64 = 0
 	private var layoutRevision: UInt64 = 0
 	private var fieldInputKind: KeyboardInputKind = .standard
+	private var configuredLanguageMode: KBLanguageMode = .english
+	/// Resolved only at controller/configuration boundaries. The key path reads this
+	/// Boolean and never hashes a pack or waits on the health cache lock.
+	private var configuredLanguageModeAvailable = true
+	/// Neural packages are promotion-gated; the shipped tier is selected only here,
+	/// between words, and remains fixed until `wordSessionID` advances.
+	private var wordSessionModelTier: DecodeModelTier = .ngram
 	private var decodeSnapshot: DecodeSnapshot?
+	private var presentedDecodeSnapshot: PresentedDecodeSnapshot?
 	private var currentWordBuffer = ""
 	private var currentContextBuffer: [String] = []
 	private var suggestionModeResolved = false
@@ -45,12 +53,15 @@ final class KeyboardViewController: UIInputViewController {
 	private var activeGlideDocumentContext: String?
 	private var activeGlideContext: [String] = []
 	private var activeGlideAutoShift = false
+	private var activeGlideSessionID: GlideSessionID?
 	private var glidePreviewEnabled = false
 	/// The exact prediction currently visible in the middle suggestion slot. If this
 	/// exists at lift, it is the commit authority; the user never sees one word and
 	/// receives another from a second release-time decode.
 	private struct DisplayedGlidePrediction {
 		let prediction: GlidePrediction
+		let sessionID: GlideSessionID
+		let revision: UInt64
 		let pointCount: Int
 		let endpoint: CGPoint
 		let pitch: CGFloat
@@ -90,6 +101,14 @@ final class KeyboardViewController: UIInputViewController {
 	/// A glided word is awaiting an explicit verdict. Typing on is intentionally
 	/// unlabelled: only selecting an alternative is safe supervision for adaptation.
 	private var pendingGlideVerdict = false
+	/// Progress is provisional until the user either continues or leaves the field.
+	/// An immediate whole-word Backspace cancels it, so leagues never reward a
+	/// rejected Glide result.
+	private var pendingGlideStatsID: UUID?
+	/// Original host context for the most recent Telugu key. Long-press alternatives
+	/// replace the already-committed base output against this exact context, preserving
+	/// a conjunct or dependent sign instead of deleting its leading consonant.
+	private var lastTeluguKeyContext: String?
 
 	/// Resolved only after the host connection is live. Calling
 	/// `needsInputModeSwitchKey` during extension prewarming produces an inaccurate result
@@ -100,6 +119,7 @@ final class KeyboardViewController: UIInputViewController {
 
 	override func viewDidLoad() {
 		super.viewDidLoad()
+		refreshConfiguredLanguageMode()
 		view.backgroundColor = .clear
 		view.isOpaque = false
 		view.layer.isOpaque = false
@@ -114,6 +134,9 @@ final class KeyboardViewController: UIInputViewController {
 		configurationObserver = KBConfigurationObserver { [weak self] in
 			DispatchQueue.main.async { [weak self] in
 				guard let self else { return }
+				if self.refreshConfiguredLanguageMode() {
+					self.invalidateDocumentSession()
+				}
 				self.buildKeyboard()
 				if self.hostConnectionReady { self.scheduleSuggestions() }
 			}
@@ -146,12 +169,15 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func handlePersonalDataReset() {
+		KBStats.synchronizeAfterExternalReset()
 		invalidateSuggestionRequests(cancelEngineWork: true)
 		cancelGlidePreview(clearStrip: true)
 		lastCorrection = nil
 		recentCorrections.removeAll(keepingCapacity: false)
 		wordTaps.removeAll(keepingCapacity: false)
 		pendingGlideVerdict = false
+		KBStats.cancel(pendingGlideStatsID)
+		pendingGlideStatsID = nil
 		cursorModeActive = false
 		resetEraseTracking()
 		mode = .predict
@@ -178,10 +204,19 @@ final class KeyboardViewController: UIInputViewController {
 		inputView?.backgroundColor = .clear
 		inputView?.isOpaque = false
 
-		let kb = KeyboardView(theme: theme, showsGlobe: showsGlobe)
+		let kb = KeyboardView(theme: theme, showsGlobe: showsGlobe,
+			languageMode: activeLanguageMode)
+		// A prewarmed extension has no reliable text proxy yet. Exposing those keys lets
+		// an immediate tap race the one-time globe/trait rebuild and silently disappear.
+		kb.isUserInteractionEnabled = hostConnectionReady
+		kb.accessibilityElementsHidden = !hostConnectionReady
 		kb.hapticsEnabled   = KBSettings.haptics
+		kb.glideEnabled     = activeLanguageMode == .english
 		kb.onInsert         = { [weak self] ch, tap in self?.handleInsert(ch, tap: tap) }
-		kb.onReplaceLastInput = { [weak self] in self?.handleReplaceLastInput(with: $0) }
+		kb.onKeyOutput      = { [weak self] output, tap in self?.handleKeyOutput(output, tap: tap) }
+		kb.onReplaceLastInput = { [weak self] base, replacement in
+			self?.handleReplaceLastInput(base: base, with: replacement)
+		}
 		kb.onDelete         = { [weak self] in self?.handleDelete() }
 		kb.onReturn         = { [weak self] in self?.handleReturn() }
 		kb.onCursorModeBegan = { [weak self] in self?.beginCursorMode() }
@@ -192,6 +227,10 @@ final class KeyboardViewController: UIInputViewController {
 			self?.handleInputModeList(from: sender, with: event)
 		}
 		kb.onPickSuggestion = { [weak self] in self?.handlePick($0) }
+		kb.onOpenMedia = { [weak self, weak kb] kind in
+			guard let self, let kb, self.keyboard === kb else { return }
+			kb.showMedia(kind: kind, hasFullAccess: self.hasFullAccess)
+		}
 		kb.onGlideBegan     = { [weak self] in self?.beginGlidePreview() }
 		kb.onGlidePreview   = { [weak self] path, times, layout in
 			self?.handleGlidePreview(path, times, layout)
@@ -241,6 +280,10 @@ final class KeyboardViewController: UIInputViewController {
 
 	override func viewWillAppear(_ animated: Bool) {
 		super.viewWillAppear(animated)
+		hostConnectionReady = false
+		if refreshConfiguredLanguageMode() { buildKeyboard() }
+		keyboard?.isUserInteractionEnabled = false
+		keyboard?.accessibilityElementsHidden = true
 		view.backgroundColor = .clear
 		view.isOpaque = false
 		inputView?.backgroundColor = .clear
@@ -254,10 +297,13 @@ final class KeyboardViewController: UIInputViewController {
 			layoutRevision &+= 1
 			keyboard?.setInputKind(.standard)
 		}
+		keyboard?.glideEnabled = activeLanguageMode == .english
 		if let keyboard { heightConstraint?.constant = keyboard.keyboardHeight }
 		invalidateDocumentSession()
 		resetEraseTracking()           // a new field/host — stale erase state is meaningless
 		wordTaps.removeAll(keepingCapacity: true)
+		KBStats.confirm(pendingGlideStatsID)
+		pendingGlideStatsID = nil
 		pendingGlideVerdict = false
 		cursorModeActive = false
 		// Host field properties are still unreliable here. The first text-input callback
@@ -267,12 +313,21 @@ final class KeyboardViewController: UIInputViewController {
 
 	override func viewWillDisappear(_ animated: Bool) {
 		super.viewWillDisappear(animated)
+		hostConnectionReady = false
+		keyboard?.isUserInteractionEnabled = false
+		keyboard?.accessibilityElementsHidden = true
+		KBStats.confirm(pendingGlideStatsID)
+		pendingGlideStatsID = nil
+		KBStats.flush()
 		KBDiagnostics.recorder.flush()
 	}
 
 	override func didReceiveMemoryWarning() {
 		super.didReceiveMemoryWarning()
 		KBDiagnostics.recorder.memoryPressure(critical: false)
+		keyboard?.releaseTransientMediaForMemoryPressure()
+		KBMediaCache.purge()
+		engine.handleMemoryPressure()
 	}
 
 	override func textDidChange(_ textInput: UITextInput?) {
@@ -311,6 +366,8 @@ final class KeyboardViewController: UIInputViewController {
 				buildKeyboard()
 			}
 		}
+		keyboard?.isUserInteractionEnabled = true
+		keyboard?.accessibilityElementsHidden = false
 		resolveSuggestionModeIfNeeded()
 
 		if !supplementaryLexiconRequested {
@@ -398,7 +455,35 @@ final class KeyboardViewController: UIInputViewController {
 		fieldInputKind = kind
 		layoutRevision &+= 1
 		keyboard?.setInputKind(kind)
+		keyboard?.glideEnabled = activeLanguageMode == .english
 		return true
+	}
+
+	/// Tenglish is a prose mode. Host traits take precedence so a user's language
+	/// preference can never transliterate an email address, URL, handle, or number.
+	private var activeLanguageMode: KBLanguageMode {
+		guard configuredLanguageModeAvailable, !isSecureField else { return .english }
+		switch fieldInputKind {
+		case .standard, .webSearch:
+			return configuredLanguageMode
+		case .email, .url, .twitter, .numbersAndPunctuation,
+			 .numberPad, .decimalPad, .phonePad:
+			return .english
+		}
+	}
+
+	/// Preserve the durable preference while resolving a safe mode for this extension
+	/// session. This may hash language resources, so callers are deliberately limited to
+	/// lifecycle/configuration callbacks rather than key handlers.
+	@discardableResult
+	private func refreshConfiguredLanguageMode() -> Bool {
+		let preferred = KBSettings.preferredLanguageMode
+		let available = preferred.isRuntimeAvailable
+		let changed = preferred != configuredLanguageMode
+			|| available != configuredLanguageModeAvailable
+		configuredLanguageMode = preferred
+		configuredLanguageModeAvailable = available
+		return changed
 	}
 
 	/// Map the host text field's Return key style to a label. nil → plain newline glyph.
@@ -426,12 +511,31 @@ final class KeyboardViewController: UIInputViewController {
 	/// permanent keep. Called at the entry of every non-undo handler — exactly the
 	/// moment the undo affordance expires.
 	private func resolveCorrectionAsAccepted() {
-		if let c = lastCorrection, c.fromAutocorrect { engine.correctionStood(c.original) }
+		if let c = lastCorrection, c.fromAutocorrect, activeLanguageMode == .english {
+			engine.correctionStood(c.original)
+		}
 	}
 
 	/// Moving on does not establish intent. Drop the pending sample without adapting.
 	private func resolveGlideUnverified() {
 		if pendingGlideVerdict { pendingGlideVerdict = false; engine.glideUnverified() }
+		KBStats.confirm(pendingGlideStatsID)
+		pendingGlideStatsID = nil
+	}
+
+	private func learnCommittedWord(context: [String], word: String) {
+		guard activeLanguageMode == .english else { return }
+		engine.learn(context: context, word: word)
+	}
+
+	private func recordReplacement(original: String, replacement: String) {
+		guard activeLanguageMode == .english else { return }
+		engine.wordReplaced(original: original, with: replacement)
+	}
+
+	private func rejectCorrection(_ word: String) {
+		guard activeLanguageMode == .english else { return }
+		engine.dontCorrect(word)
 	}
 
 	/// Timestamp of the last plain space, for the double-space → ". " shortcut.
@@ -447,23 +551,40 @@ final class KeyboardViewController: UIInputViewController {
 		documentRevision &+= 1
 		generation &+= 1
 		decodeSnapshot = nil
+		presentedDecodeSnapshot = nil
 		keyboard?.setKeyPriors([:])
+	}
+
+	/// Model selection happens only here, between words. The selected tier is then
+	/// copied into every DecodeRequest until the next session boundary.
+	private func advanceWordSession() {
+		let finishedSession = wordSessionID
+		wordSessionID &+= 1
+		engine.discardModelSession(finishedSession)
+		wordSessionModelTier = engine.preferredModelTier(for: activeLanguageMode)
 	}
 
 	@inline(__always)
 	private func insertIntoHost(_ text: String) {
+		#if DEBUG || INTERNAL_NEURAL
 		let started = ProcessInfo.processInfo.systemUptime
 		let signpost = KBDiagnostics.beginHostInsert()
 		textDocumentProxy.insertText(text)
 		KBDiagnostics.endHostInsert(signpost,
 			milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
+		#else
+		// Shipping key path: no clocks, signposts, locks, dispatches, or model work
+		// before the host edit.
+		textDocumentProxy.insertText(text)
+		#endif
 	}
 
 	private func invalidateDocumentSession() {
 		fieldRevision &+= 1
 		documentRevision &+= 1
-		wordSessionID &+= 1
+		advanceWordSession()
 		decodeSnapshot = nil
+		presentedDecodeSnapshot = nil
 		currentWordBuffer = ""
 		currentContextBuffer.removeAll(keepingCapacity: true)
 		wordTaps.removeAll(keepingCapacity: true)
@@ -478,6 +599,7 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func handleInsert(_ ch: String, tap: KeyTap? = nil) {
+		lastTeluguKeyContext = nil
 		if ch.count == 1, let c = ch.first, isWordChar(c) {
 			let wasInsideWord = !currentWordBuffer.isEmpty
 			// Hot path: the host edit is the first meaningful operation. Everything
@@ -489,15 +611,19 @@ final class KeyboardViewController: UIInputViewController {
 			trackReplacementStart(wasInsideWord: wasInsideWord)
 			let acceptedCorrection = lastCorrection
 			let unresolvedGlide = pendingGlideVerdict
+			let acceptedGlideStatsID = pendingGlideStatsID
 			lastCorrection = nil
 			pendingGlideVerdict = false
+			pendingGlideStatsID = nil
 			let revision = documentRevision
 			DispatchQueue.main.async { [weak self] in
 				guard let self else { return }
-				if let acceptedCorrection, acceptedCorrection.fromAutocorrect {
+				if let acceptedCorrection, acceptedCorrection.fromAutocorrect,
+				   self.activeLanguageMode == .english {
 					self.engine.correctionStood(acceptedCorrection.original)
 				}
 				if unresolvedGlide { self.engine.glideUnverified() }
+				KBStats.confirm(acceptedGlideStatsID)
 				guard revision == self.documentRevision else { return }
 				self.updateAutoShift()
 				self.scheduleSuggestions()
@@ -516,17 +642,17 @@ final class KeyboardViewController: UIInputViewController {
 				let before = textDocumentProxy.documentContextBeforeInput ?? ""
 				if before.hasSuffix(" "), let prev = before.dropLast().last,
 				   isWordChar(prev), suggestionsAllowed {
-				textDocumentProxy.deleteBackward()
-				insertIntoHost(". ")
-				noteProxyEdit()
-				wordSessionID &+= 1
-				wordTaps.removeAll(keepingCapacity: true)
-				lastCorrection = nil
-				lastSpaceAt = 0
-				resetEraseTracking()
-				updateAutoShift()
-				scheduleSuggestions()
-				return
+					textDocumentProxy.deleteBackward()
+					insertIntoHost(". ")
+					noteProxyEdit()
+					advanceWordSession()
+					wordTaps.removeAll(keepingCapacity: true)
+					lastCorrection = nil
+					lastSpaceAt = 0
+					resetEraseTracking()
+					updateAutoShift()
+					scheduleSuggestions()
+					return
 				}
 			}
 			lastSpaceAt = now
@@ -540,12 +666,16 @@ final class KeyboardViewController: UIInputViewController {
 			let decodeContext = currentDecodeSnapshot?.request.context ?? currentContextBuffer
 			resolveManualFix(typedWord)
 			var correction = applyAutocorrectIfNeeded()
+			if correction == nil, activeLanguageMode == .english {
+				engine.learnTouchProfile(word: typedWord, taps: wordTaps)
+			}
 			let committedWord = correction?.corrected ?? typedWord
 			// Never learn from secure fields — password fragments must not enter the
 			// persisted personal model. (Stats ride the same gate: password words
 			// shouldn't count toward streaks either.)
 			if !committedWord.isEmpty, !isSecureField {
-				engine.learn(context: decodeContext, word: committedWord)
+				learnCommittedWord(context: decodeContext, word: committedWord)
+				KBStats.noteCommitted(glided: false)
 			}
 			// Punctuation right after an auto-inserted space: delete the space first
 			// so punctuation lands directly after the word ("word." not "word .").
@@ -558,13 +688,14 @@ final class KeyboardViewController: UIInputViewController {
 			noteProxyEdit()
 			correction?.trailing = ch
 			lastCorrection = correction
-			wordSessionID &+= 1
+			advanceWordSession()
 			wordTaps.removeAll(keepingCapacity: true)
 			currentWordBuffer = ""
 		} else {
 			lastCorrection = nil
 			insertIntoHost(ch)
 			noteProxyEdit()
+			advanceWordSession()
 			wordTaps.removeAll(keepingCapacity: true)
 			currentWordBuffer = ""
 		}
@@ -572,10 +703,62 @@ final class KeyboardViewController: UIInputViewController {
 		scheduleSuggestions()
 	}
 
+	private func handleKeyOutput(_ output: KeyOutput, tap: KeyTap?) {
+		if case .text(let text) = output {
+			handleInsert(text, tap: tap)
+			return
+		}
+		guard activeLanguageMode == .telugu, !isSecureField else { return }
+		resolveCorrectionAsAccepted()
+		resolveGlideUnverified()
+		let before = textDocumentProxy.documentContextBeforeInput ?? ""
+		let edit = TeluguComposer.edit(for: output, contextBeforeInput: before)
+		guard edit.deleteBackwardCount > 0 || !edit.insertion.isEmpty else { return }
+		for _ in 0..<edit.deleteBackwardCount { textDocumentProxy.deleteBackward() }
+		if !edit.insertion.isEmpty { insertIntoHost(edit.insertion) }
+		noteProxyEdit()
+		lastTeluguKeyContext = before
+		lastCorrection = nil
+		wordTaps.removeAll(keepingCapacity: true)
+		currentWordBuffer = trailingWord(applying: edit, to: before)
+		updateAutoShift()
+		scheduleSuggestions()
+	}
+
+	private func trailingWord(applying edit: TeluguHostEdit, to context: String) -> String {
+		var simulated = context
+		for _ in 0..<edit.deleteBackwardCount where !simulated.isEmpty { simulated.removeLast() }
+		simulated.append(contentsOf: edit.insertion)
+		return trailingWord(simulated)
+	}
+
 	/// Long-press alternatives replace the base glyph that was already inserted on
 	/// touch-down. Keep the host edit first, then revise local touch/decode identity.
-	private func handleReplaceLastInput(with replacement: String) {
+	private func handleReplaceLastInput(base: String, with replacement: String) {
 		guard !replacement.isEmpty else { return }
+		if activeLanguageMode == .telugu, let originalContext = lastTeluguKeyContext {
+			let normalizedBase = TeluguComposer.normalized(base)
+			let normalizedReplacement = TeluguComposer.normalized(replacement)
+			let baseScalars = Array(normalizedBase.unicodeScalars)
+			let replacementScalars = Array(normalizedReplacement.unicodeScalars)
+			if replacementScalars.starts(with: baseScalars) {
+				let suffix = replacementScalars.dropFirst(baseScalars.count)
+					.map(String.init).joined()
+				if !suffix.isEmpty { insertIntoHost(suffix) }
+			} else {
+				// Pack-defined replacements that are not base+suffix are restricted to
+				// standalone keys (for example Latin/Telugu digits).
+				textDocumentProxy.deleteBackward()
+				insertIntoHost(normalizedReplacement)
+			}
+			noteProxyEdit()
+			currentWordBuffer = trailingWord(originalContext + normalizedReplacement)
+			wordTaps.removeAll(keepingCapacity: true)
+			lastCorrection = nil
+			updateAutoShift()
+			scheduleSuggestions()
+			return
+		}
 		textDocumentProxy.deleteBackward()
 		insertIntoHost(replacement)
 		noteProxyEdit()
@@ -608,7 +791,7 @@ final class KeyboardViewController: UIInputViewController {
 			textDocumentProxy.deleteBackward()
 			noteProxyEdit()
 		}
-		wordSessionID &+= 1
+		advanceWordSession()
 		currentWordBuffer = ""
 		currentContextBuffer.removeAll(keepingCapacity: true)
 		wordTaps.removeAll(keepingCapacity: true)
@@ -626,7 +809,7 @@ final class KeyboardViewController: UIInputViewController {
 	private func endCursorMode() {
 		guard cursorModeActive else { return }
 		cursorModeActive = false
-		wordSessionID &+= 1
+		advanceWordSession()
 		updateAutoShift()
 		scheduleSuggestions()
 	}
@@ -638,15 +821,19 @@ final class KeyboardViewController: UIInputViewController {
 		let decodeContext = currentDecodeSnapshot?.request.context ?? currentContextBuffer
 		resolveManualFix(typedWord)
 		var correction = applyAutocorrectIfNeeded()
+		if correction == nil, activeLanguageMode == .english {
+			engine.learnTouchProfile(word: typedWord, taps: wordTaps)
+		}
 		let committedWord = correction?.corrected ?? typedWord
 		if !committedWord.isEmpty, !isSecureField {
-			engine.learn(context: decodeContext, word: committedWord)
+			learnCommittedWord(context: decodeContext, word: committedWord)
+			KBStats.noteCommitted(glided: false)
 		}
 		insertIntoHost("\n")
 		noteProxyEdit()
 		correction?.trailing = "\n"
 		lastCorrection = correction
-		wordSessionID &+= 1
+		advanceWordSession()
 		wordTaps.removeAll(keepingCapacity: true)
 		currentWordBuffer = ""
 		updateAutoShift()
@@ -682,7 +869,12 @@ final class KeyboardViewController: UIInputViewController {
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 			let expected = c.corrected + c.trailing
 			guard !expected.isEmpty, ctx.hasSuffix(expected) else {
-				if pendingGlideVerdict { pendingGlideVerdict = false; engine.glideRejected() }
+				if pendingGlideVerdict {
+					pendingGlideVerdict = false
+					engine.glideRejected()
+					KBStats.cancel(pendingGlideStatsID)
+					pendingGlideStatsID = nil
+				}
 				lastCorrection = nil
 				let erased = ctx.last
 				textDocumentProxy.deleteBackward()
@@ -698,6 +890,8 @@ final class KeyboardViewController: UIInputViewController {
 			if pendingGlideVerdict, c.original.isEmpty, !c.fromAutocorrect {
 				pendingGlideVerdict = false
 				engine.glideRejected()
+				KBStats.cancel(pendingGlideStatsID)
+				pendingGlideStatsID = nil
 			}
 			lastCorrection = nil
 			resetEraseTracking()
@@ -709,10 +903,10 @@ final class KeyboardViewController: UIInputViewController {
 			// completion, or Glide). Autocorrect additionally needs a session keep so
 			// the next boundary does not immediately fight the user's undo.
 			if !isSecureField, !c.corrected.isEmpty {
-				engine.wordReplaced(original: c.corrected, with: c.original)
+				recordReplacement(original: c.corrected, replacement: c.original)
 			}
 			if c.fromAutocorrect {
-				engine.dontCorrect(c.original)
+				rejectCorrection(c.original)
 			}
 			updateAutoShift()
 			scheduleSuggestions()
@@ -755,16 +949,20 @@ final class KeyboardViewController: UIInputViewController {
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
 			for _ in 0..<partial.count { textDocumentProxy.deleteBackward() }
 			insertIntoHost(s + " ")
-			engine.learn(context: ctx, word: s)
+			learnCommittedWord(context: ctx, word: s)
+			if !isSecureField { KBStats.noteCommitted(glided: false) }
 			// Swapping the typed word for a different suggestion is strong evidence the
 			// typed word was a mistake — lift its keep protection and walk back a use.
 			// This is the "typed mjght, then picked might" healing path.
-			if partial.lowercased() != s.lowercased() { engine.wordReplaced(original: partial, with: s) }
+			if partial.lowercased() != s.lowercased() {
+				recordReplacement(original: partial, replacement: s)
+			}
 			lastCorrection = Correction(original: partial, corrected: s, trailing: " ", fromAutocorrect: false)
 		case .predict:
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
 			insertIntoHost(s + " ")
-			engine.learn(context: ctx, word: s)
+			learnCommittedWord(context: ctx, word: s)
+			if !isSecureField { KBStats.noteCommitted(glided: false) }
 			lastCorrection = nil        // nothing the user "typed" to revert to
 		case .revert(let original):
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
@@ -772,8 +970,8 @@ final class KeyboardViewController: UIInputViewController {
 				textDocumentProxy.deleteBackward()
 				for _ in 0..<corrected.count { textDocumentProxy.deleteBackward() }
 				insertIntoHost(original + " ")
-				engine.dontCorrect(original)
-				engine.wordReplaced(original: corrected, with: original)   // un-learn the undone correction
+				rejectCorrection(original)
+				recordReplacement(original: corrected, replacement: original)
 			} else {
 				insertIntoHost(s + " ")
 			}
@@ -784,6 +982,8 @@ final class KeyboardViewController: UIInputViewController {
 			// #37: the picked alternative is the TRUE word — feed its shape cost as the
 			// correct sample so the decoder learns to rank the user's real intent higher.
 			if pendingGlideVerdict { pendingGlideVerdict = false; engine.glideCorrected(to: s) }
+			KBStats.confirm(pendingGlideStatsID)
+			pendingGlideStatsID = nil
 			let oldAlternatives: [String]
 			if case .glide(_, let alternatives) = suggestionPresentation {
 				oldAlternatives = alternatives
@@ -792,11 +992,13 @@ final class KeyboardViewController: UIInputViewController {
 			}
 			for _ in 0..<(committed.count + 1) { textDocumentProxy.deleteBackward() }
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
-			let replacement = KBWordCase.sentenceDisplay(
-				s, capitalized: shouldAutoShift(textDocumentProxy.documentContextBeforeInput))
+			let replacement = SuggestionCasePolicy.display(s,
+				sentenceStart: shouldAutoShift(textDocumentProxy.documentContextBeforeInput))
 			insertIntoHost(replacement + " ")
-			engine.learn(context: ctx, word: s)
-			if committed.lowercased() != s.lowercased() { engine.wordReplaced(original: committed, with: s) }
+			learnCommittedWord(context: ctx, word: s)
+			if committed.lowercased() != s.lowercased() {
+				recordReplacement(original: committed, replacement: s)
+			}
 			lastCorrection = Correction(original: "", corrected: replacement, trailing: " ", fromAutocorrect: false)
 			mode = .glided(replacement)          // further swaps keep working
 			let alternatives = uniqueWords([committed] + oldAlternatives, excluding: replacement)
@@ -812,9 +1014,24 @@ final class KeyboardViewController: UIInputViewController {
 
 	@discardableResult
 	private func applyAutocorrectIfNeeded() -> Correction? {
-		guard suggestionsAllowed, !isSecureField,
-			  let snapshot = currentDecodeSnapshot else { return nil }
-		let word = snapshot.request.currentWord
+		guard suggestionsAllowed, !isSecureField else { return nil }
+		let snapshot: PresentedDecodeSnapshot
+		if let current = currentPresentedDecodeSnapshot {
+			snapshot = current
+		} else {
+			// A fast boundary can arrive before the asynchronous strip update. Only
+			// Tenglish has a bounded synchronous fallback: one memory-mapped exact lookup.
+			// English and neural work remain strictly off the host-insertion path.
+			let request = makeDecodeRequest(currentWord: currentWordBuffer,
+				context: currentContextBuffer, generation: generation)
+			guard let canonical = engine.immediateBoundarySnapshot(request) else { return nil }
+			let presented = SuggestionCasePolicy.present(canonical,
+				sentenceStart: shouldAutoShift(textDocumentProxy.documentContextBeforeInput))
+			decodeSnapshot = canonical
+			presentedDecodeSnapshot = presented
+			snapshot = presented
+		}
+		let word = snapshot.canonical.request.currentWord
 		guard !word.isEmpty,
 			  let correction = snapshot.correction,
 			  correction != word else { return nil }
@@ -835,8 +1052,18 @@ final class KeyboardViewController: UIInputViewController {
 			  request.generation == generation,
 			  request.layoutRevision == layoutRevision,
 			  request.currentWord == currentWordBuffer,
-			  request.context == currentContextBuffer else { return nil }
+			  request.context == currentContextBuffer,
+			  request.languageMode == activeLanguageMode,
+			  request.requestedModelTier == wordSessionModelTier,
+			  snapshot.modelTier == wordSessionModelTier else { return nil }
 		return snapshot
+	}
+
+	private var currentPresentedDecodeSnapshot: PresentedDecodeSnapshot? {
+		guard let canonical = currentDecodeSnapshot,
+			  let presented = presentedDecodeSnapshot,
+			  presented.canonical == canonical else { return nil }
+		return presented
 	}
 
 	// MARK: Glide typing
@@ -847,8 +1074,10 @@ final class KeyboardViewController: UIInputViewController {
 	/// glided word (`Correction` with empty original). Nothing commits on a rejected swipe.
 	private func handleGlide(_ path: [CGPoint], _ times: [TimeInterval], _ layout: GlideLayout) {
 		let liftAt = ProcessInfo.processInfo.systemUptime
+		let sessionID = activeGlideSessionID
 		let publishedPrediction: GlidePrediction? = {
 			guard let shown = displayedGlidePrediction,
+				  shown.sessionID == sessionID,
 				  path.count >= shown.pointCount,
 				  let finalEndpoint = path.last else { return nil }
 			var addedArc: CGFloat = 0
@@ -871,7 +1100,6 @@ final class KeyboardViewController: UIInputViewController {
 		let secure = isSecureField
 		let before = secure ? "" : activeGlideDocumentContext ?? textDocumentProxy.documentContextBeforeInput ?? ""
 		let context = activeGlideDocumentContext == nil ? contextWords(before, max: 8) : activeGlideContext
-		cancelGlidePreview(clearStrip: false)
 		// Cancel any tap decode the provisional start letter triggered. The engine's
 		// generation ticket also cooperatively stops a trie walk already in progress.
 		invalidateSuggestionRequests(cancelEngineWork: true)
@@ -880,6 +1108,18 @@ final class KeyboardViewController: UIInputViewController {
 		guard !secure else { return }                    // no gliding passwords
 		resolveCorrectionAsAccepted()
 		resolveGlideUnverified()
+		if publishedPrediction == nil, let sessionID {
+			endGlidePreviewUI(clearStrip: false, cancelEngineSession: false)
+			engine.finishGlideSession(sessionID, path: path, times: times, layout: layout) {
+				[weak self] word, alternatives in
+				guard let self else { return }
+				guard let word else { self.scheduleSuggestions(); return }
+				self.commitGlidedWord(word, alternatives: alternatives, context: context,
+					documentContext: before, liftAt: liftAt)
+			}
+			return
+		}
+		cancelGlidePreview(clearStrip: false)
 		engine.glide(path: path, times: times, layout: layout, context: context,
 			publishedPrediction: publishedPrediction) { [weak self] word, alternatives in
 			guard let self else { return }
@@ -893,7 +1133,7 @@ final class KeyboardViewController: UIInputViewController {
 							   documentContext: String? = nil, liftAt: TimeInterval) {
 		let ctx = documentContext ?? textDocumentProxy.documentContextBeforeInput ?? ""
 		let autoShift = shouldAutoShift(ctx)
-		let display = KBWordCase.sentenceDisplay(word, capitalized: autoShift)
+		let display = SuggestionCasePolicy.display(word, sentenceStart: autoShift)
 		var text = display + " "
 		if let last = ctx.last, isWordChar(last) { text = " " + text }
 		insertIntoHost(text)
@@ -901,12 +1141,14 @@ final class KeyboardViewController: UIInputViewController {
 		KBDiagnostics.logGlideCommit(ms: (ProcessInfo.processInfo.systemUptime - liftAt) * 1_000)
 
 		// Everything below is bookkeeping after the visible insertion.
-		engine.learn(context: context ?? contextWords(ctx, max: 8), word: word)
+		learnCommittedWord(context: context ?? contextWords(ctx, max: 8), word: word)
 		lastCorrection = Correction(original: "", corrected: display, trailing: " ", fromAutocorrect: false)
 		mode = .glided(display)
 		pendingGlideVerdict = true
+		KBStats.cancel(pendingGlideStatsID)
+		pendingGlideStatsID = KBStats.noteProvisional(glided: true)
 		let displayedAlternatives = alternatives.map {
-			KBWordCase.sentenceDisplay($0, capitalized: autoShift)
+			SuggestionCasePolicy.display($0, sentenceStart: autoShift)
 		}
 		setGlideSuggestionBar(winner: display, alternatives: displayedAlternatives)
 		updateAutoShift()
@@ -940,6 +1182,7 @@ final class KeyboardViewController: UIInputViewController {
 		activeGlideDocumentContext = before
 		activeGlideContext = contextWords(before, max: 8)
 		activeGlideAutoShift = shouldAutoShift(before)
+		activeGlideSessionID = engine.beginGlideSession(context: activeGlideContext)
 	}
 
 	private func handleGlidePreview(_ path: [CGPoint], _ times: [TimeInterval], _ layout: GlideLayout) {
@@ -955,13 +1198,14 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func startNextGlidePreviewIfNeeded() {
-		guard !glidePreviewInFlight, let request = pendingGlidePreview else { return }
+		guard !glidePreviewInFlight, let request = pendingGlidePreview,
+			let sessionID = activeGlideSessionID else { return }
 		pendingGlidePreview = nil
 		glidePreviewInFlight = true
 		let generation = glidePreviewGeneration
 		let capitalize = activeGlideAutoShift
-		engine.glidePreview(path: request.path, times: request.times, layout: request.layout,
-							context: activeGlideContext) { [weak self] prediction in
+		engine.updateGlideSession(sessionID, path: request.path, times: request.times,
+			layout: request.layout) { [weak self] update in
 			guard let self else { return }
 			self.glidePreviewInFlight = false
 			guard generation == self.glidePreviewGeneration else {
@@ -970,16 +1214,25 @@ final class KeyboardViewController: UIInputViewController {
 			}
 			// A newer path snapshot may have arrived while this decode was running.
 			// Never flash the older winner; move directly to the newest queued path.
-			if request.sequence == self.glidePreviewSequence, let prediction {
-				let word = KBWordCase.sentenceDisplay(prediction.word, capitalized: capitalize)
+			if request.sequence == self.glidePreviewSequence,
+			   let update, update.sessionID == self.activeGlideSessionID {
+				let prediction = update.prediction
+				let word = SuggestionCasePolicy.display(prediction.word,
+					sentenceStart: capitalize)
+				let alternatives = prediction.alternatives.prefix(2).map {
+					SuggestionCasePolicy.display($0, sentenceStart: capitalize)
+				}
 				if let endpoint = request.path.last {
 					self.displayedGlidePrediction = DisplayedGlidePrediction(
 						prediction: prediction,
+						sessionID: update.sessionID,
+						revision: update.revision,
 						pointCount: request.path.count,
 						endpoint: endpoint,
 						pitch: request.layout.xPitch)
 				}
-				self.keyboard?.setGlidePreview(word, confident: prediction.margin >= 0.75)
+				self.keyboard?.setGlidePreview(word, alternatives: alternatives,
+					confident: prediction.margin >= 0.75)
 			} else if request.sequence == self.glidePreviewSequence {
 				self.displayedGlidePrediction = nil
 				self.keyboard?.setGlidePreview(nil)
@@ -989,10 +1242,17 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func cancelGlidePreview(clearStrip: Bool) {
+		endGlidePreviewUI(clearStrip: clearStrip, cancelEngineSession: true)
+	}
+
+	private func endGlidePreviewUI(clearStrip: Bool, cancelEngineSession: Bool) {
 		glidePreviewGeneration &+= 1
 		glidePreviewSequence &+= 1
 		pendingGlidePreview = nil
-		engine.cancelGlidePreviews()
+		if cancelEngineSession, let sessionID = activeGlideSessionID {
+			engine.cancelGlideSession(sessionID)
+		}
+		activeGlideSessionID = nil
 		activeGlideDocumentContext = nil
 		activeGlideContext.removeAll(keepingCapacity: true)
 		activeGlideAutoShift = false
@@ -1048,10 +1308,11 @@ final class KeyboardViewController: UIInputViewController {
 			  erased.lowercased() != committed.lowercased(), !isSecureField else { return }
 		if let hit = recentCorrections.last(where: { $0.corrected.lowercased() == erased.lowercased() }),
 		   hit.original.lowercased() == committed.lowercased() {
-			engine.dontCorrect(committed)
+			rejectCorrection(committed)
 			decodeSnapshot = nil
+			presentedDecodeSnapshot = nil
 		}
-		engine.wordReplaced(original: erased, with: committed)
+		recordReplacement(original: erased, replacement: committed)
 	}
 
 	// MARK: Suggestions — versioned, background-computed
@@ -1065,6 +1326,7 @@ final class KeyboardViewController: UIInputViewController {
 	private func invalidateSuggestionRequests(cancelEngineWork: Bool = false) {
 		generation &+= 1
 		decodeSnapshot = nil
+		presentedDecodeSnapshot = nil
 		if cancelEngineWork { engine.cancelSuggestions() }
 	}
 
@@ -1072,6 +1334,7 @@ final class KeyboardViewController: UIInputViewController {
 		guard requestGeneration == generation else { return }
 		guard suggestionsAllowed else {
 			decodeSnapshot = nil
+			presentedDecodeSnapshot = nil
 			setSuggestionBar([])
 			return
 		}
@@ -1086,21 +1349,24 @@ final class KeyboardViewController: UIInputViewController {
 		engine.decode(request) { [weak self] snapshot in
 			guard let self, gen == self.generation,
 				  snapshot.isValid(for: request) else { return }
+			let presented = SuggestionCasePolicy.present(snapshot,
+				sentenceStart: self.shouldAutoShift(ctx))
 			self.decodeSnapshot = snapshot
+			self.presentedDecodeSnapshot = presented
 			self.keyboard.setKeyPriors(snapshot.nextCharacterPriors)
 			if current.isEmpty {
 				if let revert {
 					self.mode = .revert(revert)
-					self.setSuggestionBar([revert] + snapshot.suggestions.prefix(2))
+					self.setSuggestionBar([revert] + presented.suggestions.prefix(2).map(\.text))
 				} else {
 					self.mode = .predict
-					self.setSuggestionBar(snapshot.suggestions)
+					self.setSuggestionBar(presented.suggestions.map(\.text))
 				}
 			} else {
 				self.mode = .complete(current)
-				let exactPrimary = snapshot.suggestions.first?.caseInsensitiveCompare(current) == .orderedSame
-				self.setSuggestionBar(snapshot.suggestions, typedPrefix: current,
-					highlightPrimary: snapshot.correction != nil || exactPrimary)
+				let exactPrimary = presented.suggestions.first?.isExactTypedCandidate == true
+				self.setSuggestionBar(presented.suggestions.map(\.text), typedPrefix: current,
+					highlightPrimary: presented.correction != nil || exactPrimary)
 			}
 		}
 	}
@@ -1115,7 +1381,9 @@ final class KeyboardViewController: UIInputViewController {
 			layoutRevision: layoutRevision,
 			currentWord: currentWord,
 			context: context,
-			taps: taps)
+			taps: activeLanguageMode == .english ? taps : nil,
+			languageMode: activeLanguageMode,
+			requestedModelTier: wordSessionModelTier)
 	}
 
 	private func setSuggestionBar(_ suggestions: [String], typedPrefix: String? = nil,

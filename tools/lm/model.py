@@ -66,9 +66,13 @@ class Block(nn.Module):
         Tk = K.shape[2]                                 # = P + T
         # New token t (0..T-1) sits at absolute position P+t and may attend to <= P+t.
         # For the steady-state T=1 step this is all-zeros (attend to everything so far).
-        col = torch.arange(Tk)
-        row = torch.arange(T) + (Tk - T)
-        mask = torch.where(col[None, :] <= row[:, None], 0.0, float("-inf"))
+        col = torch.arange(Tk, device=x.device)
+        row = torch.arange(T, device=x.device) + (Tk - T)
+        mask = torch.where(
+            col[None, :] <= row[:, None],
+            torch.zeros((), device=x.device, dtype=x.dtype),
+            torch.full((), float("-inf"), device=x.device, dtype=x.dtype),
+        )
         att = ((q @ K.transpose(-2, -1)) / (self.hd ** 0.5) + mask).softmax(dim=-1)
         o = (att @ V).transpose(1, 2).reshape(B, T, d)
         x = x + self.proj(o)
@@ -133,7 +137,8 @@ class TinyLM(nn.Module):
         d = self.emb.embedding_dim
         heads = self.blocks[0].heads
         hd = d // heads
-        return [(torch.zeros(batch, heads, 0, hd), torch.zeros(batch, heads, 0, hd))
+        return [(self.emb.weight.new_zeros(batch, heads, 0, hd),
+                 self.emb.weight.new_zeros(batch, heads, 0, hd))
                 for _ in self.blocks]
 
     def forward_cached(self, tokens, cache, start_pos):
@@ -202,6 +207,33 @@ class StudentDecoderBlock(nn.Module):
         feed_forward = self.ff2(F.gelu(self.ff1(self.norm2(x)), approximate="tanh"))
         return x + self.dropout(feed_forward)
 
+    def forward_cached(self, x, past_k, past_v):
+        """Incremental equivalent of ``forward`` for one or more new tokens."""
+        batch, length, width = x.shape
+        hidden = self.norm1(x)
+        q, k, v = self.qkv(hidden).split(width, dim=-1)
+
+        def split_heads(tensor):
+            return tensor.view(batch, length, self.heads, self.head_dim).transpose(1, 2)
+
+        q, k, v = split_heads(q), split_heads(k), split_heads(v)
+        keys = torch.cat((past_k, k), dim=2)
+        values = torch.cat((past_v, v), dim=2)
+        key_length = keys.shape[2]
+        columns = torch.arange(key_length, device=x.device)
+        rows = torch.arange(length, device=x.device) + key_length - length
+        causal = torch.where(
+            columns[None, :] <= rows[:, None],
+            torch.zeros((), device=x.device, dtype=x.dtype),
+            torch.full((), float("-inf"), device=x.device, dtype=x.dtype),
+        )
+        attention = ((q @ keys.transpose(-2, -1)) / (self.head_dim ** 0.5) + causal)
+        attention = attention.softmax(dim=-1)
+        out = (attention @ values).transpose(1, 2).reshape(batch, length, width)
+        x = x + self.dropout(self.proj(out))
+        feed_forward = self.ff2(F.gelu(self.ff1(self.norm2(x)), approximate="tanh"))
+        return x + self.dropout(feed_forward), keys, values
+
 
 class KeyboardStudentLM(nn.Module):
     """The supplied 6-layer English keyboard student, independent of train stage."""
@@ -243,6 +275,32 @@ class KeyboardStudentLM(nn.Module):
 
     def forward(self, tokens):
         return self.head(self.hidden(tokens))
+
+    def empty_cache(self, batch=1):
+        head_dim = self.config.d_model // self.config.heads
+        return [
+            (
+                self.embedding.weight.new_zeros(batch, self.config.heads, 0, head_dim),
+                self.embedding.weight.new_zeros(batch, self.config.heads, 0, head_dim),
+            )
+            for _ in self.blocks
+        ]
+
+    def forward_cached(self, tokens, cache, start_pos):
+        """Encode only a continuation while reusing the immutable context cache.
+
+        The keyboard can compute a context once between words and branch this state
+        across a packed candidate-continuation graph. Tier selection and cache
+        ownership stay outside this model so one word session never changes model.
+        """
+        _, length = tokens.shape
+        positions = self.position_ids[start_pos:start_pos + length]
+        hidden = self.embedding(tokens) + self.position(positions)
+        updated = []
+        for block, (past_k, past_v) in zip(self.blocks, cache):
+            hidden, keys, values = block.forward_cached(hidden, past_k, past_v)
+            updated.append((keys, values))
+        return self.head(self.norm(hidden)), updated
 
 
 class SmoothLinear(nn.Linear):

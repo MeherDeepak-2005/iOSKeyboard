@@ -7,6 +7,7 @@ final class KeyButton: UIView {
 	let action: () -> Void
 	let repeats: Bool
 	let letterBase: String?          // lowercase base letter (for in-place shift relabelling)
+	let committedText: String?
 	let isShift: Bool                // shift key → its glyph is swapped on shift changes
 	let isInputModeSwitch: Bool
 	let isSpace: Bool
@@ -36,6 +37,7 @@ final class KeyButton: UIView {
 		self.action = spec.action
 		self.repeats = spec.repeats
 		self.letterBase = spec.letterBase
+		self.committedText = spec.committedText
 		self.isShift = spec.isShift
 		self.isInputModeSwitch = spec.isInputModeSwitch
 		self.isSpace = spec.isSpace

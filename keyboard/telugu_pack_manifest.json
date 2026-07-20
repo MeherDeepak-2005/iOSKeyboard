@@ -1,0 +1,171 @@
+{
+  "artifacts": {
+    "benchmark": null,
+    "language_model": {
+      "bytes": 1924776,
+      "format": "KBTD-v1 compact bi-trigram",
+      "path": "telugu_langdata.bin",
+      "sha256": "6f887cc3b8eb7b50f7fabae17705dc3b356888de09187ccce53b4ac19ada4557"
+    },
+    "layout": {
+      "bytes": 4288,
+      "format": "binary-plist Telugu-layout-v1",
+      "path": "telugu_layout.kbpack",
+      "sha256": "486d12c6748b0221ecbe641028f33174cbe45b7b1d9bc2ea55886e6f17caedd9"
+    },
+    "lexicon": {
+      "bytes": 1924776,
+      "format": "KBTD-v1 compact scalar trie",
+      "path": "telugu_langdata.bin",
+      "sha256": "6f887cc3b8eb7b50f7fabae17705dc3b356888de09187ccce53b4ac19ada4557"
+    },
+    "safety": null,
+    "transliteration_fst": null,
+    "transliteration_lexicon": {
+      "bytes": 871171,
+      "format": "KBXL-v3 weighted lexicon + Roman bi-trigram",
+      "path": "tenglish_lexicon.bin",
+      "sha256": "e70b56a4bbb77f9c8ed39570a446691b3ba963cc6e7a97787d4ef195f7a967c7"
+    }
+  },
+  "benchmark_hash": null,
+  "benchmark_version": "telugu-beta-unvalidated-v2",
+  "build": {
+    "aksharantar_accepted_rows": 2429539,
+    "aksharantar_archive_sha256": "08f1c2841f4d02fcc2a56362f7760ec16fc52d8a199029c68d44024ab0d22c1a",
+    "aksharantar_rejected_rows": 23,
+    "bigram_context_count": 567,
+    "bigram_continuation_count": 951,
+    "corpus_manifest_sha256": "f0d62f106d02ca761cfa8d8dc68d28ff171a02c2550e4ebe958c0af0c3a6abbe",
+    "corpus_sources": {
+      "tatoeba_telugu_2026_07_19": {
+        "contributors": [
+          "AlphaSteppeNomad",
+          "Balamax",
+          "bharath",
+          "cntrational",
+          "epraneeth98",
+          "frpzzd",
+          "Hari",
+          "NigerianSmiths",
+          "nurendra",
+          "ramanirudh",
+          "rarmdhyymm",
+          "simley",
+          "strykerami"
+        ],
+        "count_weight": 1,
+        "domain": "mixed",
+        "duplicates": 0,
+        "language": "telugu",
+        "max_sentences": 50000,
+        "rejected": 0,
+        "sample_admissions": 318,
+        "scanned": 318,
+        "selected": 318,
+        "valid": 318
+      }
+    },
+    "direct_roman_corpus_sentence_count": 0,
+    "max_roman_keys": 12000,
+    "max_variants": 3,
+    "max_words": 22000,
+    "native_corpus_sentence_count": 318,
+    "reviewed_core_rows": 67,
+    "roman_bigram_context_count": 82,
+    "roman_bigram_continuation_count": 141,
+    "roman_key_count": 12000,
+    "roman_trigram_context_count": 33,
+    "roman_trigram_continuation_count": 34,
+    "roman_variant_count": 20028,
+    "synthetic_roman_sentence_count": 318,
+    "tatoeba_contributors": [
+      "AlphaSteppeNomad",
+      "Balamax",
+      "bharath",
+      "cntrational",
+      "epraneeth98",
+      "frpzzd",
+      "Hari",
+      "NigerianSmiths",
+      "nurendra",
+      "ramanirudh",
+      "rarmdhyymm",
+      "simley",
+      "strykerami"
+    ],
+    "tatoeba_sentence_count": 318,
+    "trie_edge_count": 73850,
+    "trie_node_count": 73851,
+    "trigram_context_count": 650,
+    "trigram_continuation_count": 667,
+    "word_count": 22000
+  },
+  "identifier": "te-IN-apple-mobile",
+  "input_modes": [
+    "tenglish_to_telugu",
+    "roman_telugu",
+    "telugu"
+  ],
+  "locale": "te_IN",
+  "minimum_ios": "18.0",
+  "native_speaker_reviewed": false,
+  "normalization": "NFC",
+  "provenance": [
+    {
+      "attribution": "Project-authored geometry; Unicode character coverage",
+      "license": "Reference implementation data; screenshots are not redistributed",
+      "license_url": "https://www.unicode.org/cldr/charts/41/keyboards/layouts/te.html",
+      "name": "Project-authored Apple-mobile Telugu layout source",
+      "purpose": "layout",
+      "release_eligible": true,
+      "research_only": false,
+      "sha256": "65851c575bb67c79cf60f44056d748de6c87d31f40209ea77892ee4f8fcdd176",
+      "source_revision": "layout-v2",
+      "split": "none",
+      "url": "https://medium.com/@pravynandas/telugu-typing-in-iphone-%E0%B0%90%E0%B0%AB%E0%B1%8B%E0%B0%A8%E0%B1%8D-%E0%B0%B2%E0%B1%8B-%E0%B0%A4%E0%B1%86%E0%B0%B2%E0%B1%81%E0%B0%97%E0%B1%81-2d6669344b6f"
+    },
+    {
+      "attribution": "AI4Bharat Aksharantar contributors",
+      "license": "CC-BY for manually collected rows; CC0 for mined/existing rows",
+      "license_url": "https://huggingface.co/datasets/ai4bharat/Aksharantar#licensing-information",
+      "name": "AI4Bharat Aksharantar/tel_train.json",
+      "purpose": "training",
+      "release_eligible": true,
+      "research_only": false,
+      "sha256": "eb77e61d9bc2b3fc4ed1f94d5b56f0fdf0f13c916ea7bb66b1c810f5f00e55f8",
+      "source_revision": "tel_train.json",
+      "split": "train",
+      "url": "https://huggingface.co/datasets/ai4bharat/Aksharantar"
+    },
+    {
+      "attribution": "Glyph project reviewed aliases",
+      "license": "Project-authored",
+      "license_url": "project://THIRD_PARTY_NOTICES.md",
+      "name": "Project-reviewed core Tenglish aliases",
+      "purpose": "training",
+      "release_eligible": true,
+      "research_only": false,
+      "sha256": "de09faf9c89d9df9bd856d2416c90b02fc7abe2c0bc180cc539638bdce5b0c9b",
+      "source_revision": "de09faf9c89d9df9bd856d2416c90b02fc7abe2c0bc180cc539638bdce5b0c9b",
+      "split": "train",
+      "url": "project://tools/language_packs/sources/te-IN/tenglish-core-reviewed.tsv"
+    },
+    {
+      "attribution": "Tatoeba contributors listed in the generated pack manifest",
+      "license": "CC BY 2.0 FR",
+      "license_url": "https://creativecommons.org/licenses/by/2.0/fr/",
+      "name": "Tatoeba Telugu detailed sentences",
+      "purpose": "training",
+      "release_eligible": true,
+      "research_only": false,
+      "sha256": "833268b5ac5b18f69903594a8e8c5ab7cbfdaa9f1d6f69e6dc927282cdc9da9c",
+      "source_revision": "snapshot-2026-07-19",
+      "split": "train",
+      "url": "https://downloads.tatoeba.org/exports/per_language/tel/"
+    }
+  ],
+  "release_status": "research",
+  "schema_version": 2,
+  "version": 2
+}

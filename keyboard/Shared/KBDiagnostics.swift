@@ -101,7 +101,94 @@ enum KBDiagnostics {
 			  let s = try? JSONDecoder().decode(Snapshot.self, from: data) else { return Snapshot() }
 		return s
 	}
-	static func reset() { store.removeObject(forKey: key); Recorder.shared.clear() }
+	static func reset() {
+		store.removeObject(forKey: key)
+		// NEURAL_DEBUG_TELEMETRY_REMOVE
+		#if DEBUG || INTERNAL_NEURAL
+		store.removeObject(forKey: neuralDebugKey)
+		#endif
+		Recorder.shared.clear()
+	}
+
+	// MARK: DEBUG-only neural ranking telemetry
+	// NEURAL_DEBUG_TELEMETRY_REMOVE: remove every block carrying this marker in
+	// KBDiagnostics.swift, Keyboardengine.swift, and ContentView.swift after promotion.
+	#if DEBUG || INTERNAL_NEURAL
+	struct NeuralRankRowSnapshot: Codable, Equatable, Identifiable {
+		var id: String { "\(finalRank)-\(word)" }
+		let word: String
+		let ngramRank: Int
+		let finalRank: Int
+		let spatialCost: Double
+		let ngramLogProbability: Double
+		let neuralLogProbability: Double
+		let ngramScore: Double
+		let finalScore: Double
+	}
+
+	struct NeuralDebugSnapshot: Codable, Equatable {
+		let updated: Date
+		let state: String
+		let detail: String?
+		let modelTier: String
+		let isActive: Bool
+		let isReady: Bool
+		let topPickChangeCount: Int
+		let typedWord: String?
+		let contextTail: [String]
+		let ngramTopPick: String?
+		let finalTopPick: String?
+		let wordSessionID: UInt64?
+		let rows: [NeuralRankRowSnapshot]
+	}
+
+	private static let neuralDebugKey = "kb.diag.neural.debug.v1"
+	private static let neuralDebugQueue = DispatchQueue(
+		label: "keyboard.neural.debug.telemetry", qos: .utility)
+
+	static func readNeuralDebug() -> NeuralDebugSnapshot? {
+		guard let data = store.data(forKey: neuralDebugKey) else { return nil }
+		return try? JSONDecoder().decode(NeuralDebugSnapshot.self, from: data)
+	}
+
+	static func recordNeuralState(tier: DecodeModelTier, ready: Bool, state: String,
+		detail: String? = nil) {
+		neuralDebugQueue.async {
+			let previous = readNeuralDebug()
+			persistNeuralDebug(NeuralDebugSnapshot(updated: Date(), state: state,
+				detail: detail,
+				modelTier: tier.rawValue, isActive: tier != .ngram && ready,
+				isReady: ready, topPickChangeCount: previous?.topPickChangeCount ?? 0,
+				typedWord: previous?.typedWord, contextTail: previous?.contextTail ?? [],
+				ngramTopPick: previous?.ngramTopPick, finalTopPick: previous?.finalTopPick,
+				wordSessionID: previous?.wordSessionID, rows: previous?.rows ?? []))
+		}
+	}
+
+	static func recordNeuralRanking(tier: DecodeModelTier, typedWord: String,
+		context: [String], wordSessionID: UInt64, rows: [NeuralRankRowSnapshot]) {
+		neuralDebugQueue.async {
+			let previous = readNeuralDebug()
+			let ngramTop = rows.min(by: { $0.ngramRank < $1.ngramRank })?.word
+			let finalTop = rows.min(by: { $0.finalRank < $1.finalRank })?.word
+			let changed = ngramTop != nil && finalTop != nil && ngramTop != finalTop
+			persistNeuralDebug(NeuralDebugSnapshot(updated: Date(), state: "ranked",
+				detail: nil,
+				modelTier: tier.rawValue, isActive: true, isReady: true,
+				topPickChangeCount: (previous?.topPickChangeCount ?? 0) + (changed ? 1 : 0),
+				typedWord: typedWord, contextTail: Array(context.suffix(4)),
+				ngramTopPick: ngramTop, finalTopPick: finalTop,
+				wordSessionID: wordSessionID,
+				rows: rows.sorted { $0.finalRank < $1.finalRank }))
+		}
+	}
+
+	private static func persistNeuralDebug(_ snapshot: NeuralDebugSnapshot) {
+		if let data = try? JSONEncoder().encode(snapshot) {
+			store.set(data, forKey: neuralDebugKey)
+		}
+	}
+	#endif
 
 	// MARK: Live ranking log — inspect channel, n-gram, and frequency contributions
 	//

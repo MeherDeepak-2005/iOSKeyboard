@@ -1,0 +1,91 @@
+{
+  "bundle": "demo_keyboard.appex",
+  "failures": [],
+  "files": [
+    {
+      "bytes": 1164,
+      "path": "Info.plist",
+      "sha256": "40969c961579f66ef01778cd06cc16f970daf2534342bf82737f083cea06a186"
+    },
+    {
+      "bytes": 1033,
+      "path": "PrivacyInfo.xcprivacy",
+      "sha256": "271853104efc3a57ac3331a013f9337749683c8d4197c6e31268a87ca01cc1d6"
+    },
+    {
+      "bytes": 1251520,
+      "path": "demo_keyboard",
+      "sha256": "2ed9e2572ea4eac976175b5538f96b1a926b8092851867913da5e611fcb7958f"
+    },
+    {
+      "bytes": 41541,
+      "path": "emoji.bin",
+      "sha256": "aab47a6f406a3ae3788c6bc5066d902e965c687e8ed06fa97ebb0fdcd0073dc8"
+    },
+    {
+      "bytes": 9091531,
+      "path": "langdata.bin",
+      "sha256": "ff095aaa6e15b1c92d1d992f6d0a9a453921428f3fd49d107debcdaba3ab4b26"
+    },
+    {
+      "bytes": 243,
+      "path": "rescorer.mlmodelc/analytics/coremldata.bin",
+      "sha256": "5d622b166b7853ca16a5be263364e3bebf5a7d77a857436d90e7c2d5d825a449"
+    },
+    {
+      "bytes": 709,
+      "path": "rescorer.mlmodelc/coremldata.bin",
+      "sha256": "56b0188e7c3c45878d1525a6e7040a12b5de6f772dbb5b28a403be216025a36f"
+    },
+    {
+      "bytes": 3910,
+      "path": "rescorer.mlmodelc/metadata.json",
+      "sha256": "7cb5dd6c26747b7b50aa252f65628b713fcfdecc9ae57caf84b46ba7c5d38b2b"
+    },
+    {
+      "bytes": 84361,
+      "path": "rescorer.mlmodelc/model.mil",
+      "sha256": "4bb7056d4c91afeb815b160d9ea2090ac527c63ab17f9812543aef69f8b71638"
+    },
+    {
+      "bytes": 10750368,
+      "path": "rescorer.mlmodelc/weights/weight.bin",
+      "sha256": "a4c42d86904f5cc1c26efd519784baf8db4e8d6419b7ab75ce043c009344e248"
+    },
+    {
+      "bytes": 31927,
+      "path": "safety.kbguard",
+      "sha256": "15df514efe2e7b19f75aa12fe626f4cf33ce397ab73479c220c5f940d718ad5b"
+    },
+    {
+      "bytes": 1925578,
+      "path": "telugu_langdata.bin",
+      "sha256": "031aa5c141d9487638ebf034467997a1a449ee82f09464186d9af015a33d5e01"
+    },
+    {
+      "bytes": 4751,
+      "path": "telugu_layout.kbpack",
+      "sha256": "d56ce9bc0e75c217a19534e2f3997a393818227bee7e9d927a1ef9a0e96d250d"
+    },
+    {
+      "bytes": 3652,
+      "path": "telugu_pack_manifest.json",
+      "sha256": "2f8b9d933a8056971ceaf0407e403067dc26169f2c978b6df2617f99200f16a7"
+    },
+    {
+      "bytes": 868704,
+      "path": "tenglish_lexicon.bin",
+      "sha256": "3f5f7252f40bb6438d594e0e0ea36d62b85575ae52c88a90e15504bf31ae7167"
+    },
+    {
+      "bytes": 93846,
+      "path": "tokenizer.bin",
+      "sha256": "ac712ec81c1be30a8dbd6e2ddbb6204112f0507f4a4846226db7ff70b52ab6e1"
+    }
+  ],
+  "gateBytes": 25000000,
+  "gatePassed": true,
+  "neuralArtifactsAllowed": true,
+  "schemaVersion": 1,
+  "totalBytes": 24154838
+}

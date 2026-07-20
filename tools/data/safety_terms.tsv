@@ -1,31 +1,30 @@
-# Exact terms excluded from automatic suggestions/corrections. This list does not
-# censor user input. Additions require a false-positive review and product approval.
-arsehole	en
-asshole	en
-bastard	en
-bitch	en
-bullshit	en
-cocksucker	en
-cunt	en
-dickhead	en
-douchebag	en
-faggot	en
-fuck	en
-fucked	en
-fucker	en
-fucking	en
-motherfucker	en
-motherfucking	en
-nigga	en
-nigger	en
-prick	en
-pussy	en
-retard	en
-retarded	en
-shit	en
-shithead	en
-shitty	en
-slut	en
-twat	en
-wanker	en
-whore	en
+term	language	action	source	license	review_status
+arsehole	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+asshole	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+bastard	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+bitch	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+bullshit	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+cocksucker	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+cunt	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+dickhead	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+douchebag	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+faggot	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+fuck	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+fucked	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+fucker	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+fucking	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+motherfucker	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+motherfucking	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+nigga	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+nigger	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+prick	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+pussy	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+retard	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+retarded	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+shit	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+shithead	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+shitty	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+slut	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+twat	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+wanker	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved
+whore	en	suppress_suggest	project-reviewed	internal-reviewed-policy	approved

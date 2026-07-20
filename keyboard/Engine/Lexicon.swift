@@ -45,6 +45,18 @@ final class Lexicon {
 		safety?.isBlocked(w.lowercased()) == true
 	}
 
+	func safetyPenalty(_ word: String) -> Double {
+		switch safety?.action(for: word) ?? .allow {
+		case .allow: return 0
+		case .demote: return 4
+		case .suppressSuggest, .suppressAlways: return .infinity
+		}
+	}
+
+	func isSafeToLearn(_ word: String) -> Bool {
+		(safety?.action(for: word) ?? .allow) == .allow
+	}
+
 	func contains(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
 		return (staticTrie && langData?.trieContains(lw) == true)
@@ -164,6 +176,37 @@ final class Lexicon {
 			out += data.trieSearch(lw, maxCost: maxCost, taps: taps,
 				shouldCancel: shouldCancel).map { Self.applying(boostSnapshot, to: $0) }
 		}
+		return out
+	}
+
+	/// Creates the retained static search state once per word. A nil result means the
+	/// pack is legacy/missing or the explicit state cap was exceeded; callers must use
+	/// the full trie walk in that case rather than silently reducing candidate recall.
+	func makeIncrementalDecodeSession(typedFirst: UInt8,
+		firstTap: KeyTap?) -> IncrementalDecodeSession? {
+		lock.lock()
+		let data = staticTrie ? langData : nil
+		let boostSnapshot = boosts
+		lock.unlock()
+		guard let seeds = data?.incrementalSeeds(typedFirst: typedFirst,
+			firstTap: firstTap) else { return nil }
+		let adjusted = seeds.map { seed -> IncrementalLexiconSeed in
+			guard let boost = boostSnapshot[seed.word] else { return seed }
+			return IncrementalLexiconSeed(word: seed.word, bytes: seed.bytes,
+				logFreq: log(exp(seed.logFreq) + Double(boost)))
+		}
+		return IncrementalDecodeSession(seeds: adjusted)
+	}
+
+	/// Mutable/supplementary layers stay small and are searched conventionally. The
+	/// large immutable trie is owned by `IncrementalDecodeSession` during a word.
+	func mutableCorrections(for lw: String, maxCost: Double,
+		taps: [KeyTap?]? = nil) -> [Candidate] {
+		lock.lock(); defer { lock.unlock() }
+		var out = staticTrie ? [] : baseTrie.search(lw, maxCost: maxCost,
+			taps: taps).map(boosted)
+		out += supplementaryTrie.search(lw, maxCost: maxCost, taps: taps)
+		out += personalTrie.search(lw, maxCost: maxCost, taps: taps)
 		return out
 	}
 

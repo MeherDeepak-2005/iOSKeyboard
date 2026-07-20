@@ -15,7 +15,7 @@ import torch
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from export_coreml import load_calibration_cache, sha256
+from export_coreml import int8_weight_op_count, load_calibration_cache, sha256
 from model import KeyboardInferenceModel, load_inference_checkpoint
 
 DEFAULT_CHECKPOINT = HERE / "data" / "qwen_pretrain.pt"
@@ -49,7 +49,7 @@ def main() -> None:
         raise RuntimeError("production model must use the fixed batch size of 16")
     op_counts = manifest.get("mil_ops", {})
     if not (
-        op_counts.get("constexpr_affine_dequantize", 0) > 0
+        int8_weight_op_count(op_counts) > 0
         and op_counts.get("quantize", 0) > 0
         and op_counts.get("dequantize", 0) > 0
     ):
