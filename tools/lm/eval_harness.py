@@ -37,6 +37,10 @@ CACHE = HERE.parent / ".cache"
 LANGDATA = HERE.parents[1] / "keyboard" / "langdata.bin"
 
 LM_W, FREQ_W = 1.0, 0.3
+# Sparse-context shrinkage — mirror of NgramScorer.sparseContextFloor. Pulls a
+# tiny context table's observed distribution toward the backoff so a lone count-1
+# successor cannot outscore its unigram by ~9 nats. Must stay numerically identical.
+SPARSE_CONTEXT_FLOOR = 8.0
 INS = DEL = 1.6
 TRANS = 0.8          # adjacent-letter swap (Damerau) — mirror of Trie.transCost
 APOS_SKIP = 0.4      # omitted apostrophe (whats -> what's) — mirror of KB.apostropheSkipCost
@@ -267,7 +271,8 @@ def logprob(ld, w, ctx):
         if total <= 0 or types <= 0:
             return backoff
         count = next((n for word, n in entries if word == wid), 0) if wid is not None else 0
-        observed_weight = total / (total + types)
+        confidence = total / (total + SPARSE_CONTEXT_FLOOR)
+        observed_weight = total / (total + types) * confidence
         return observed_weight * (count / total) + (1 - observed_weight) * backoff
 
     if len(ctx) >= 1:
