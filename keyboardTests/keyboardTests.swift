@@ -212,10 +212,19 @@ struct KeyboardTests {
 		let fields = Dictionary(uniqueKeysWithValues:
 			(components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
 		#expect(url.scheme == "https")
+		#expect(url.path == "/api/v1/test-key_1/gifs/search")
 		#expect(fields == ["page": "2", "per_page": "20", "q": "Telugu reaction"])
-		#expect(KlipyClient.requestURL(apiKey: "key", kind: .gifs, query: nil, page: 1) == nil)
+		// No query (or blank) → the trending feed so the panel shows content on open,
+		// with no `q` parameter. A malformed key is still rejected.
+		let trending = try #require(KlipyClient.requestURL(apiKey: "key", kind: .gifs, query: nil, page: 1))
+		#expect(trending.path == "/api/v1/key/gifs/trending")
+		let trendingFields = Dictionary(uniqueKeysWithValues:
+			(URLComponents(url: trending, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+				.map { ($0.name, $0.value ?? "") })
+		#expect(trendingFields == ["page": "1", "per_page": "20"])
+		#expect(KlipyClient.requestURL(apiKey: "key", kind: .stickers, query: " ", page: 1)?.path
+			== "/api/v1/key/stickers/trending")
 		#expect(KlipyClient.requestURL(apiKey: "bad/key", kind: .gifs, query: "hi", page: 1) == nil)
-		#expect(KlipyClient.requestURL(apiKey: "key", kind: .gifs, query: " ", page: 1) == nil)
 	}
 
 	@Test func klipyParserRejectsUnsafeAndMalformedMedia() throws {
@@ -237,11 +246,15 @@ struct KeyboardTests {
 		#expect(KlipyClient.parse(Data("not-json".utf8)).0.isEmpty)
 	}
 
-	@MainActor @Test func mediaPanelWaitsForExplicitSearch() {
+	@MainActor @Test func mediaPanelLoadsTrendingOnOpen() {
+		// Opening the panel (no query) now loads the trending feed instead of waiting for
+		// an explicit search, so content shows immediately. Without Full Access it shows
+		// the access gate — never the old "Search … to browse" prompt.
 		let panel = MediaPanelView(theme: .system(dark: true), showsGlobe: false,
 			hasFullAccess: false, kind: .gifs)
 		let labels = recursiveSubviews(panel).compactMap { ($0 as? UILabel)?.text }
-		#expect(labels.contains(where: { $0.contains("Search GIFs") }))
+		#expect(labels.contains(where: { $0.contains("Full Access is required") }))
+		#expect(!labels.contains(where: { $0.contains("Search GIFs to browse") }))
 	}
 
 	@MainActor @Test func mediaPanelDeniesSearchedMediaWithoutFullAccess() {
@@ -746,6 +759,35 @@ struct KeyboardTests {
 		#expect(conjunct.isEmpty)
 	}
 
+	@Test func suffixReplacementStopsAtTheSamePrefixForGraphemeAndScalarHosts() throws {
+		let original = "Before అంతే "
+		let plan = try #require(HostSuffixReplacementPlan(
+			contextBeforeInput: original, suffix: "అంతే ", replacement: "anthe"))
+		#expect(plan.prefix == "Before ")
+
+		var graphemeHost = original
+		var graphemeDeletes = 0
+		while plan.state(for: graphemeHost) == .deleteBackward {
+			graphemeHost.removeLast()
+			graphemeDeletes += 1
+		}
+		#expect(plan.state(for: graphemeHost) == .readyToInsert)
+		#expect(graphemeHost + plan.replacement == "Before anthe")
+		#expect(graphemeDeletes < plan.maximumDeleteCount)
+
+		var scalarHost = original
+		var scalarDeletes = 0
+		while plan.state(for: scalarHost) == .deleteBackward {
+			var scalars = scalarHost.unicodeScalars
+			scalars.removeLast()
+			scalarHost = String(scalars)
+			scalarDeletes += 1
+			#expect(scalarDeletes <= plan.maximumDeleteCount)
+		}
+		#expect(plan.state(for: scalarHost) == .readyToInsert)
+		#expect(scalarHost + plan.replacement == "Before anthe")
+	}
+
 	@MainActor @Test func nativeTeluguKeyboardDoesNotReuseQwertyGeometry() {
 		let keyboard = KeyboardView(theme: .system(dark: false), showsGlobe: false,
 			languageMode: .telugu)
@@ -821,6 +863,16 @@ struct KeyboardTests {
 		#expect(transliterator.candidates(for: "meher", context: []).isEmpty)
 	}
 
+	@Test func tenglishSupportsFirstLetterPrefixesAndReviewedAnthe() throws {
+		let transliterator = TenglishTransliterator(url:
+			keyboardResourceURL("tenglish_lexicon.bin"))
+		#expect(!transliterator.candidates(for: "a", context: []).isEmpty)
+		let anthe = try #require(transliterator.candidates(
+			for: "anthe", context: [], limit: 8).first)
+		#expect(anthe.text == "అంతే")
+		#expect(anthe.confidence >= 0.90)
+	}
+
 	@Test func tenglishDecodeKeepsSuggestionAndCommitAuthorityTogether() async throws {
 		let engine = KeyboardEngine(languageDataURL: langdataURL())
 		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
@@ -871,6 +923,23 @@ struct KeyboardTests {
 			language: .romanTelugu)
 		#expect(snapshot.suggestions.first == "oka")
 		#expect(snapshot.suggestions.allSatisfy { value in
+			value.unicodeScalars.allSatisfy(\.isASCII)
+		})
+	}
+
+	@Test func TeluguModesDoNotLeaveTheStripEmptyBetweenWords() async throws {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let converted = await decode(engine, word: "", context: [],
+			language: .tenglishToTelugu)
+		#expect(!converted.suggestions.isEmpty)
+		#expect(converted.suggestions.allSatisfy { value in
+			value.unicodeScalars.contains { (0x0C00...0x0C7F).contains($0.value) }
+		})
+
+		let roman = await decode(engine, word: "", context: ["unknown"],
+			language: .romanTelugu)
+		#expect(!roman.suggestions.isEmpty)
+		#expect(roman.suggestions.allSatisfy { value in
 			value.unicodeScalars.allSatisfy(\.isASCII)
 		})
 	}
@@ -1098,6 +1167,11 @@ struct KeyboardTests {
 		#expect(KBClipboard.add("hello", at: url))
 		let items = KBClipboard.all(at: url)
 		#expect(items.map(\.text) == ["hello", "world"])
+
+		// Row formatting: newlines / indentation / padding collapse to one clean line
+		// for display (insertion still uses the raw text).
+		#expect(ClipboardPanelView.displayText("line one\n\tline two\n\n  line three  ")
+			== "line one line two line three")
 
 		// Sensitive content is never stored: OTP-shaped codes and Luhn-valid cards.
 		#expect(!KBClipboard.isSensitive("hello world"))

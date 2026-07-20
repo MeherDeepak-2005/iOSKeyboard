@@ -122,6 +122,8 @@ final class KeyboardView: UIView {
 	var onOpenClipboard: (() -> Void)?
 	/// A history row was picked in the clipboard panel.
 	var onClipboardPick: ((String) -> Void)?
+	/// The "Paste" offer in the suggestion strip was tapped (empty field + fresh copy).
+	var onPaste: (() -> Void)?
 
 	/// Set to the tapped key's landing offset for the duration of `key.action()`, so
 	/// the char closures can attach it to `onInsert`. nil outside a live letter tap.
@@ -317,6 +319,7 @@ final class KeyboardView: UIView {
 		suggestionBar.isHidden = !showsSuggestions    // start collapsed until the host is known
 		suggestionBar.onPick = { [weak self] in self?.onPickSuggestion?($0) }
 		suggestionBar.onOpenClipboard = { [weak self] in self?.onOpenClipboard?() }
+		suggestionBar.onPaste = { [weak self] in self?.onPaste?() }
 		reload()
 	}
 	required init?(coder: NSCoder) { fatalError() }
@@ -343,6 +346,11 @@ final class KeyboardView: UIView {
 
 	func setSuggestions(_ s: [String], typedPrefix: String? = nil, highlightPrimary: Bool = false) {
 		suggestionBar.setSuggestions(s, typedPrefix: typedPrefix, highlightPrimary: highlightPrimary)
+	}
+
+	/// Show/hide the strip's "Paste" offer (metadata-driven; the controller decides when).
+	func setPasteOffer(_ show: Bool) {
+		suggestionBar.setPasteOffer(show)
 	}
 
 	func setGlidePreview(_ word: String?, alternatives: [String] = [],
@@ -1473,7 +1481,7 @@ final class KeyboardView: UIView {
 			trailingExtras: [KeySpec] = []) -> [KeySpec] {
 			var r = [leading]
 			if showsGlobe {
-				r.append(KeySpec(symbol: "globe", accessibilityLabel: "Next Keyboard",
+				r.append(KeySpec(symbol: "keyboard", accessibilityLabel: "Next Keyboard",
 					role: .special, width: .unit, pill: true, isInputModeSwitch: true) { [weak self] in self?.onNextKeyboard?() })
 			}
 			r.append(emojiKey)

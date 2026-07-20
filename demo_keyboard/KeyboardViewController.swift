@@ -38,6 +38,7 @@ final class KeyboardViewController: UIInputViewController {
 	private enum SuggestionPresentation {
 		case ranked(words: [String], prefix: String?, highlightPrimary: Bool)
 		case glide(winner: String, alternatives: [String])
+		case paste
 	}
 	private var suggestionPresentation = SuggestionPresentation.ranked(words: [], prefix: nil, highlightPrimary: false)
 	private struct GlidePreviewRequest {
@@ -237,6 +238,7 @@ final class KeyboardViewController: UIInputViewController {
 			kb.showClipboard(hasFullAccess: self.hasFullAccess)
 		}
 		kb.onClipboardPick = { [weak self] in self?.handleClipboardPick($0) }
+		kb.onPaste = { [weak self] in self?.handlePasteChip() }
 		kb.onGlideBegan     = { [weak self] in self?.beginGlidePreview() }
 		kb.onGlidePreview   = { [weak self] path, times, layout in
 			self?.handleGlidePreview(path, times, layout)
@@ -585,6 +587,32 @@ final class KeyboardViewController: UIInputViewController {
 		#endif
 	}
 
+	/// Replaces an exact suffix without assuming that UIKit and Swift use the same
+	/// deletion unit for Indic text. This is intentionally reserved for explicit
+	/// correction/pick transactions, never the ordinary letter insertion path.
+	@discardableResult
+	private func replaceHostSuffix(_ suffix: String, with replacement: String) -> Bool {
+		guard let initial = textDocumentProxy.documentContextBeforeInput,
+			let plan = HostSuffixReplacementPlan(contextBeforeInput: initial,
+				suffix: suffix, replacement: replacement) else { return false }
+		var context = initial
+		for _ in 0...plan.maximumDeleteCount {
+			switch plan.state(for: context) {
+			case .readyToInsert:
+				if !plan.replacement.isEmpty { insertIntoHost(plan.replacement) }
+				return true
+			case .invalid:
+				return false
+			case .deleteBackward:
+				textDocumentProxy.deleteBackward()
+				guard let updated = textDocumentProxy.documentContextBeforeInput,
+					updated != context else { return false }
+				context = updated
+			}
+		}
+		return false
+	}
+
 	// MARK: Clipboard — capture on panel open, insert from saved history
 
 	/// Capture the current system pasteboard into history. Called ONLY when the user
@@ -609,6 +637,33 @@ final class KeyboardViewController: UIInputViewController {
 			  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 		KBClipboard.consumedChangeCount = count      // only after a confirmed read
 		KBClipboard.add(text)
+	}
+
+	/// Should the strip show a "Paste" offer? True when the field is empty (the user
+	/// just cleared it or focused a blank field) and there is unconsumed clipboard text
+	/// — the "copied, then deleted it" moment. Uses METADATA only (changeCount /
+	/// hasStrings), so deciding to show the offer never fires iOS's paste banner; the
+	/// contents are read only when the offer is tapped (handlePasteChip).
+	private func offersPaste() -> Bool {
+		guard hasFullAccess, !isSecureField, suggestionsAllowed else { return false }
+		let before = textDocumentProxy.documentContextBeforeInput ?? ""
+		guard before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+		let pb = UIPasteboard.general
+		return pb.hasStrings && pb.changeCount != KBClipboard.consumedChangeCount
+	}
+
+	/// The "Paste" offer was tapped — the ONE deliberate pasteboard read (one banner).
+	/// Marks the change consumed (so the offer does not re-appear for the same copy) and
+	/// saves it to history, then inserts like any clipboard pick.
+	private func handlePasteChip() {
+		guard hasFullAccess, !isSecureField else { return }
+		let pb = UIPasteboard.general
+		guard pb.hasStrings, let text = pb.string,
+			  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+		KBClipboard.consumedChangeCount = pb.changeCount
+		KBClipboard.add(text)
+		handleClipboardPick(text)
+		scheduleSuggestions()
 	}
 
 	/// A history row from the clipboard panel. Inserts and stays on the panel
@@ -941,9 +996,11 @@ final class KeyboardViewController: UIInputViewController {
 			lastCorrection = nil
 			resetEraseTracking()
 			wordTaps.removeAll(keepingCapacity: true)   // word rewritten — offsets no longer align
-			for _ in 0..<c.trailing.count { textDocumentProxy.deleteBackward() }
-			for _ in 0..<c.corrected.count { textDocumentProxy.deleteBackward() }
-			insertIntoHost(c.original)
+			guard replaceHostSuffix(expected, with: c.original) else {
+				updateAutoShift()
+				scheduleSuggestions()
+				return
+			}
 			// Walk back the exact learned replacement for every source (autocorrect,
 			// completion, or Glide). Autocorrect additionally needs a session keep so
 			// the next boundary does not immediately fight the user's undo.
@@ -977,9 +1034,10 @@ final class KeyboardViewController: UIInputViewController {
 		if !s.isEmpty, !s.contains(where: { $0.isLetter }) {
 			resolveCorrectionAsAccepted()
 			if case .complete(let partial) = mode {
-				for _ in 0..<partial.count { textDocumentProxy.deleteBackward() }
+				guard replaceHostSuffix(partial, with: s) else { return }
+			} else {
+				insertIntoHost(s)
 			}
-			insertIntoHost(s)
 			KBEmojiRecents.add(s)
 			lastCorrection = nil
 			updateAutoShift()
@@ -992,8 +1050,7 @@ final class KeyboardViewController: UIInputViewController {
 		switch mode {
 		case .complete(let partial):
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
-			for _ in 0..<partial.count { textDocumentProxy.deleteBackward() }
-			insertIntoHost(s + " ")
+			guard replaceHostSuffix(partial, with: s + " ") else { return }
 			learnCommittedWord(context: ctx, word: s)
 			if !isSecureField { KBStats.noteCommitted(glided: false) }
 			// Swapping the typed word for a different suggestion is strong evidence the
@@ -1012,9 +1069,7 @@ final class KeyboardViewController: UIInputViewController {
 		case .revert(let original):
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 			if s == original, let corrected = lastCompleteWord(ctx) {
-				textDocumentProxy.deleteBackward()
-				for _ in 0..<corrected.count { textDocumentProxy.deleteBackward() }
-				insertIntoHost(original + " ")
+				guard replaceHostSuffix(corrected + " ", with: original + " ") else { return }
 				rejectCorrection(original)
 				recordReplacement(original: corrected, replacement: original)
 			} else {
@@ -1035,11 +1090,10 @@ final class KeyboardViewController: UIInputViewController {
 			} else {
 				oldAlternatives = []
 			}
-			for _ in 0..<(committed.count + 1) { textDocumentProxy.deleteBackward() }
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
 			let replacement = SuggestionCasePolicy.display(s,
 				sentenceStart: shouldAutoShift(textDocumentProxy.documentContextBeforeInput))
-			insertIntoHost(replacement + " ")
+			guard replaceHostSuffix(committed + " ", with: replacement + " ") else { return }
 			learnCommittedWord(context: ctx, word: s)
 			if committed.lowercased() != s.lowercased() {
 				recordReplacement(original: committed, replacement: s)
@@ -1405,7 +1459,13 @@ final class KeyboardViewController: UIInputViewController {
 					self.setSuggestionBar([revert] + presented.suggestions.prefix(2).map(\.text))
 				} else {
 					self.mode = .predict
-					self.setSuggestionBar(presented.suggestions.map(\.text))
+					if self.offersPaste() {
+						// Empty field + fresh clipboard text → offer Paste in place of
+						// next-word predictions (the "copied, then deleted it" moment).
+						self.setPasteBar()
+					} else {
+						self.setSuggestionBar(presented.suggestions.map(\.text))
+					}
 				}
 			} else {
 				self.mode = .complete(current)
@@ -1444,6 +1504,11 @@ final class KeyboardViewController: UIInputViewController {
 		keyboard?.setGlideResult(winner, alternatives: alternatives)
 	}
 
+	private func setPasteBar() {
+		suggestionPresentation = .paste
+		keyboard?.setPasteOffer(true)
+	}
+
 	private func applySuggestionPresentation(to keyboard: KeyboardView) {
 		switch suggestionPresentation {
 		case .ranked(let words, let prefix, let highlightPrimary):
@@ -1451,6 +1516,8 @@ final class KeyboardViewController: UIInputViewController {
 				highlightPrimary: highlightPrimary)
 		case .glide(let winner, let alternatives):
 			keyboard.setGlideResult(winner, alternatives: alternatives)
+		case .paste:
+			keyboard.setPasteOffer(true)
 		}
 	}
 

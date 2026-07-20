@@ -77,6 +77,16 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 
 	// MARK: Table
 
+	/// Collapse newlines and runs of whitespace so a multi-line, indented, or
+	/// whitespace-padded copy (an address, a code block, formatted text) shows as one
+	/// clean line instead of ragged wrapped rows. Insertion still uses the RAW text —
+	/// only the row label is normalized.
+	nonisolated static func displayText(_ text: String) -> String {
+		text.components(separatedBy: .whitespacesAndNewlines)
+			.filter { !$0.isEmpty }
+			.joined(separator: " ")
+	}
+
 	private func items(in section: Int) -> [KBClipboardItem] {
 		section == 0 ? pinnedItems : recentItems
 	}
@@ -91,10 +101,11 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		let cell = tv.dequeueReusableCell(withIdentifier: "c", for: ip)
 		let item = items(in: ip.section)[ip.row]
 		var cfg = cell.defaultContentConfiguration()
-		cfg.text = item.text
+		cfg.text = Self.displayText(item.text)
 		cfg.textProperties.font = .systemFont(ofSize: 15)
 		cfg.textProperties.color = theme.keyText
 		cfg.textProperties.numberOfLines = 2
+		cfg.textProperties.lineBreakMode = .byTruncatingTail
 		cell.contentConfiguration = cfg
 		cell.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.08) : UIColor(white: 1, alpha: 0.65)
 		cell.selectionStyle = .none
@@ -144,12 +155,12 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		return UISwipeActionsConfiguration(actions: [pin])
 	}
 
-	// MARK: Bottom bar — ABC | (globe) | title
+	// MARK: Bottom bar — ABC | (input mode) | title
 
 	private func buildBottomBar() {
 		bottomBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
 		var leading: [UIButton] = [barButton(title: "ABC") { [weak self] in self?.onABC?() }]
-		if showsGlobe { leading.append(barButton(symbol: "globe", accessibilityLabel: "Next Keyboard") { [weak self] in self?.onNextKeyboard?() }) }
+		if showsGlobe { leading.append(barButton(symbol: "keyboard", accessibilityLabel: "Next Keyboard") { [weak self] in self?.onNextKeyboard?() }) }
 
 		let title = UILabel()
 		title.text = "Clipboard"

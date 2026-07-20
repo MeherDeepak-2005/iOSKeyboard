@@ -136,11 +136,8 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		loadGeneration &+= 1
 		items.removeAll(keepingCapacity: true)
 		collection.reloadData()
-		guard let query,
-			!query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-			setStatus("Search \(kind.displayName) to browse KLIPY")
-			return
-		}
+		// No query loads the trending feed (browse on open); a query searches. Both
+		// still require Full Access and a configured, content-filter-approved key.
 		guard hasFullAccess else {
 			setStatus("Full Access is required only for GIFs and stickers.")
 			return
@@ -251,7 +248,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		credit.textAlignment = .right
 		footer.addSubview(credit)
 		if showsGlobe {
-			globeButton.setImage(UIImage(systemName: "globe"), for: .normal)
+			globeButton.setImage(UIImage(systemName: "keyboard"), for: .normal)
 			globeButton.tintColor = theme.specialKeyText.withAlphaComponent(0.62)
 			globeButton.addAction(UIAction { [weak self] _ in self?.onNextKeyboard?() }, for: .touchUpInside)
 			footer.addSubview(globeButton)

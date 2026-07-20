@@ -25,6 +25,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import build_tenglish_lexicon as tenglish
+from ngram_compaction import compact_contexts
 
 MAGIC = b"KBTD"
 VERSION = 1
@@ -38,6 +39,9 @@ EDGE_RECORD = struct.Struct("<HI")
 BIGRAM_CONTEXT = struct.Struct("<HII")
 TRIGRAM_CONTEXT = struct.Struct("<III")
 CONTINUATION = struct.Struct("<HI")
+DEFAULT_NATIVE_BIGRAM_BYTE_BUDGET = 112 * 1024
+DEFAULT_NATIVE_TRIGRAM_BYTE_BUDGET = 112 * 1024
+DEFAULT_NATIVE_MAX_CONTINUATIONS = 24
 
 TATOEBA_URL = "https://downloads.tatoeba.org/exports/per_language/tel/"
 TATOEBA_LICENSE = "https://creativecommons.org/licenses/by/2.0/fr/"
@@ -466,12 +470,30 @@ def group_ngrams(sentences: list[WeightedSentence], word_ids: dict[str, int]):
 
 
 def write_telugu_data(output: Path, words: list[str], scores: dict[str, float],
-                      sentences: list[WeightedSentence]) -> dict[str, int]:
+                      sentences: list[WeightedSentence], *,
+                      bigram_byte_budget: int = DEFAULT_NATIVE_BIGRAM_BYTE_BUDGET,
+                      trigram_byte_budget: int = DEFAULT_NATIVE_TRIGRAM_BYTE_BUDGET,
+                      max_continuations: int = DEFAULT_NATIVE_MAX_CONTINUATIONS) \
+        -> dict[str, int]:
     if not 1 <= len(words) <= 65_534:
         raise ValueError("Telugu vocabulary must contain 1...65,534 words")
     word_ids = {word: index for index, word in enumerate(words)}
     children, terminals, tops = build_trie(words)
     bigrams, trigrams = group_ngrams(sentences, word_ids)
+    bigrams, bigram_compaction = compact_contexts(
+        bigrams,
+        context_record_bytes=BIGRAM_CONTEXT.size,
+        continuation_record_bytes=CONTINUATION.size,
+        byte_budget=bigram_byte_budget,
+        max_continuations=max_continuations,
+    )
+    trigrams, trigram_compaction = compact_contexts(
+        trigrams,
+        context_record_bytes=TRIGRAM_CONTEXT.size,
+        continuation_record_bytes=CONTINUATION.size,
+        byte_budget=trigram_byte_budget,
+        max_continuations=max_continuations,
+    )
 
     blob = bytearray()
     word_records = bytearray()
@@ -538,6 +560,10 @@ def write_telugu_data(output: Path, words: list[str], scores: dict[str, float],
         "bigram_continuation_count": bigram_count,
         "trigram_context_count": len(trigrams),
         "trigram_continuation_count": trigram_count,
+        **{f"native_bigram_{key}": value
+           for key, value in bigram_compaction.items()},
+        **{f"native_trigram_{key}": value
+           for key, value in trigram_compaction.items()},
     }
 
 
@@ -555,6 +581,20 @@ def build(args: argparse.Namespace) -> Path:
         raise ValueError("pass --license-ack after reviewing every language-data source")
     if not 1 <= args.max_words <= 65_534:
         raise ValueError("max-words must be 1...65,534")
+    for field, fallback in {
+        "native_bigram_byte_budget": DEFAULT_NATIVE_BIGRAM_BYTE_BUDGET,
+        "native_trigram_byte_budget": DEFAULT_NATIVE_TRIGRAM_BYTE_BUDGET,
+        "roman_bigram_byte_budget": tenglish.DEFAULT_BIGRAM_BYTE_BUDGET,
+        "roman_trigram_byte_budget": tenglish.DEFAULT_TRIGRAM_BYTE_BUDGET,
+    }.items():
+        if getattr(args, field, fallback) < 0:
+            raise ValueError(f"{field.replace('_', '-')} must be non-negative")
+    for field, fallback in {
+        "native_max_continuations": DEFAULT_NATIVE_MAX_CONTINUATIONS,
+        "roman_max_continuations": tenglish.DEFAULT_MAX_CONTINUATIONS,
+    }.items():
+        if getattr(args, field, fallback) <= 0:
+            raise ValueError(f"{field.replace('_', '-')} must be positive")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     layout_output = args.output_dir / "telugu_layout.kbpack"
     data_output = args.output_dir / "telugu_langdata.bin"
@@ -622,12 +662,29 @@ def build(args: argparse.Namespace) -> Path:
         scores = native_scores(database)
         words, scores = select_vocabulary(scores, native_sentences, args.max_words)
         data_stats = write_telugu_data(
-            data_output, words, scores, native_sentences)
-        tenglish.select_keys(database, args.max_roman_keys)
+            data_output, words, scores, native_sentences,
+            bigram_byte_budget=getattr(
+                args, "native_bigram_byte_budget", DEFAULT_NATIVE_BIGRAM_BYTE_BUDGET),
+            trigram_byte_budget=getattr(
+                args, "native_trigram_byte_budget", DEFAULT_NATIVE_TRIGRAM_BYTE_BUDGET),
+            max_continuations=getattr(
+                args, "native_max_continuations", DEFAULT_NATIVE_MAX_CONTINUATIONS),
+        )
+        # Direct Roman Telugu sentences promote attested Aksharantar spellings into
+        # the bounded runtime key set. Synthetic projection is generated afterward
+        # and therefore cannot circularly decide which spellings are available.
+        tenglish.select_keys(database, args.max_roman_keys, roman_sentences)
         synthetic_roman = romanize_sentences(database, native_sentences)
         all_roman_sentences = roman_sentences + synthetic_roman
         roman_keys, roman_variants, roman_lm_stats = tenglish.write_binary_with_lm(
-            database, tenglish_output, args.max_variants, all_roman_sentences)
+            database, tenglish_output, args.max_variants, all_roman_sentences,
+            bigram_byte_budget=getattr(
+                args, "roman_bigram_byte_budget", tenglish.DEFAULT_BIGRAM_BYTE_BUDGET),
+            trigram_byte_budget=getattr(
+                args, "roman_trigram_byte_budget", tenglish.DEFAULT_TRIGRAM_BYTE_BUDGET),
+            max_continuations=getattr(
+                args, "roman_max_continuations", tenglish.DEFAULT_MAX_CONTINUATIONS),
+        )
         database.close()
 
     manifest = {
@@ -737,6 +794,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-words", type=int, default=40_000)
     parser.add_argument("--max-roman-keys", type=int, default=40_000)
     parser.add_argument("--max-variants", type=int, default=3)
+    parser.add_argument("--native-bigram-byte-budget", type=int,
+                        default=DEFAULT_NATIVE_BIGRAM_BYTE_BUDGET)
+    parser.add_argument("--native-trigram-byte-budget", type=int,
+                        default=DEFAULT_NATIVE_TRIGRAM_BYTE_BUDGET)
+    parser.add_argument("--native-max-continuations", type=int,
+                        default=DEFAULT_NATIVE_MAX_CONTINUATIONS)
+    parser.add_argument("--roman-bigram-byte-budget", type=int,
+                        default=tenglish.DEFAULT_BIGRAM_BYTE_BUDGET)
+    parser.add_argument("--roman-trigram-byte-budget", type=int,
+                        default=tenglish.DEFAULT_TRIGRAM_BYTE_BUDGET)
+    parser.add_argument("--roman-max-continuations", type=int,
+                        default=tenglish.DEFAULT_MAX_CONTINUATIONS)
     parser.add_argument("--reviewed-core", type=Path)
     parser.add_argument("--license-ack", action="store_true")
     return parser.parse_args()

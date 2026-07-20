@@ -5,6 +5,39 @@ nonisolated struct TeluguHostEdit: Equatable, Sendable {
 	let insertion: String
 }
 
+/// A host-independent plan for replacing text immediately before the cursor.
+/// Some text hosts delete an Indic extended grapheme in one call while others expose
+/// its combining marks one at a time. Callers therefore inspect the document after
+/// every deletion and stop at `prefix` instead of assuming `String.count` matches the
+/// host's deletion unit.
+nonisolated struct HostSuffixReplacementPlan: Equatable, Sendable {
+	enum State: Equatable, Sendable {
+		case deleteBackward
+		case readyToInsert
+		case invalid
+	}
+
+	let prefix: String
+	let replacement: String
+	let maximumDeleteCount: Int
+
+	init?(contextBeforeInput: String, suffix: String, replacement: String) {
+		guard !suffix.isEmpty, contextBeforeInput.hasSuffix(suffix) else { return nil }
+		prefix = String(contextBeforeInput.dropLast(suffix.count))
+		self.replacement = replacement
+		// UTF-16 is the most conservative bound used by UIKit hosts. The state check
+		// below stops immediately when a host removes a complete grapheme at once.
+		maximumDeleteCount = max(suffix.count, suffix.unicodeScalars.count,
+			suffix.utf16.count)
+	}
+
+	func state(for contextBeforeInput: String) -> State {
+		if contextBeforeInput == prefix { return .readyToInsert }
+		guard contextBeforeInput.hasPrefix(prefix) else { return .invalid }
+		return .deleteBackward
+	}
+}
+
 /// Validates Telugu scalar transitions while keeping the host mutation append-only.
 /// UITextDocumentProxy does not promise scalar-level deletion: deleting and rebuilding
 /// an extended grapheme can remove more text than intended in some hosts. A sequence

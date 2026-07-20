@@ -1,0 +1,245 @@
+{
+  "output": {
+    "bytes": 33493011,
+    "path": "tools/.cache/indiccorpv2-te-ranges.txt",
+    "sha256": "5ccc07cc46b227ffca6c436ce40a8b5eef186c8b2f74ca73e90af2027d554f23"
+  },
+  "rangeBytes": 1048576,
+  "rangeCount": 32,
+  "ranges": [
+    {
+      "completeBytes": 1046578,
+      "end": 240007848,
+      "index": 0,
+      "sha256": "7a1b644a6a50443ed8dd5600bf6e959fbc3b2de989a5eb96c24c7c2cb77ba30c",
+      "start": 238959273
+    },
+    {
+      "completeBytes": 1048175,
+      "end": 981924734,
+      "index": 1,
+      "sha256": "a205019a9e803711646000a823cd356de243ed48c1a138412f342b0799fc1c1d",
+      "start": 980876159
+    },
+    {
+      "completeBytes": 1046456,
+      "end": 1111637172,
+      "index": 2,
+      "sha256": "3a4a2e21ee110a51fad0491d48578bbc67ef3747af3f01a7c92fa7ebf8f343e9",
+      "start": 1110588597
+    },
+    {
+      "completeBytes": 1047234,
+      "end": 1687079673,
+      "index": 3,
+      "sha256": "87b07d78c1668cae19a521ceb77ea0f459008e2d46444add85d9a63b38a68a4b",
+      "start": 1686031098
+    },
+    {
+      "completeBytes": 1047628,
+      "end": 2430539773,
+      "index": 4,
+      "sha256": "38d3d875ddd4818910e8740b36ef38386eb01af0f7b01c422560af69f4c7cdcc",
+      "start": 2429491198
+    },
+    {
+      "completeBytes": 1047621,
+      "end": 2697723550,
+      "index": 5,
+      "sha256": "f012b3f774849c3665f16affaf5ed7d8c0f78a7ddf2b92fc603492ec5c3ca1d5",
+      "start": 2696674975
+    },
+    {
+      "completeBytes": 1047776,
+      "end": 3274483315,
+      "index": 6,
+      "sha256": "51b0db8d602cfc20c7354ce816360e39a59a6cd0b5b14ad8e5ac79d113812810",
+      "start": 3273434740
+    },
+    {
+      "completeBytes": 1046708,
+      "end": 3596789112,
+      "index": 7,
+      "sha256": "43eebd3928ac48ce74e4cfe23f898665eaf26048b6466585c0e79c244181ea0f",
+      "start": 3595740537
+    },
+    {
+      "completeBytes": 1047894,
+      "end": 4205245618,
+      "index": 8,
+      "sha256": "934c5bf39afaf936c306089725f841cf0027380b89fbf2185d85cfdac17c0467",
+      "start": 4204197043
+    },
+    {
+      "completeBytes": 1037013,
+      "end": 4540095695,
+      "index": 9,
+      "sha256": "2f1103d7ec133da3db391354b44d87dbaaaa2e9a38f4258bf54dd447042361c2",
+      "start": 4539047120
+    },
+    {
+      "completeBytes": 1047491,
+      "end": 5249425032,
+      "index": 10,
+      "sha256": "829a095b3a77aac19a22accb2a4f54173547c431d6358b31b44708837d2917cd",
+      "start": 5248376457
+    },
+    {
+      "completeBytes": 1046582,
+      "end": 5718005566,
+      "index": 11,
+      "sha256": "d0f65cf12fe0c50a12e0c4bd261343d2b19ddc541a0310110c0ed54b16f4fa31",
+      "start": 5716956991
+    },
+    {
+      "completeBytes": 1047522,
+      "end": 6031019923,
+      "index": 12,
+      "sha256": "bcbbeda3afd712f437711da26c2c0a8e979e4efb428920f467a973d9d8279b7e",
+      "start": 6029971348
+    },
+    {
+      "completeBytes": 1044830,
+      "end": 6536003527,
+      "index": 13,
+      "sha256": "266839e9528207b37d5184d1e475a8ec20e3aba6d7be006b58df8f5b3453f984",
+      "start": 6534954952
+    },
+    {
+      "completeBytes": 1048450,
+      "end": 7067101535,
+      "index": 14,
+      "sha256": "44a25534457ea29614e5295ec9bea3f708a23d522e5f14b9553ec70924fe0be8",
+      "start": 7066052960
+    },
+    {
+      "completeBytes": 1046876,
+      "end": 7637913937,
+      "index": 15,
+      "sha256": "2c215099b13db7d9e7ba2e487e80c55bc03576987868d68ac2b273dee8f4e9c6",
+      "start": 7636865362
+    },
+    {
+      "completeBytes": 1043478,
+      "end": 7986569558,
+      "index": 16,
+      "sha256": "46320e17214bd0597bf18e6898b35ae103949f66605206e95e9a898a7ff2433d",
+      "start": 7985520983
+    },
+    {
+      "completeBytes": 1048455,
+      "end": 8419820620,
+      "index": 17,
+      "sha256": "0eef06fbba7253206ca8a1e9cfd269864a59272fe07617cb87c2cc8577f3484e",
+      "start": 8418772045
+    },
+    {
+      "completeBytes": 1047222,
+      "end": 9034867195,
+      "index": 18,
+      "sha256": "1403ea81c77bcdd4d891640898b31ec110b6b585aab12c2635313a7616ce8d64",
+      "start": 9033818620
+    },
+    {
+      "completeBytes": 1046694,
+      "end": 9815314878,
+      "index": 19,
+      "sha256": "3f08afd238a286a83b5d57ef860624537df560e12939728f9aad3b6f0b0a1763",
+      "start": 9814266303
+    },
+    {
+      "completeBytes": 1046789,
+      "end": 10261758639,
+      "index": 20,
+      "sha256": "49a9d729b74fc0ae92d35221dfb75feb209fe39c57a988114ba1549443b38b7f",
+      "start": 10260710064
+    },
+    {
+      "completeBytes": 1044041,
+      "end": 10375796472,
+      "index": 21,
+      "sha256": "19933d2dcb911bcd4b9755373dcb954f3c1ee817d173f21710ea348360fae599",
+      "start": 10374747897
+    },
+    {
+      "completeBytes": 1048070,
+      "end": 11109368349,
+      "index": 22,
+      "sha256": "ea86e7cd4c24d3b0b7b1879a3b7dda68b44b7ddffd785632d0d30c9bb830c70a",
+      "start": 11108319774
+    },
+    {
+      "completeBytes": 1047164,
+      "end": 11462260987,
+      "index": 23,
+      "sha256": "9301f65b84ee99834395b8cd35692077fe44eccabd9a691d5eab63eeb716ab6e",
+      "start": 11461212412
+    },
+    {
+      "completeBytes": 1046543,
+      "end": 12021966487,
+      "index": 24,
+      "sha256": "750fbeedbcd82f7d6fd58adee1a04fd122bf9887ff8d2b0930e64f367bb5b813",
+      "start": 12020917912
+    },
+    {
+      "completeBytes": 1045591,
+      "end": 12700136768,
+      "index": 25,
+      "sha256": "7ac2ed032f1dede096c2dfe81292a0fd1c95e9fa8703d74155851276c2a4bdcf",
+      "start": 12699088193
+    },
+    {
+      "completeBytes": 1048033,
+      "end": 12957843435,
+      "index": 26,
+      "sha256": "83acc5b7d5d625240c27d78d0f588dfffb9c53ab9cef439284680b4b521e9745",
+      "start": 12956794860
+    },
+    {
+      "completeBytes": 1046546,
+      "end": 13763803545,
+      "index": 27,
+      "sha256": "472ddf606107f3017575efb837df175c8668d23036090e7f302d4249e2ffc631",
+      "start": 13762754970
+    },
+    {
+      "completeBytes": 1048041,
+      "end": 14276262845,
+      "index": 28,
+      "sha256": "d1015dca9d31a50e0c77ca5f41f0278aae85d0840d8b644010b8b034e279cb06",
+      "start": 14275214270
+    },
+    {
+      "completeBytes": 1048176,
+      "end": 14324660625,
+      "index": 29,
+      "sha256": "a2c2fdff2f54a3da1eee86daa17f6547b4e44b230b8a29368ae69ff35de2fd12",
+      "start": 14323612050
+    },
+    {
+      "completeBytes": 1047710,
+      "end": 15041522887,
+      "index": 30,
+      "sha256": "cf4734eb8ccc39fb92f18b381877b48b3ee0f9ab456f7e7de80777a05d00b29c",
+      "start": 15040474312
+    },
+    {
+      "completeBytes": 1045624,
+      "end": 15760282033,
+      "index": 31,
+      "sha256": "7aed4833811b0fab48bbc946a40679479336097fbb371464450fa422bea3e42e",
+      "start": 15759233458
+    }
+  ],
+  "sampling": "one SHA-256-jittered byte range per equal-size source stratum",
+  "schemaVersion": 1,
+  "source": {
+    "bytes": 15760603733,
+    "filename": "data/te.txt",
+    "repository": "ai4bharat/IndicCorpV2",
+    "revision": "2d7285e6ce14fdb3fb2449c9f89427b9f582ac3f",
+    "sha256": "60693a4fd501b4a37ce57c76d6057a224fd6434bf6580eb134382cbe4ba1799a",
+    "url": "https://huggingface.co/datasets/ai4bharat/IndicCorpV2/resolve/2d7285e6ce14fdb3fb2449c9f89427b9f582ac3f/data/te.txt"
+  }
+}

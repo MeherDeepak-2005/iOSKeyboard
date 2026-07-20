@@ -23,9 +23,73 @@ def load(name: str, filename: str):
 builder = load("build_tenglish_lexicon", "build_tenglish_lexicon.py")
 telugu_builder = load("build_telugu_pack", "build_telugu_pack.py")
 validator = load("validate_manifest", "validate_manifest.py")
+compactor = load("ngram_compaction", "ngram_compaction.py")
+corpus_preparer = load("prepare_telugu_corpus", "prepare_telugu_corpus.py")
+range_sampler = load("sample_hf_text_ranges", "sample_hf_text_ranges.py")
 
 
 class LanguagePackTests(unittest.TestCase):
+    def test_ngram_compaction_enforces_exact_byte_budget(self):
+        groups = {
+            0: [(1, 10), (2, 5)],
+            1: [(3, 9)],
+        }
+        retained, stats = compactor.compact_contexts(
+            groups, context_record_bytes=10, continuation_record_bytes=6,
+            byte_budget=22, max_continuations=4,
+        )
+        self.assertEqual(retained, {0: [(1, 10), (2, 5)]})
+        self.assertEqual(stats["encoded_bytes"], 22)
+        self.assertEqual(stats["dropped_context_count"], 1)
+
+    def test_remote_range_sampling_stays_inside_disjoint_strata(self):
+        starts = [
+            range_sampler._range_start(b"fixture", index, 8, 8_000_000, 100_000)
+            for index in range(8)
+        ]
+        self.assertEqual(starts, [
+            range_sampler._range_start(b"fixture", index, 8, 8_000_000, 100_000)
+            for index in range(8)
+        ])
+        for index, start in enumerate(starts):
+            self.assertGreaterEqual(start, index * 1_000_000)
+            self.assertLessEqual(start + 100_000, (index + 1) * 1_000_000)
+
+    def test_corpus_preparer_filters_and_is_deterministic(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value)
+            first = root / "first.txt"
+            second = root / "second.txt"
+            first.write_text(
+                "నేను ఇంటికి వెళ్తున్నాను. ఇది చాలా బాగుంది.\n"
+                "నేను ఇంటికి వెళ్తున్నాను.\n"
+                "https://example.com నేను ఇంటికి వెళ్తున్నాను.\n",
+                encoding="utf-8",
+            )
+            second.write_text("మీరు ఎలా ఉన్నారు? అతను ఇక్కడ ఉన్నాడు.\n", encoding="utf-8")
+
+            def run(inputs: list[Path], suffix: str):
+                output = root / f"corpus-{suffix}.txt.bz2"
+                report = root / f"report-{suffix}.json"
+                result = corpus_preparer.prepare(argparse.Namespace(
+                    input=inputs, format="auto", text_field="text", language="telugu",
+                    source_id="fixture", output=output, report=report,
+                    max_sentences=4, min_tokens=2, max_tokens=20,
+                    min_script_ratio=0.75, max_fragment_characters=2000,
+                ))
+                return output, result
+
+            one, first_report = run([first, second], "one")
+            two, second_report = run([second, first], "two")
+            with bz2.open(one, "rt", encoding="utf-8") as handle:
+                one_rows = handle.read()
+            with bz2.open(two, "rt", encoding="utf-8") as handle:
+                two_rows = handle.read()
+            self.assertEqual(one_rows, two_rows)
+            self.assertEqual(first_report["output"]["sentences"], 4)
+            self.assertEqual(second_report["output"]["sentences"], 4)
+            self.assertNotIn("example", one_rows)
+
     def fixture_zip(self, root: Path) -> Path:
         path = root / "aksharantar.zip"
         rows = [
@@ -78,6 +142,22 @@ class LanguagePackTests(unittest.TestCase):
                 "SELECT native, weight FROM pairs WHERE roman = 'meeru'"
             ).fetchone()
             self.assertEqual(row, ("మీరు", 10.0))
+
+    def test_direct_roman_corpus_promotes_attested_runtime_keys(self):
+        with tempfile.TemporaryDirectory() as value:
+            root = Path(value)
+            database = builder.sqlite3.connect(":memory:")
+            builder.ingest(self.fixture_zip(root), "tel_train.json", database)
+            builder.select_keys(database, 1, [(["meeru"], 100)])
+            selected = database.execute("SELECT roman FROM selected").fetchone()
+            self.assertEqual(selected, ("meeru",))
+
+    def test_roman_lm_stores_corpus_ranked_starters(self):
+        groups, _ = builder._group_roman_ngrams(
+            [(["meeru", "nenu"], 2), (["meeru"], 4)],
+            {"nenu": 0, "meeru": 1},
+        )
+        self.assertEqual(groups[builder.ROMAN_START_CONTEXT], [(1, 6), (0, 2)])
 
     def test_layout_compiler_rejects_unclassified_script_keys(self):
         with tempfile.TemporaryDirectory() as value:

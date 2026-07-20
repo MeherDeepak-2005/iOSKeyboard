@@ -1188,8 +1188,23 @@ final class KeyboardEngine {
 
 	private func tenglishToTeluguSnapshot(for request: DecodeRequest) -> DecodeSnapshot {
 		let currentWord = request.currentWord
+		if currentWord.isEmpty {
+			let predictions = teluguLexicon.suggestions(prefix: "",
+				context: request.context, limit: 8)
+				.filter { !lexicon.isProfane($0) }
+			let evidence = predictions.map {
+				DecodeCandidateEvidence(word: $0, score: 0, spatialCost: 0,
+					logFrequency: 0, logLanguageProbability: 0,
+					source: .completion, typedWordMargin: 0)
+			}
+			return DecodeSnapshot(request: request,
+				suggestions: Array(predictions.prefix(3)), candidates: evidence,
+				correction: nil, confidence: 0, nextCharacterPriors: [:],
+				modelTier: .ngram,
+				completedAtUptime: ProcessInfo.processInfo.systemUptime)
+		}
 		let candidates = transliterator.candidates(for: currentWord.lowercased(),
-			context: request.context)
+			context: request.context, limit: 16)
 			.filter { !lexicon.isProfane($0.text) }
 			.sorted {
 				$0.score + teluguLexicon.contextBonus(for: $0.text, context: request.context)
