@@ -29,7 +29,10 @@ export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 LM_DIR="${LM_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 DATA_DIR="${DATA_DIR:-$LM_DIR/data}"
 TOKENIZER="${TOKENIZER:-$DATA_DIR/qwen_spm.model}"   # shared with the distill teacher (6k)
-TEACHER="${TEACHER:-$DATA_DIR/qwen_pretrain.pt}"      # the 10.6M transformer
+# The 10.6M distill teacher. Prefer the MESSAGING-adapted finetune.pt over the broad
+# qwen_pretrain.pt — the distill runs before the messaging fine-tune, and a stronger
+# base teacher helps more (finetune.pt reportedly ~54 messaging ppl vs the GRU's ~250).
+TEACHER="${TEACHER:-$DATA_DIR/qwen_pretrain.pt}"
 CORPUS="${CORPUS:-$DATA_DIR/corpus.txt}"
 FINETUNE_DATA="${FINETUNE_DATA:-$DATA_DIR/gru_finetune.txt}"
 HELDOUT="${HELDOUT:-$DATA_DIR/messaging_heldout.txt}"
@@ -44,7 +47,6 @@ DO_DISTILL="${DO_DISTILL:-1}"
 DRIVE_OUT="${DRIVE_OUT:-}"                            # optional checkpoint mirror
 
 GRU="$DATA_DIR/gru.pt"
-GRU_DISTILLED="$DATA_DIR/gru_distilled.pt"
 
 # ------------------------------- helpers -------------------------------------
 START=$(date +%s)
@@ -96,43 +98,38 @@ fi
 cd "$LM_DIR"
 COMMON=(--device cuda --tokenizer "$TOKENIZER" --batch-tokens "$BATCH_TOKENS")
 
+# ORDER MATTERS: pretrain -> distill -> fine-tune. The messaging fine-tune must be the
+# LAST stage, or a corpus-register distill reverts the adaptation (observed: messaging
+# top-1 21.7% collapsed to 9.8% when distill ran last on the corpus).
+
 # ------------------------------- stage 1 -------------------------------------
 banner "Stage 1/4  PRETRAIN  (full corpus, ${PRETRAIN_EPOCHS} epochs)"
 python3 train_gru.py "${COMMON[@]}" --data "$CORPUS" --out "$GRU" --epochs "$PRETRAIN_EPOCHS"
 
 # ------------------------------- stage 2 -------------------------------------
-banner "Stage 2/4  FINE-TUNE  (messaging register, ${FINETUNE_EPOCHS} epochs)"
+if [[ "$DO_DISTILL" == "1" ]]; then
+  banner "Stage 2/4  DISTILL  (teacher soft targets on the corpus, ${DISTILL_EPOCHS} epochs)"
+  python3 train_gru.py "${COMMON[@]}" --finetune --data "$CORPUS" \
+    --teacher "$TEACHER" --out "$GRU" --epochs "$DISTILL_EPOCHS"
+else
+  banner "Stage 2/4  DISTILL  (skipped — DO_DISTILL=0)"
+fi
+
+# ------------------------------- stage 3 -------------------------------------
+banner "Stage 3/4  FINE-TUNE  (messaging register — LAST, ${FINETUNE_EPOCHS} epochs)"
 python3 train_gru.py "${COMMON[@]}" --finetune --data "$FINETUNE_DATA" \
   --out "$GRU" --epochs "$FINETUNE_EPOCHS"
 
-# ------------------------------- stage 3 -------------------------------------
-if [[ "$DO_DISTILL" == "1" ]]; then
-  banner "Stage 3/4  DISTILL  (from 10.6M teacher on the corpus, ${DISTILL_EPOCHS} epochs)"
-  # Resume the fine-tuned weights, then continue with the teacher's soft targets.
-  cp "$GRU" "$GRU_DISTILLED"
-  python3 train_gru.py "${COMMON[@]}" --finetune --data "$CORPUS" \
-    --teacher "$TEACHER" --out "$GRU_DISTILLED" --epochs "$DISTILL_EPOCHS"
-else
-  banner "Stage 3/4  DISTILL  (skipped — DO_DISTILL=0)"
-fi
-
 # ------------------------------- stage 4 -------------------------------------
 banner "Stage 4/4  EVALUATE  (held-out messaging)"
-echo "---- fine-tuned GRU ($GRU) ----"
 python3 eval_gru.py --checkpoint "$GRU" --tokenizer "$TOKENIZER" \
   --heldout "$HELDOUT" --device cuda
-if [[ "$DO_DISTILL" == "1" ]]; then
-  echo; echo "---- distilled GRU ($GRU_DISTILLED) ----"
-  python3 eval_gru.py --checkpoint "$GRU_DISTILLED" --tokenizer "$TOKENIZER" \
-    --heldout "$HELDOUT" --device cuda
-fi
 
 # ------------------------------- mirror --------------------------------------
 if [[ -n "$DRIVE_OUT" ]]; then
-  banner "Mirroring checkpoints to $DRIVE_OUT"
+  banner "Mirroring checkpoint to $DRIVE_OUT"
   mkdir -p "$DRIVE_OUT"
   cp "$GRU" "$DRIVE_OUT/"
-  [[ "$DO_DISTILL" == "1" ]] && cp "$GRU_DISTILLED" "$DRIVE_OUT/"
   echo "  mirrored: $(ls -1 "$DRIVE_OUT")"
 fi
 
