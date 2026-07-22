@@ -22,6 +22,9 @@
 # =============================================================================
 set -euo pipefail
 
+# Reduce CUDA fragmentation (Colab's error message recommends this).
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+
 # ------------------------------- config --------------------------------------
 LM_DIR="${LM_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 DATA_DIR="${DATA_DIR:-$LM_DIR/data}"
@@ -33,7 +36,10 @@ HELDOUT="${HELDOUT:-$DATA_DIR/messaging_heldout.txt}"
 PRETRAIN_EPOCHS="${PRETRAIN_EPOCHS:-6}"
 FINETUNE_EPOCHS="${FINETUNE_EPOCHS:-4}"
 DISTILL_EPOCHS="${DISTILL_EPOCHS:-4}"
-BATCH_TOKENS="${BATCH_TOKENS:-131072}"               # bigger batch on a real GPU
+# Sized for a 15 GB T4: the [B, L, 6000] logits (x2 during distillation) are the
+# memory bound, not the 2.3M GRU. 16384 tok -> ~500 seq/batch -> ~0.4 GB logits.
+# Raise it on a bigger GPU (A100 40 GB: 65536 is fine); lower it if you still OOM.
+BATCH_TOKENS="${BATCH_TOKENS:-16384}"
 DO_DISTILL="${DO_DISTILL:-1}"
 DRIVE_OUT="${DRIVE_OUT:-}"                            # optional checkpoint mirror
 
