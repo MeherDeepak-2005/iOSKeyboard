@@ -532,3 +532,184 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 		#endif
 	}
 }
+
+/// GRU streaming search-prior (roadmap Plan 3). Conforms to the SAME NeuralLanguagePrior
+/// seam as the transformer above, so it inherits the engine's ranking blend, per-word tier
+/// freeze, and memory handling for free. FAIL-SAFE: with no bundled model/tokenizer, `isReady`
+/// stays false and the engine ranks on the n-gram alone — production/`main` is untouched.
+///
+/// UNVERIFIED until `gru.mlpackage` is exported (Colab, coremltools) and bundled: `step` runs
+/// the exported forward_step (token + explicit recurrent state → logits + new state). It
+/// compiles against the generic MLModel API, but its numeric path — and the streaming-vs-
+/// batched score-export choice — can only be validated with the real model plus a running
+/// keyboard. See the GRU integration walkthrough.
+final class GRULanguagePrior: NeuralLanguagePrior, @unchecked Sendable {
+	let modelTier: DecodeModelTier = .neuralGRU
+
+	private enum GRUError: Error { case notReady, badOutput }
+	private struct Session { let contextTokens: [Int32] }
+
+	private let compiledURL: URL?
+	private let packageURL: URL?
+	private let tokenizer: KeyboardSentencePieceTokenizer?
+	private let layers: Int
+	private let hidden: Int
+	private let queue = DispatchQueue(label: "keyboard.neural.gru", qos: .userInitiated)
+	private let lock = NSLock()
+	private var model: MLModel?
+	private var loading = false
+	private var sessions: [UInt64: Session] = [:]
+
+	static func bundled() -> GRULanguagePrior {
+		GRULanguagePrior(
+			compiledURL: Bundle.main.url(forResource: "gru", withExtension: "mlmodelc"),
+			packageURL: Bundle.main.url(forResource: "gru", withExtension: "mlpackage"),
+			tokenizerURL: Bundle.main.url(forResource: "gru_tokenizer", withExtension: "bin"))
+	}
+
+	init(compiledURL: URL?, packageURL: URL?, tokenizerURL: URL?,
+		layers: Int = 2, hidden: Int = 256) {
+		self.compiledURL = compiledURL
+		self.packageURL = packageURL
+		self.tokenizer = tokenizerURL.flatMap(KeyboardSentencePieceTokenizer.init(url:))
+		self.layers = layers
+		self.hidden = hidden
+		prepareForSelection()
+	}
+
+	var isReady: Bool { lock.lock(); defer { lock.unlock() }; return model != nil }
+
+	func prepareForSelection() {
+		lock.lock()
+		guard tokenizer != nil, compiledURL != nil || packageURL != nil,
+			model == nil, !loading else { lock.unlock(); return }
+		loading = true
+		lock.unlock()
+		queue.async { [weak self] in self?.loadModel() }
+	}
+
+	private func loadModel() {
+		do {
+			let url: URL
+			if let compiledURL { url = compiledURL }
+			else if let packageURL { url = try MLModel.compileModel(at: packageURL) }
+			else { lock.lock(); loading = false; lock.unlock(); return }
+			let configuration = MLModelConfiguration()
+			configuration.computeUnits = .cpuAndNeuralEngine
+			let loaded = try MLModel(contentsOf: url, configuration: configuration)
+			lock.lock(); model = loaded; loading = false; lock.unlock()
+		} catch {
+			lock.lock(); model = nil; loading = false; lock.unlock()
+		}
+	}
+
+	func prepareContext(_ words: [String], wordSessionID: UInt64) {
+		guard let tokenizer else { return }
+		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
+		tokens += tokenizer.encode(words.suffix(12).joined(separator: " ").lowercased())
+		lock.lock(); sessions[wordSessionID] = Session(contextTokens: tokens); lock.unlock()
+	}
+
+	func discardSession(_ wordSessionID: UInt64) {
+		lock.lock(); sessions[wordSessionID] = nil; lock.unlock()
+	}
+
+	func handleMemoryPressure() {
+		lock.lock(); model = nil; lock.unlock()
+	}
+
+	func score(candidates: [String], wordSessionID: UInt64,
+		completion: @escaping (Result<[String: Double], Error>) -> Void) {
+		guard !candidates.isEmpty else { completion(.success([:])); return }
+		lock.lock(); let session = sessions[wordSessionID]; let ready = model; lock.unlock()
+		guard let session, let ready, let tokenizer else {
+			prepareForSelection()
+			completion(.failure(GRUError.notReady))
+			return
+		}
+		let bounded = Array(candidates.prefix(32))
+		queue.async { [weak self] in
+			guard let self else { return }
+			do {
+				let scores = try self.streamScore(bounded, session: session,
+					model: ready, tokenizer: tokenizer)
+				DispatchQueue.main.async { completion(.success(scores)) }
+			} catch {
+				DispatchQueue.main.async { completion(.failure(error)) }
+			}
+		}
+	}
+
+	/// One log P(word | context) per candidate: rebuild the recurrent state over the context,
+	/// then thread each candidate's word tokens, summing log-softmax of each realized token.
+	/// Per-token prediction has overhead; a batched score export is the perf optimization.
+	private func streamScore(_ candidates: [String], session: Session, model: MLModel,
+		tokenizer: KeyboardSentencePieceTokenizer) throws -> [String: Double] {
+		let contextState = try runContext(session.contextTokens, model: model)
+		let previousToken = session.contextTokens.last ?? tokenizer.padID
+		var out: [String: Double] = [:]
+		for word in candidates {
+			let wordTokens = tokenizer.encode(word.lowercased())
+			guard !wordTokens.isEmpty else { continue }
+			var state = try duplicate(contextState)
+			var previous = previousToken
+			var logProbability = 0.0
+			for token in wordTokens {
+				let (logits, nextState) = try step(previous, state: state, model: model)
+				logProbability += logSoftmax(logits, at: Int(token))
+				state = nextState
+				previous = token
+			}
+			out[word.lowercased()] = logProbability
+		}
+		return out
+	}
+
+	private func runContext(_ tokens: [Int32], model: MLModel) throws -> MLMultiArray {
+		var state = try zeroState()
+		var previous = tokenizer?.padID ?? 0
+		for token in tokens {
+			let (_, nextState) = try step(previous, state: state, model: model)
+			state = nextState
+			previous = token
+		}
+		return state
+	}
+
+	private func step(_ token: Int32, state: MLMultiArray, model: MLModel) throws
+		-> (logits: MLMultiArray, state: MLMultiArray) {
+		let tokenArray = try MLMultiArray(shape: [1, 1], dataType: .int32)
+		tokenArray[0] = NSNumber(value: token)
+		let provider = try MLDictionaryFeatureProvider(dictionary: [
+			"token": tokenArray, "state_in": state])
+		let output = try model.prediction(from: provider)
+		guard let logits = output.featureValue(for: "logits")?.multiArrayValue,
+			let newState = output.featureValue(for: "state_out")?.multiArrayValue else {
+			throw GRUError.badOutput
+		}
+		return (logits, newState)
+	}
+
+	private func zeroState() throws -> MLMultiArray {
+		let state = try MLMultiArray(
+			shape: [NSNumber(value: layers), 1, NSNumber(value: hidden)], dataType: .float32)
+		for index in 0..<state.count { state[index] = 0 }
+		return state
+	}
+
+	private func duplicate(_ source: MLMultiArray) throws -> MLMultiArray {
+		let clone = try MLMultiArray(shape: source.shape, dataType: source.dataType)
+		for index in 0..<source.count { clone[index] = source[index] }
+		return clone
+	}
+
+	private func logSoftmax(_ logits: MLMultiArray, at index: Int) -> Double {
+		let count = logits.count
+		guard index >= 0, index < count else { return -30 }
+		var maximum = -Double.greatestFiniteMagnitude
+		for i in 0..<count { maximum = max(maximum, logits[i].doubleValue) }
+		var sum = 0.0
+		for i in 0..<count { sum += exp(logits[i].doubleValue - maximum) }
+		return logits[index].doubleValue - maximum - log(sum)
+	}
+}

@@ -183,7 +183,9 @@ final class KeyboardEngine {
 	/// Process-wide engine: iOS may prewarm more than one controller, while language
 	/// data and personalization should be loaded exactly once per extension process.
 	static let shared: KeyboardEngine = {
-		#if DEBUG || INTERNAL_NEURAL
+		#if INTERNAL_GRU
+		return KeyboardEngine(neuralPrior: GRULanguagePrior.bundled())
+		#elseif DEBUG || INTERNAL_NEURAL
 		return KeyboardEngine(neuralPrior: CoreMLNeuralLanguagePrior.bundled())
 		#else
 		return KeyboardEngine()
