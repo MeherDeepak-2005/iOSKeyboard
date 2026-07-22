@@ -85,17 +85,33 @@ device. Until then it never loads a model, so it's inert.
 
 ---
 
-## 4. Two layers: this is the rescorer, not yet the in-trie search
+## 4. Two layers — both now implemented
 
-- **Layer 1 — rescorer (this branch).** The GRU scores the candidate list the trie already
-  produced, and the score is blended into ranking. This improves *ordering* and the
-  autocorrect decision. It does **not** change which candidates exist.
-- **Layer 2 — LM-in-the-loop trie search (next, larger).** To close the ~85.6% oracle-recall
-  ceiling, the GRU must guide *generation*: score partial paths during `Trie.recurse` /
-  `IncrementalDecodeSession` and keep/prune branches by a joint `channelCost + λ·(−logP_GRU)`.
-  This is where the GRU's O(1) streaming state and the **single-step** `forward_step` export
-  pay off (branch the state across the beam frontier). It rewrites the core walk and is its
-  own milestone — deliberately not faked here.
+- **Layer 1 — rescorer.** The neural prior scores the candidate list and blends into ranking.
+  Redundant with the transformer; kept only as the tested seam.
+- **Layer 2 — NN-LM IN the trie (context-aware generation).** ✅ **Implemented.** A
+  `TrieSearchPrior`, built from the LM's likely next words, funds extra edit budget along
+  those words' prefixes *inside* the trie walk — so a context-plausible word just outside the
+  fixed edit radius is **generated**, not merely re-ranked. This is the piece that attacks the
+  ~85.6% oracle-recall ceiling.
+  - **Where:** `TrieSearchPrior` + threaded through `Trie.recurse` ([Trie.swift](keyboard/Engine/Trie.swift))
+    **and** the mmap production walk `LangData.trieSearch` ([LangData.swift](keyboard/Engine/LangData.swift)),
+    byte-identical to before when the prior is `nil`.
+  - **Scope:** wired into the **recovery** search (`broadCorrections`) via
+    `KeyboardEngine.contextSearchPrior`, *not* the close search. Rationale — proven live: a
+    prior on the close search dragged "sebd" → "see" over the spatially-correct "send"
+    (`looseCandidatesCannotBeatCloseChannelMatches`). The recovery pool already rides the
+    channel-dominance guards, which keep the rescue honest.
+  - **Prior source:** the shipped **n-gram** now (functional today). The **GRU's next-word
+    distribution** is the drop-in upgrade — swap `ngram.nextWords` for the GRU in
+    `contextSearchPrior`; the search is identical, only the prior gets smarter (and more
+    trustworthy, which is what lets the guards relax).
+  - **Test:** `trieSearchPriorExpandsContextPlausibleWords` proves a word outside the base
+    radius is generated, at its true channel cost, without fabricating unfunded words.
+
+  *Honest scope:* this is word-**prefix**-funded budget expansion — a real, shipping-safe form
+  of LM-in-the-trie. A full per-**character** neural beam (a char-level GRU threaded node-by-node,
+  pruning by a joint spatial+neural score) is the further step; it needs a char-level model.
 
 ---
 
