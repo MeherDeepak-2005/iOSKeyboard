@@ -58,7 +58,9 @@ def main():
     ap.add_argument("--out", type=Path, default=DATA / "gru.pt")
     ap.add_argument("--device", default="auto", choices=["auto", "cpu", "mps", "cuda"])
     ap.add_argument("--max-lines", type=int, default=0, help="cap corpus lines (0 = all)")
-    ap.add_argument("--batch-tokens", type=int, default=65536)
+    # The [B, L, vocab] logits (doubled during distillation) dominate GPU memory, not
+    # the 2.3M GRU. 32768 fits a 15 GB T4; drop to 16384 if a distill run OOMs.
+    ap.add_argument("--batch-tokens", type=int, default=32768)
     ap.add_argument("--layers", type=int, default=2)
     ap.add_argument("--d-model", type=int, default=256)
     ap.add_argument("--tokenizer", type=Path, default=DATA / "spm.model",
@@ -130,7 +132,7 @@ def main():
                     F.log_softmax(teacher_logits.reshape(-1, vocab) / temp, dim=-1),
                     reduction="batchmean", log_target=True) * (temp * temp)
                 loss = args.distill_alpha * loss + (1 - args.distill_alpha) * soft
-            opt.zero_grad()
+            opt.zero_grad(set_to_none=True)              # frees grad buffers each step
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
