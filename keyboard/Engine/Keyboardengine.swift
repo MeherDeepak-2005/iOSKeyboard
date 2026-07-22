@@ -1473,6 +1473,13 @@ final class KeyboardEngine {
 				// ranking and the precomputed autocorrect decision below (previously the
 				// trie DP ran twice — once here, once inside computeCorrection).
 				let normalCost = self.maxCost(for: lw.count)
+				// NN-LM in the trie: the words the LM expects next fund extra edit budget
+				// along their prefixes, so a context-plausible word just outside the base
+				// radius is GENERATED (recall). Applied ONLY to the recovery walk below —
+				// the close search stays pure-channel so a good spatial match ("sebd"→"send")
+				// is never dragged to an LM-plausible neighbour ("see"); the recovery pool
+				// already rides the channel-dominance guards that keep the rescue honest.
+				let searchPrior = self.contextSearchPrior(context)
 				let retained = self.retainedDecodeSession(for: request, word: lw,
 					taps: taps)
 				let corrections: [Candidate]
@@ -1506,7 +1513,7 @@ final class KeyboardEngine {
 					? Array(
 						(retained?.candidates(maxCost: normalCost * 2.0)
 							?? self.lexicon.broadCorrections(for: lw,
-								maxCost: normalCost * 2.0, taps: taps,
+								maxCost: normalCost * 2.0, taps: taps, prior: searchPrior,
 								shouldCancel: { [weak self] in self?.isLatest(gen) != true }))
 							.sorted {
 								let lhs = $0.cost - 0.12 * $0.logFreq
@@ -1887,6 +1894,20 @@ final class KeyboardEngine {
 				completion((rescored, request.requestedModelTier))
 			}
 		}
+	}
+
+	/// Context-conditioned trie search prior (NN-LM in the trie). The words the LM expects
+	/// to come next fund extra edit budget along their prefixes inside the trie walk, so a
+	/// context-plausible word just outside the fixed edit radius is generated. Empty context
+	/// or no predictions → nil, which reproduces today's exact pure-channel search. Source is
+	/// the shipped n-gram now; the GRU's next-word distribution is the drop-in upgrade — same
+	/// search, richer prior. Must run on `queue`.
+	private func contextSearchPrior(_ context: [String]) -> TrieSearchPrior? {
+		guard !context.isEmpty else { return nil }
+		let likely = ngram.nextWords(context: context, limit: 24)
+		guard !likely.isEmpty else { return nil }
+		let prior = TrieSearchPrior(likelyWords: likely)
+		return prior.isEmpty ? nil : prior
 	}
 
 	/// Must run on `queue`.

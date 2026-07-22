@@ -164,16 +164,18 @@ final class Lexicon {
 		return staticTrie ? langData : nil
 	}
 	func corrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
+					 prior: TrieSearchPrior? = nil,
 					 shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
 		lock.lock()
 		let data = staticTrie ? langData : nil
 		let boostSnapshot = boosts
-		var out = staticTrie ? [] : baseTrie.search(lw, maxCost: maxCost, taps: taps).map(boosted)
+		var out = staticTrie ? [] : baseTrie.search(lw, maxCost: maxCost,
+			taps: taps, prior: prior).map(boosted)
 		out += supplementaryTrie.search(lw, maxCost: maxCost, taps: taps)
 		out += personalTrie.search(lw, maxCost: maxCost, taps: taps)
 		lock.unlock()
 		if let data {
-			out += data.trieSearch(lw, maxCost: maxCost, taps: taps,
+			out += data.trieSearch(lw, maxCost: maxCost, taps: taps, prior: prior,
 				shouldCancel: shouldCancel).map { Self.applying(boostSnapshot, to: $0) }
 		}
 		return out
@@ -217,12 +219,13 @@ final class Lexicon {
 	/// — the mmap data is immutable so the walk is safe. Dynamic trie is intentionally skipped
 	/// (adopted words are already close to correctly-typed forms and don't need the wide budget).
 	func broadCorrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
+						  prior: TrieSearchPrior? = nil,
 						  shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
 		lock.lock()
 		guard staticTrie, let ld = langData else { lock.unlock(); return [] }
 		let snap = boosts   // COW snapshot — O(1) under the lock
 		lock.unlock()
-		return ld.trieSearch(lw, maxCost: maxCost, taps: taps,
+		return ld.trieSearch(lw, maxCost: maxCost, taps: taps, prior: prior,
 			shouldCancel: shouldCancel).map { Self.applying(snap, to: $0) }
 	}
 
