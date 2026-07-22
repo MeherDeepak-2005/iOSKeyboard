@@ -198,6 +198,7 @@ enum KBSettings {
 		static let haptics  = "kb.haptics"
 		static let language = "kb.language"
 		static let glideCap = "kb.glidecapture"
+		static let neuralEnabled = "kb.neural.enabled"
 		static let hasUsed  = "kb.hasused"
 		static let lastSeen = "kb.keyboard.lastSeen"
 		static let fullAccess = "kb.fullaccess"
@@ -359,6 +360,20 @@ enum KBSettings {
 	static var glideCapture: Bool {
 		get { store.object(forKey: Key.glideCap) as? Bool ?? false }
 		set { store.set(newValue, forKey: Key.glideCap) }
+	}
+
+	/// On/off switch for the neural rescorer. Default on. Inert in Release builds, which
+	/// bundle no neural prior (the tier is always n-gram there); it only has an effect in
+	/// Debug / INTERNAL_NEURAL builds that load a prior. The engine reads it fresh at each
+	/// word-session boundary, so toggling it takes effect on the next word — no rebuild.
+	static var neuralEnabled: Bool {
+		get { store.object(forKey: Key.neuralEnabled) as? Bool ?? true }
+		set {
+			store.set(newValue, forKey: Key.neuralEnabled)
+			// Wake the extension process so the next word session re-reads the flag,
+			// instead of waiting for a keyboard restart / lazy cross-process sync.
+			postConfigurationChange()
+		}
 	}
 
 	/// URL of the on-device personalisation model in the shared App Group container.

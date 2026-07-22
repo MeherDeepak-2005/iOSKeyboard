@@ -72,8 +72,8 @@ final class keyboardUITests: XCTestCase {
 		}
 		XCTAssertTrue(progress.waitForExistence(timeout: 2))
 		progress.tap()
-		XCTAssertTrue(app.navigationBars["Progress"].waitForExistence(timeout: 2))
-		XCTAssertTrue(app.staticTexts["Words entered"].exists)
+		XCTAssertTrue(app.navigationBars["Achievements"].waitForExistence(timeout: 2))
+		XCTAssertTrue(app.staticTexts["Last 14 days"].exists)
 		add(XCTAttachment(screenshot: app.screenshot()))
 	}
 

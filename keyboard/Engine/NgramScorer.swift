@@ -16,6 +16,11 @@ final class NgramScorer {
 	/// turn into a near-certain unigram or context prediction.
 	private let minPersonalEvidence = 3
 	private let minNovelPredictionEvidence = 5
+	/// A single corpus observation can refine the score of an already plausible fuzzy
+	/// candidate, but is not enough evidence to inject a distant next-word candidate.
+	/// Compact backoff LMs normally prune singleton continuations; enforcing that rule
+	/// in the prediction funnel also protects old packs that still contain them.
+	private static let minCorpusContinuationEvidence = 2
 
 	init(user: UserModel) { self.user = user }
 	func attach(data: LangData?, resolveID: @escaping (String) -> Int32?, lexicon: Lexicon) {
@@ -161,7 +166,9 @@ final class NgramScorer {
 		// OOV strings (typos, adopted words, contact names) are excluded — they must
 		// not surface in next-word predictions just because the user typed them recently.
 		var m: [String: Int] = [:]
-		for e in base ?? [] { m[data?.word(Int(e.word)) ?? "", default: 0] += e.count }
+		for e in base ?? [] where e.count >= Self.minCorpusContinuationEvidence {
+			m[data?.word(Int(e.word)) ?? "", default: 0] += e.count
+		}
 		for (w, c) in userCounts where lexicon?.isStaticWord(w) == true {
 			if m[w] != nil, c >= minPersonalEvidence {
 				m[w, default: 0] += min(c - minPersonalEvidence + 1, 8)

@@ -368,6 +368,13 @@ final class KeyboardViewController: UIInputViewController {
 		if firstConnection {
 			hostConnectionReady = true
 			KBSettings.markKeyboardObserved(fullAccess: hasFullAccess)
+			// Resolve strip visibility BEFORE the (possible) globe rebuild so the keyboard
+			// is constructed once in its final geometry. Rebuilding first and hiding the
+			// strip second produced two layout passes on first connection; a tap that
+			// landed in that window hit a view mid-relayout and was dropped, which read as
+			// "the keyboard isn't clickable right after it appears". buildKeyboard() re-applies
+			// the resolved strip state (see its `suggestionModeResolved` branch).
+			resolveSuggestionModeIfNeeded()
 			let requiresSwitchKey = needsInputModeSwitchKey
 			if showsGlobe != requiresSwitchKey {
 				showsGlobe = requiresSwitchKey
@@ -590,8 +597,13 @@ final class KeyboardViewController: UIInputViewController {
 	/// Replaces an exact suffix without assuming that UIKit and Swift use the same
 	/// deletion unit for Indic text. This is intentionally reserved for explicit
 	/// correction/pick transactions, never the ordinary letter insertion path.
+	/// Deletes issued by the most recent `replaceHostSuffix` call, for the pick/revert
+	/// diagnostic (#3) — read immediately after the call, before any other edit.
+	private var lastReplaceDeleteCount = 0
+
 	@discardableResult
 	private func replaceHostSuffix(_ suffix: String, with replacement: String) -> Bool {
+		lastReplaceDeleteCount = 0
 		guard let initial = textDocumentProxy.documentContextBeforeInput,
 			let plan = HostSuffixReplacementPlan(contextBeforeInput: initial,
 				suffix: suffix, replacement: replacement) else { return false }
@@ -605,6 +617,7 @@ final class KeyboardViewController: UIInputViewController {
 				return false
 			case .deleteBackward:
 				textDocumentProxy.deleteBackward()
+				lastReplaceDeleteCount += 1
 				guard let updated = textDocumentProxy.documentContextBeforeInput,
 					updated != context else { return false }
 				context = updated
@@ -1046,6 +1059,14 @@ final class KeyboardViewController: UIInputViewController {
 		}
 
 		// Every pick except the bar-undo means any pending autocorrect stood.
+		let pickMode: (label: String, replacing: String) = {
+			switch mode {
+			case .complete(let partial): return ("complete", partial)
+			case .predict: return ("predict", "")
+			case .revert(let original): return ("revert", original)
+			case .glided(let committed): return ("glided", committed)
+			}
+		}()
 		if case .revert(let original) = mode, s == original {} else { resolveCorrectionAsAccepted() }
 		switch mode {
 		case .complete(let partial):
@@ -1105,6 +1126,9 @@ final class KeyboardViewController: UIInputViewController {
 			updateAutoShift()
 			return                               // keep the alternatives on the bar
 		}
+		KBDiagnostics.logPick(mode: pickMode.label, replacing: pickMode.replacing, with: s,
+			contextTail: String((textDocumentProxy.documentContextBeforeInput ?? "").suffix(24)),
+			deletes: lastReplaceDeleteCount, inserted: true)
 		updateAutoShift()
 		scheduleSuggestions()
 	}

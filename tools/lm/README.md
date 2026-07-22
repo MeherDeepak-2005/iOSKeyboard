@@ -59,6 +59,31 @@ python -m unittest discover -s . -p 'test_*.py'
 Consult each script before running it. Several scripts reference large local data
 or optional ML packages and are not part of the Xcode build.
 
+## Streaming GRU search-prior challenger (roadmap Plan 3)
+
+`model.py` also defines `KeyboardGRULM` (~2.3M params, `GRUModelConfig`) — a streaming
+recurrent LM over the same 6k SentencePiece vocab as the transformers. Its purpose is
+**in-loop candidate scoring**: a fixed-size recurrent state makes scoring one more
+character O(1) with no growing KV-cache, so the decoder can thread it through a packed
+prefix-continuation graph and score partial paths at every trie depth. `forward_step`
+threaded token-by-token reproduces the batched `forward` exactly (asserted in
+`test_gru_model.py` and re-checked at eval time as "streaming drift").
+
+Same corpus, tokenizer, packing (L=32), and per-register perplexity as `train_lm.py`,
+so results are directly comparable to TinyLM / the 10.6M student:
+
+```bash
+python prepare_gru_finetune.py                    # data/gru_finetune.txt from dailydialog+sms
+python train_gru.py                               # pretrain on data/corpus.txt -> data/gru.pt
+python train_gru.py --finetune                    # adapt toward the messaging register
+python eval_gru.py --checkpoint data/gru.pt       # held-out ppl, next-token top-1/5, parity
+python -m unittest test_gru_model -v
+```
+
+The GRU is a research challenger and is subject to the **same promotion gates above**;
+nothing here ships until they pass. Distillation from the cached Qwen teacher and a
+Core ML stateful export are the natural follow-ups.
+
 The production comparison and confidence-interval harness lives in
 `tools/evaluation/`; use that task-level result, not token perplexity, to decide
 whether a model is eligible for promotion.
