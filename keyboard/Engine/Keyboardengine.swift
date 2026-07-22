@@ -115,6 +115,13 @@ final class KeyboardEngine {
 	/// a correction fires. Genuine typos clear it by 8–15; slang/names that fit the
 	/// context sit near 0 and survive uncorrected — no lexicon entry needed. Active
 	private let correctionMargin = 3.0
+	/// Broad recovery is reached only for long OOV input after the normal-radius trie
+	/// fails. A ten-to-one posterior win over the literal plus a two-to-one win over
+	/// an unrelated runner-up is sufficient there; requiring the normal typo margin
+	/// discarded useful severe recoveries even after singleton context injection was
+	/// removed.
+	private let severeRecoveryMargin = log(10.0)
+	private let severeRunnerUpMargin = log(2.0)
 	/// Real-word correction (the "hoe → how", "js → is" case): a word that IS in the
 	/// dictionary is only replaced when a near-neighbour real word dominates it in
 	/// context by this much — far stricter than `correctionMargin`, because wrongly
@@ -212,8 +219,9 @@ final class KeyboardEngine {
 	/// a second ranking path in the controller.
 	func preferredModelTier(for languageMode: KBLanguageMode) -> DecodeModelTier {
 		neuralPrior?.prepareForSelection()
+		let neuralAllowed = KBSettings.neuralEnabled
 		let tier: DecodeModelTier
-		if languageMode == .english, let neuralPrior, neuralPrior.isReady {
+		if languageMode == .english, let neuralPrior, neuralPrior.isReady, neuralAllowed {
 			tier = neuralPrior.modelTier
 		} else {
 			tier = .ngram
@@ -226,6 +234,9 @@ final class KeyboardEngine {
 		} else if neuralPrior == nil {
 			KBDiagnostics.recordNeuralState(tier: .ngram, ready: false,
 				state: "not-configured")
+		} else if !neuralAllowed {
+			KBDiagnostics.recordNeuralState(tier: .ngram,
+				ready: neuralPrior?.isReady ?? false, state: "disabled-by-setting")
 		} else if tier != .ngram {
 			KBDiagnostics.recordNeuralState(tier: tier, ready: true, state: "ready")
 		}
@@ -298,6 +309,14 @@ final class KeyboardEngine {
 	/// They sit beneath the ≥3-char gate the fuzzy path uses, so they're special-cased.
 	private static let iForms: Set<String> = ["i", "i'm", "i'll", "i've", "i'd"]
 
+	/// Left-context words that make a following "id" the noun (an ID), not "I'd"/"is".
+	/// Possessives and articles only — demonstratives ("this"/"that") are deliberately
+	/// excluded so "this id" can still correct to "this is".
+	private static let idNounDeterminers: Set<String> = [
+		"my", "your", "his", "her", "our", "their", "a", "an", "the",
+		"valid", "fake", "user", "login", "student", "employee", "email", "caller",
+	]
+
 	private struct CorrectionDecision {
 		let word: String?
 		/// Winner minus typed-word score in natural-log units. This is the actual
@@ -310,13 +329,50 @@ final class KeyboardEngine {
 			+ freqWeight * candidate.logFrequency
 	}
 
+	/// The user typed a trailing 's' that the bare-base correction would DROP; if
+	/// base+"'s" is a real contraction it renders the typed letters better ("thads" →
+	/// base "that", but the typed 's' means "that's"). Validity-gated, so only genuine
+	/// dictionary contractions are ever promoted.
+	private func contractionPreservingTypedSuffix(base: String, typed lw: String) -> String? {
+		guard lw.hasSuffix("s"), !base.hasSuffix("s") else { return nil }
+		let contraction = base + "'s"
+		guard lexicon.contains(contraction), !lexicon.isProfane(contraction) else { return nil }
+		return contraction
+	}
+
+	/// Context-aware next-character priors for key-target resizing (Plan 1). The
+	/// context-free trie prior (`base`) is lifted wherever the in-context ranking already
+	/// favours a completion extending the current prefix: the character each higher-ranked
+	/// completion adds gets a rank-decayed weight, normalized, and folded in with MAX so
+	/// context can only ENLARGE a likely key, never shrink one below its lexical baseline.
+	private func contextualCharPriors(evidence: [DecodeCandidateEvidence], prefix lw: String,
+									  base: [Character: Double]) -> [Character: Double] {
+		guard !lw.isEmpty else { return base }
+		var contextual: [Character: Double] = [:]
+		var weight = 1.0
+		for candidate in evidence
+			where candidate.word.count > lw.count && candidate.word.hasPrefix(lw) {
+			let next = candidate.word[candidate.word.index(candidate.word.startIndex,
+				offsetBy: lw.count)]
+			contextual[next, default: 0] += weight
+			weight *= 0.85
+		}
+		guard let top = contextual.values.max(), top > 0 else { return base }
+		var out = base
+		for (character, value) in contextual {
+			out[character] = Swift.max(out[character] ?? 0, value / top)
+		}
+		return out
+	}
+
 	/// Decide from the same already-scored table used by the suggestion strip. The
 	/// language model is never invoked here; display and commit therefore share one
 	/// candidate generation pass and one prior batch.
 	private func correction(from scored: [RankedCandidate], correctionCosts: [String: Double],
 							typed lw: String, context: [String],
 							split: (candidate: Candidate, a: String, b: String)?,
-							looseWords: Set<String> = []) -> CorrectionDecision {
+							looseWords: Set<String> = [],
+							broadRecoveryWords: Set<String> = []) -> CorrectionDecision {
 		guard !isKept(lw) else { return CorrectionDecision(word: nil, margin: 0) }
 
 		guard let typed = scored.first(where: { $0.word == lw }) else {
@@ -339,6 +395,18 @@ final class KeyboardEngine {
 		// (the iOS-17 "hoe → how" behaviour). Allowed down to 2 chars because the strict
 		// margin + single-edit requirement make it safe there; runs on the n-gram too.
 		if lexicon.contains(lw) {
+			// "id" is a kept dictionary word (Freudian id / "your id"). At a sentence start
+			// it is almost always "I'd". A possessive/article before it marks the noun, so
+			// keep it. Any other left context falls through to the normal real-word branch,
+			// which corrects the near-homophone in context ("this id" -> "is"). Frequency
+			// alone can't separate these — "is" outweighs "id" everywhere — so the noun is
+			// protected by its determiner, not by the margin.
+			if lw == "id" {
+				if context.isEmpty { return CorrectionDecision(word: "i'd", margin: 100) }
+				if let previous = context.last, Self.idNounDeterminers.contains(previous) {
+					return CorrectionDecision(word: nil, margin: 0)
+				}
+			}
 			guard lw.count >= 2, let bestWord, lexicon.contains(bestWord),
 				  let cost = correctionCosts[bestWord], cost <= realWordMaxCost else {
 				return CorrectionDecision(word: nil, margin: 0)
@@ -382,9 +450,15 @@ final class KeyboardEngine {
 				+ lmWeight * ngram.pairLogProb(split.a, split.b, context: context)
 			if s > bestScore { bestWord = split.candidate.word; bestScore = s }
 		}
+		if let current = bestWord, !current.contains("'"),
+		   let promoted = contractionPreservingTypedSuffix(base: current, typed: lw) {
+			bestWord = promoted
+		}
 		guard let bestWord else { return CorrectionDecision(word: nil, margin: 0) }
 		let margin = bestScore - typedScore
-		var fire = margin > correctionMargin
+		let isSevereBroadRecovery = lw.count >= 8 && broadRecoveryWords.contains(bestWord)
+		let requiredMargin = isSevereBroadRecovery ? severeRecoveryMargin : correctionMargin
+		var fire = margin > requiredMargin
 		// A LOOSE winner (context injection / broad recovery) is a heavy rewrite of
 		// what the user typed. At those spatial costs the channel can no longer
 		// discriminate between candidates, so unless the language model clearly
@@ -399,10 +473,12 @@ final class KeyboardEngine {
 			let contender = eligible
 				.filter { $0.word != bestWord && !Self.nearForm($0.word, bestWord) }
 				.map(rawScore).max()
-			if let contender, bestScore - contender < looseRunnerUpMargin { fire = false }
+			let requiredRunnerUp = isSevereBroadRecovery
+				? severeRunnerUpMargin : looseRunnerUpMargin
+			if let contender, bestScore - contender < requiredRunnerUp { fire = false }
 		}
 		KBDiagnostics.logDecision(typed: lw, best: bestWord, margin: margin,
-								  threshold: correctionMargin, corrected: fire)
+								  threshold: requiredMargin, corrected: fire)
 		return CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
 	}
 
@@ -1367,7 +1443,8 @@ final class KeyboardEngine {
 			}
 			let publishEnglish: ([String], [DecodeCandidateEvidence], String?, Double,
 				DecodeModelTier) -> Void = { suggestions, evidence, decision, confidence, tier in
-				let priors = self.lexicon.nextCharPriors(prefix: lw)
+				let priors = self.contextualCharPriors(evidence: evidence, prefix: lw,
+					base: self.lexicon.nextCharPriors(prefix: lw))
 				guard self.isLatest(gen) else { return }
 				let snapshot = DecodeSnapshot(request: request, suggestions: suggestions,
 					candidates: evidence, correction: decision, confidence: confidence,
@@ -1522,11 +1599,13 @@ final class KeyboardEngine {
 								candidate.cost)
 						}
 						if let split { correctionCosts[split.candidate.word] = split.candidate.cost }
+						let broadRecoveryWords = broadWords.subtracting(closeWords)
 						let resolved = self.correction(from: ranked,
 							correctionCosts: correctionCosts, typed: lw,
 							context: context, split: split,
 							looseWords: broadWords.union(contextWords)
-								.subtracting(closeWords))
+								.subtracting(closeWords),
+							broadRecoveryWords: broadRecoveryWords)
 						decision = resolved.word
 						decisionConfidence = resolved.margin
 					}

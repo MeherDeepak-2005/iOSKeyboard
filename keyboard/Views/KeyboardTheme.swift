@@ -297,5 +297,8 @@ struct KeySpec {
 	var isInputModeSwitch: Bool = false
 	var isSpace: Bool = false
 	var alternatives: [String] = []
+	/// Multiplier on the key legend's point size. 1.0 for Latin; Telugu script keys pass
+	/// a smaller value so the tall multi-row Indic deck can use shorter, more compact keys.
+	var glyphScale: CGFloat = 1.0
 	var action: () -> Void
 }

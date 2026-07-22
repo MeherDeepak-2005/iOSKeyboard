@@ -244,6 +244,18 @@ enum KBDiagnostics {
 		#endif
 	}
 
+	/// Suggestion-pick trace (#3): the bar mode, the word being replaced, the picked
+	/// suggestion, the document tail, and how many deleteBackward calls the replace
+	/// transaction actually issued — so a "picking deletes the whole word" report
+	/// captures the exact replace that misfired instead of relying on a live repro.
+	static func logPick(mode: String, replacing: String, with picked: String,
+		contextTail: String, deletes: Int, inserted: Bool) {
+		#if DEBUG
+		guard verbose else { return }
+		rankLog.debug("[pick] mode=\(mode, privacy: .public) replace=\"\(replacing, privacy: .private(mask: .hash))\" -> \"\(picked, privacy: .private(mask: .hash))\" tail=\"\(contextTail, privacy: .private(mask: .hash))\" deletes=\(deletes, privacy: .public) inserted=\(inserted, privacy: .public)")
+		#endif
+	}
+
 	/// Next-word prediction: which words, and how many came from beam search vs n-gram.
 	static func logPredict(context: [String], words: [String], beam: Int, ngram: Int) {
 		#if DEBUG

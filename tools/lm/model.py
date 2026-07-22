@@ -303,6 +303,87 @@ class KeyboardStudentLM(nn.Module):
         return self.head(self.norm(hidden)), updated
 
 
+@dataclass(frozen=True)
+class GRUModelConfig:
+    """Streaming GRU LM — the in-loop search-prior challenger (roadmap Plan 3).
+
+    Unlike the transformers above, the GRU carries a fixed-size recurrent state, so
+    scoring one more character costs O(1) and needs no growing KV-cache. That is the
+    whole point: the keyboard decoder can thread this state through a packed
+    prefix-continuation graph and score partial paths at every trie depth cheaply.
+    d_model == hidden keeps the output head tied to the embedding (one weight matrix).
+    """
+    vocab_size: int = 6000
+    d_model: int = 256
+    hidden: int = 256
+    layers: int = 2
+    dropout: float = 0.1
+    max_length: int = 32          # kept only for packing/eval parity with the transformer
+
+    @classmethod
+    def from_dict(cls, value):
+        allowed = cls.__dataclass_fields__.keys()
+        return cls(**{key: value[key] for key in allowed if key in value})
+
+
+class KeyboardGRULM(nn.Module):
+    """~2.3M-param streaming GRU language model over the shared 6k SentencePiece vocab.
+
+    ``forward`` is used for training/eval (packed [B, L] sequences, next-token loss).
+    ``forward_step`` is the deployment interface: one token in, one state threaded out,
+    reproducing ``forward`` on the same sequence EXACTLY (guaranteed by the recurrence
+    and verified in test_gru_model.py). Nothing here references ``tokens.shape`` for a
+    dynamic int, so a single-step function traces cleanly to a Core ML stateful model.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.maxlen = config.max_length
+        self.embedding = nn.Embedding(config.vocab_size, config.d_model)
+        self.gru = nn.GRU(
+            config.d_model, config.hidden, config.layers,
+            batch_first=True, dropout=config.dropout if config.layers > 1 else 0.0,
+        )
+        self.norm = nn.LayerNorm(config.hidden)
+        self.head = nn.Linear(config.hidden, config.vocab_size, bias=False)
+        if config.hidden == config.d_model:
+            self.head.weight = self.embedding.weight        # tied — one matrix, not two
+        self.apply(self._initialize)
+
+    @staticmethod
+    def _initialize(module):
+        # nn.GRU seeds its own recurrent weights; only touch the embedding/head here so
+        # the tied logits don't start at the huge scale untied normal init would give.
+        if isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, std=0.02)
+        elif isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, std=0.02)
+            if getattr(module, "bias", None) is not None:
+                nn.init.zeros_(module.bias)
+
+    def hidden_states(self, tokens, state=None):
+        outputs, state = self.gru(self.embedding(tokens), state)   # [B, L, hidden]
+        return self.norm(outputs), state                           # LayerNorm is per-position
+
+    def forward(self, tokens):
+        states, _ = self.hidden_states(tokens)
+        return self.head(states)                                   # [B, L, vocab]
+
+    def empty_state(self, batch=1):
+        return self.embedding.weight.new_zeros(self.config.layers, batch, self.config.hidden)
+
+    def forward_step(self, token, state):
+        """One streaming step. ``token`` is [B] or [B, 1]; ``state`` is
+        [layers, B, hidden] (or None to start). Returns (logits [B, vocab], new_state).
+        Threading the returned state token-by-token reproduces ``forward`` on the whole
+        sequence — the O(1)-per-token property that makes this an in-loop search prior."""
+        if token.dim() == 1:
+            token = token.unsqueeze(1)
+        states, new_state = self.hidden_states(token, state)       # [B, 1, hidden]
+        return self.head(states[:, -1, :]), new_state              # [B, vocab]
+
+
 class SmoothLinear(nn.Linear):
     """Inference-only linear with an exactly compensating input-channel scale."""
 
@@ -371,7 +452,10 @@ def load_inference_checkpoint(path):
     except TypeError:  # torch < 2.6 has no weights_only argument
         checkpoint = torch.load(path, map_location="cpu")
 
-    if "model_config" in checkpoint:
+    if checkpoint.get("model_type") == "gru":
+        config = GRUModelConfig.from_dict(checkpoint["model_config"])
+        model = KeyboardGRULM(config)
+    elif "model_config" in checkpoint:
         config = StudentModelConfig.from_dict(checkpoint["model_config"])
         model = KeyboardStudentLM(config)
     else:

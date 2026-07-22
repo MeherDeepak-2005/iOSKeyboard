@@ -26,6 +26,7 @@ final class KeyButton: UIView {
 	private let recessColor: UIColor               // cap fill while the balloon is floating
 	private let spokenLabelWasExplicit: Bool
 	private let foregroundColor: UIColor
+	private let glyphScale: CGFloat            // legend point-size multiplier (Telugu < 1)
 	private(set) var acceptsInput = true
 
 	/// Character to show in the press balloon (nil = no balloon). Reads the live label
@@ -51,6 +52,7 @@ final class KeyButton: UIView {
 		// cap reads as a blackish transparent well and only the raised balloon shows the glyph.
 		self.recessColor = theme.isDark ? UIColor(white: 0, alpha: 0.34) : UIColor(white: 0, alpha: 0.16)
 		self.isPill = spec.pill
+		self.glyphScale = spec.glyphScale
 		self.baseRadius = theme.cornerRadius
 		self.spokenLabelWasExplicit = spec.accessibilityLabel != nil
 		self.foregroundColor = {
@@ -105,8 +107,8 @@ final class KeyButton: UIView {
 			let multi = (spec.label?.count ?? 0) > 1
 			let bold = UIAccessibility.isBoldTextEnabled
 			// Key legends use Apple's system face for consistent metrics and alignment.
-			lbl.font = multi ? .systemFont(ofSize: 16, weight: bold ? .semibold : .medium)
-							 : .systemFont(ofSize: 23, weight: bold ? .medium : .regular)
+			lbl.font = multi ? .systemFont(ofSize: 16 * glyphScale, weight: bold ? .semibold : .medium)
+							 : .systemFont(ofSize: 23 * glyphScale, weight: bold ? .medium : .regular)
 			content = lbl
 			label = lbl
 		}
@@ -204,8 +206,8 @@ final class KeyButton: UIView {
 		}
 		let bold = UIAccessibility.isBoldTextEnabled
 		label?.font = text.count > 1
-			? .systemFont(ofSize: 16, weight: bold ? .semibold : .medium)
-			: .systemFont(ofSize: 23, weight: bold ? .medium : .regular)
+			? .systemFont(ofSize: 16 * glyphScale, weight: bold ? .semibold : .medium)
+			: .systemFont(ofSize: 23 * glyphScale, weight: bold ? .medium : .regular)
 		label?.text = text
 		label?.isHidden = false
 		iconView?.isHidden = true

@@ -93,7 +93,7 @@ python3 tools/language_packs/sample_hf_text_ranges.py \
   --revision 2d7285e6ce14fdb3fb2449c9f89427b9f582ac3f \
   --source-bytes 15760603733 \
   --source-sha256 60693a4fd501b4a37ce57c76d6057a224fd6434bf6580eb134382cbe4ba1799a \
-  --range-count 64 --range-bytes 1048576 \
+  --range-count 32 --range-bytes 1048576 \
   --output tools/.cache/indiccorpv2-te-ranges.txt \
   --report tools/.cache/indiccorpv2-te-ranges.report.json
 ```
@@ -132,12 +132,33 @@ Dataset roles are deliberately separate:
 - MILU, IndicQuest, and IndicParam are benchmarks; IndicVoices and Kathbath are
   speech data. None belongs in the tap-prediction training stream.
 
-The tracked manifest intentionally contains only the small Tatoeba bootstrap. Its
-318 sentences are enough to validate the complete binary/runtime path but not to
-claim production Telugu quality. Add pinned Dakshina/Sangraha-derived training
-sources only after their exact split, redistribution terms, source revision, and
-domain cap are recorded. A source marked `researchOnly` can build an internal pack,
-but the Release artifact verifier rejects it.
+The tracked pack combines the 318-sentence Tatoeba bootstrap with a deterministic,
+hash-pinned 100,000-sentence stratified sample of IndicCorpV2 Telugu. It contains
+22,000 native words, 12,000 Roman keys, and 20,028 weighted transliteration mappings.
+That is enough to make native and Roman context tables useful, but its predominantly
+web/news register is not a substitute for conversational data or a user-separated
+quality benchmark. Add Dakshina/Sangraha-derived training sources only after their
+exact split, redistribution terms, source revision, and domain cap are recorded. A
+source marked `researchOnly` can build an internal pack, but the Release artifact
+verifier rejects it.
+
+### Runtime residency and downloadable packs
+
+All three runtime dictionaries are opened with Foundation's read-only mapped-data
+option. Tenglish and Telugu use lazily initialized process-wide readers, so opening
+the English keyboard does not parse or copy either Indic pack into heap memory.
+Sorted fixed-width n-gram records are searched in place; no decompressed dictionary
+or hash table is retained. The current bundled inventory is 60,450 English words
+(9,391,297 bytes), 22,000 Telugu words (1,918,563 bytes), and 12,000 Roman keys /
+20,028 mappings (967,207 bytes), for 12,277,067 dictionary bytes total.
+
+Do not make On-Demand Resources the only source for an iOS 18 keyboard extension.
+The host controls extension lifetime, and a keyboard must remain usable when the
+companion app has never fetched an optional asset. Keep compact mapped fallbacks in
+the extension. Future larger packs should be downloaded by the companion app,
+verified against a signed manifest, atomically installed into the App Group, and
+rolled back to the bundled pack on any failure. Background Assets can replace that
+delivery layer only when the deployment floor permits it.
 
 The schema-v2 manifest remains `research`: the five-row arrangement was captured
 from a current Apple Telugu keyboard reference and cross-checked against Unicode,

@@ -1,6 +1,7 @@
 import UIKit
 import CoreText
 import os
+import SwiftUI
 
 // KeyboardView — the on-screen key deck (touches, layout, popups, shift).
 // Emoji picker → Emoji.swift; keys/theme/suggestion bar → their own files.
@@ -10,6 +11,14 @@ struct KeyboardLayoutMetrics: Equatable {
 	let profile: Profile
 	let rowHeight, keySpacing, rowSpacing, sidePadding, topPadding, bottomPadding: CGFloat
 	let maximumDeckWidth: CGFloat
+
+	/// A copy with the row height (and inter-row gap) scaled — used to make the taller
+	/// multi-row Telugu deck more compact without touching Latin geometry.
+	func scalingRowHeight(_ factor: CGFloat) -> KeyboardLayoutMetrics {
+		.init(profile: profile, rowHeight: rowHeight * factor, keySpacing: keySpacing,
+			rowSpacing: rowSpacing * factor, sidePadding: sidePadding, topPadding: topPadding,
+			bottomPadding: bottomPadding, maximumDeckWidth: maximumDeckWidth)
+	}
 
 	static func resolve(width: CGFloat, idiom: UIUserInterfaceIdiom) -> KeyboardLayoutMetrics {
 		if idiom == .pad {
@@ -21,14 +30,14 @@ struct KeyboardLayoutMetrics: Equatable {
 				sidePadding: 10, topPadding: 3, bottomPadding: 4, maximumDeckWidth: 700)
 		}
 		if width <= 360 {
-			return .init(profile: .compactPhone, rowHeight: 40, keySpacing: 5, rowSpacing: 6,
+			return .init(profile: .compactPhone, rowHeight: 40, keySpacing: 5, rowSpacing: 11,
 				sidePadding: 5, topPadding: 4, bottomPadding: 5, maximumDeckWidth: .greatestFiniteMagnitude)
 		}
 		if width >= 430 {
-			return .init(profile: .largePhone, rowHeight: 43, keySpacing: 6, rowSpacing: 7,
+			return .init(profile: .largePhone, rowHeight: 43, keySpacing: 6, rowSpacing: 13,
 				sidePadding: 7, topPadding: 4, bottomPadding: 6, maximumDeckWidth: .greatestFiniteMagnitude)
 		}
-		return .init(profile: .phone, rowHeight: 42, keySpacing: 6, rowSpacing: 7,
+		return .init(profile: .phone, rowHeight: 42, keySpacing: 6, rowSpacing: 12,
 			sidePadding: 6, topPadding: 4, bottomPadding: 5, maximumDeckWidth: .greatestFiniteMagnitude)
 	}
 }
@@ -230,9 +239,15 @@ final class KeyboardView: UIView {
 	private var glideThreshold: CGFloat { unitPitch * 0.85 }
 
 	private let stripHeight: CGFloat = 44       // full minimum touch target for suggestions
+	/// Telugu legends are drawn smaller and the rows shorter: the script's glyphs read
+	/// large and the deck carries ~5 glyph rows, so at Latin size it towers over stock.
+	private static let teluguGlyphScale: CGFloat = 0.6
+	private static let teluguRowHeightScale: CGFloat = 0.78
 	private var metrics: KeyboardLayoutMetrics {
 		let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
-		return .resolve(width: width, idiom: traitCollection.userInterfaceIdiom)
+		let base = KeyboardLayoutMetrics.resolve(width: width,
+			idiom: traitCollection.userInterfaceIdiom)
+		return languageMode == .telugu ? base.scalingRowHeight(Self.teluguRowHeightScale) : base
 	}
 	private var keySpacing: CGFloat { metrics.keySpacing }
 	private var rowSpacing: CGFloat { metrics.rowSpacing }
@@ -1438,7 +1453,8 @@ final class KeyboardView: UIView {
 			width: .unit,
 			popup: true,
 			committedText: descriptor.output.literal,
-			alternatives: descriptor.alternatives) { [weak self] in
+			alternatives: descriptor.alternatives,
+			glyphScale: Self.teluguGlyphScale) { [weak self] in
 				self?.routeOutput(descriptor.output, nil)
 			}
 	}
@@ -1596,3 +1612,44 @@ final class KeyboardView: UIView {
 		}
 	}
 }
+
+#if DEBUG
+private struct KeyboardMetricsPreview: UIViewRepresentable {
+	let dark: Bool
+	let language: KBLanguageMode
+	let width: CGFloat
+
+	func makeUIView(context: Context) -> KeyboardView {
+		let view = KeyboardView(theme: .system(dark: dark), languageMode: language)
+		view.setSuggestions(["the", "keyboard", "layout"])
+		return view
+	}
+
+	func updateUIView(_ uiView: KeyboardView, context: Context) {}
+
+	func sizeThatFits(_ proposal: ProposedViewSize, uiView: KeyboardView,
+		context: Context) -> CGSize? {
+		uiView.frame = CGRect(x: 0, y: 0, width: width, height: 320)
+		uiView.layoutIfNeeded()
+		return CGSize(width: width, height: uiView.keyboardHeight)
+	}
+}
+
+#Preview("English 393pt") {
+	KeyboardMetricsPreview(dark: false, language: .english, width: 393)
+		.frame(width: 393)
+		.background(Color(white: 0.55))
+}
+
+#Preview("English Dark 430pt") {
+	KeyboardMetricsPreview(dark: true, language: .english, width: 430)
+		.frame(width: 430)
+		.background(Color(white: 0.18))
+}
+
+#Preview("Telugu 393pt") {
+	KeyboardMetricsPreview(dark: false, language: .telugu, width: 393)
+		.frame(width: 393)
+		.background(Color(white: 0.55))
+}
+#endif

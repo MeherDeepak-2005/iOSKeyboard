@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# =============================================================================
+# GRU keyboard LM — full CUDA pipeline for Google Colab (pretrain → fine-tune →
+# distill → evaluate). Produces the streaming in-trie search-prior challenger.
+#
+# COLAB USAGE
+#   1. Runtime -> Change runtime type -> Hardware accelerator: GPU (T4 / A100).
+#   2. Put tools/lm/ (this script + *.py) and the data files under one folder,
+#      e.g. upload to /content/lm  OR  mount Drive and point LM_DIR at it.
+#      Required in $DATA_DIR (default $LM_DIR/data):
+#        corpus.txt  gru_finetune.txt  messaging_heldout.txt
+#        qwen_spm.model  qwen_pretrain.pt        (tokenizer + distill teacher)
+#      (gru_finetune.txt is rebuilt automatically from dailydialog.txt +
+#       sms_train.txt if those are present and it is missing.)
+#   3. Run:   !bash /content/lm/train_gru_colab.sh
+#      Faster smoke:  !PRETRAIN_EPOCHS=1 FINETUNE_EPOCHS=1 DISTILL_EPOCHS=1 bash .../train_gru_colab.sh
+#      Skip distill:  !DO_DISTILL=0 bash .../train_gru_colab.sh
+#      Save to Drive: !DRIVE_OUT=/content/drive/MyDrive/gru bash .../train_gru_colab.sh
+#
+# Progress: each Python stage prints a live tqdm bar (epoch, loss, it/s); this
+# script prints a timestamped banner + elapsed time around every stage.
+# =============================================================================
+set -euo pipefail
+
+# ------------------------------- config --------------------------------------
+LM_DIR="${LM_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+DATA_DIR="${DATA_DIR:-$LM_DIR/data}"
+TOKENIZER="${TOKENIZER:-$DATA_DIR/qwen_spm.model}"   # shared with the distill teacher (6k)
+TEACHER="${TEACHER:-$DATA_DIR/qwen_pretrain.pt}"      # the 10.6M transformer
+CORPUS="${CORPUS:-$DATA_DIR/corpus.txt}"
+FINETUNE_DATA="${FINETUNE_DATA:-$DATA_DIR/gru_finetune.txt}"
+HELDOUT="${HELDOUT:-$DATA_DIR/messaging_heldout.txt}"
+PRETRAIN_EPOCHS="${PRETRAIN_EPOCHS:-6}"
+FINETUNE_EPOCHS="${FINETUNE_EPOCHS:-4}"
+DISTILL_EPOCHS="${DISTILL_EPOCHS:-4}"
+BATCH_TOKENS="${BATCH_TOKENS:-131072}"               # bigger batch on a real GPU
+DO_DISTILL="${DO_DISTILL:-1}"
+DRIVE_OUT="${DRIVE_OUT:-}"                            # optional checkpoint mirror
+
+GRU="$DATA_DIR/gru.pt"
+GRU_DISTILLED="$DATA_DIR/gru_distilled.pt"
+
+# ------------------------------- helpers -------------------------------------
+START=$(date +%s)
+elapsed() { local s=$(( $(date +%s) - START )); printf '%dm%02ds' $((s / 60)) $((s % 60)); }
+banner() {
+  echo
+  echo "============================================================"
+  echo ">> $*   ::   $(date '+%H:%M:%S')   (+$(elapsed))"
+  echo "============================================================"
+}
+
+# --------------------------- environment -------------------------------------
+banner "Environment + dependencies"
+pip install -q sentencepiece tqdm
+python3 - <<'PY'
+import sys, torch
+print("torch", torch.__version__, "| CUDA available:", torch.cuda.is_available())
+if not torch.cuda.is_available():
+    sys.exit("!! No CUDA GPU. Colab: Runtime -> Change runtime type -> GPU (T4/A100).")
+print("GPU:", torch.cuda.get_device_name(0),
+      f"| {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+PY
+
+# --------------------------- input checks ------------------------------------
+banner "Checking inputs in $DATA_DIR"
+# Rebuild the messaging fine-tune set if it is missing but its sources exist.
+if [[ ! -f "$FINETUNE_DATA" && -f "$DATA_DIR/dailydialog.txt" && -f "$DATA_DIR/sms_train.txt" ]]; then
+  echo "  gru_finetune.txt missing -> rebuilding from dailydialog.txt + sms_train.txt"
+  ( cd "$LM_DIR" && python3 prepare_gru_finetune.py )
+fi
+
+missing=0
+check() { if [[ -f "$1" ]]; then echo "  ok        $1"; else echo "  MISSING   $1  ($2)"; missing=1; fi; }
+check "$CORPUS"                "pretrain corpus"
+check "$FINETUNE_DATA"         "messaging fine-tune set"
+check "$HELDOUT"               "held-out eval set"
+check "$TOKENIZER"             "SentencePiece tokenizer"
+check "$LM_DIR/train_gru.py"   "trainer"
+check "$LM_DIR/eval_gru.py"    "evaluator"
+check "$LM_DIR/model.py"       "model definitions"
+if [[ "$DO_DISTILL" == "1" ]]; then
+  check "$TEACHER"             "distill teacher — or set DO_DISTILL=0"
+fi
+if [[ "$missing" != "0" ]]; then
+  echo; echo "Upload the missing files into $DATA_DIR (or override DATA_DIR / individual paths)."
+  exit 1
+fi
+
+cd "$LM_DIR"
+COMMON=(--device cuda --tokenizer "$TOKENIZER" --batch-tokens "$BATCH_TOKENS")
+
+# ------------------------------- stage 1 -------------------------------------
+banner "Stage 1/4  PRETRAIN  (full corpus, ${PRETRAIN_EPOCHS} epochs)"
+python3 train_gru.py "${COMMON[@]}" --data "$CORPUS" --out "$GRU" --epochs "$PRETRAIN_EPOCHS"
+
+# ------------------------------- stage 2 -------------------------------------
+banner "Stage 2/4  FINE-TUNE  (messaging register, ${FINETUNE_EPOCHS} epochs)"
+python3 train_gru.py "${COMMON[@]}" --finetune --data "$FINETUNE_DATA" \
+  --out "$GRU" --epochs "$FINETUNE_EPOCHS"
+
+# ------------------------------- stage 3 -------------------------------------
+if [[ "$DO_DISTILL" == "1" ]]; then
+  banner "Stage 3/4  DISTILL  (from 10.6M teacher on the corpus, ${DISTILL_EPOCHS} epochs)"
+  # Resume the fine-tuned weights, then continue with the teacher's soft targets.
+  cp "$GRU" "$GRU_DISTILLED"
+  python3 train_gru.py "${COMMON[@]}" --finetune --data "$CORPUS" \
+    --teacher "$TEACHER" --out "$GRU_DISTILLED" --epochs "$DISTILL_EPOCHS"
+else
+  banner "Stage 3/4  DISTILL  (skipped — DO_DISTILL=0)"
+fi
+
+# ------------------------------- stage 4 -------------------------------------
+banner "Stage 4/4  EVALUATE  (held-out messaging)"
+echo "---- fine-tuned GRU ($GRU) ----"
+python3 eval_gru.py --checkpoint "$GRU" --tokenizer "$TOKENIZER" \
+  --heldout "$HELDOUT" --device cuda
+if [[ "$DO_DISTILL" == "1" ]]; then
+  echo; echo "---- distilled GRU ($GRU_DISTILLED) ----"
+  python3 eval_gru.py --checkpoint "$GRU_DISTILLED" --tokenizer "$TOKENIZER" \
+    --heldout "$HELDOUT" --device cuda
+fi
+
+# ------------------------------- mirror --------------------------------------
+if [[ -n "$DRIVE_OUT" ]]; then
+  banner "Mirroring checkpoints to $DRIVE_OUT"
+  mkdir -p "$DRIVE_OUT"
+  cp "$GRU" "$DRIVE_OUT/"
+  [[ "$DO_DISTILL" == "1" ]] && cp "$GRU_DISTILLED" "$DRIVE_OUT/"
+  echo "  mirrored: $(ls -1 "$DRIVE_OUT")"
+fi
+
+banner "DONE  —  total $(elapsed)"

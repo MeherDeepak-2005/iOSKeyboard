@@ -1223,15 +1223,17 @@ struct KeyboardTests {
 		#expect(KBSafetyLexicon.normalize("  It’s   Fine ") == "it's fine")
 	}
 
-	/// A loose-pool winner backed only by over-confident sparse bigrams (1-count
-	/// "receive …" successors) must NOT auto-commit: the pool is a frequency coin
-	/// flip (physician/communion/corrections separated by 0.22 nats). The strip may
-	/// still offer it; the boundary must keep the typed string.
-	@Test func coinFlipLoosePoolDoesNotAutoCommit() async {
+	/// One-off "receive …" corpus successors are singleton evidence and must not
+	/// hijack broad lexical recovery. The compact LM keeps those records for legacy
+	/// compatibility, but the runtime backs off before ranking or context injection.
+	@Test func singletonContextCannotHijackSevereRecovery() async {
 		let engine = KeyboardEngine(languageDataURL: langdataURL())
 		let s = await decode(engine, word: "coeevitjkn", context: ["possibly", "receive"])
-		#expect(s.correction == nil,
-			"coin-flip pool must not commit: \(s.correction ?? "nil") sugg=\(s.suggestions)")
+		#expect(s.correction == "correction",
+			"singleton context changed recovery: \(s.correction ?? "nil") sugg=\(s.suggestions)")
+		#expect(s.suggestions.first == "correction")
+		#expect(!s.suggestions.contains("physician"))
+		#expect(!s.suggestions.contains("communion"))
 	}
 
 	/// Reproduces the exact live simulator battery misses (2026-07-20): context-injected
@@ -1261,6 +1263,36 @@ struct KeyboardTests {
 			"severe: sugg=\(severe.suggestions)")
 		#expect(severe.correction == "correction",
 			"severe: correction=\(severe.correction ?? "nil")")
+		let liveContext = await decode(engine, word: "coeevitjkn",
+			context: ["could", "definitely", "receive"])
+		let liveEvidence = liveContext.candidates.map {
+			"\($0.word){\($0.source.rawValue),s=\($0.score),c=\($0.spatialCost),lm=\($0.logLanguageProbability)}"
+		}.joined(separator: ", ")
+		#expect(liveContext.suggestions.first == "correction",
+			"live severe context: sugg=\(liveContext.suggestions); candidates=\(liveEvidence)")
+		#expect(liveContext.correction == "correction",
+			"live severe context: correction=\(liveContext.correction ?? "nil"); candidates=\(liveEvidence)")
+	}
+
+	@Test func contractionCorrectionsPreserveTypedForms() async {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		// Typo + missing apostrophe: exact restoration fails, but the typed trailing 's'
+		// means "that's", not the bare base "that" that would drop it.
+		let thads = await decode(engine, word: "thads", context: [])
+		#expect(thads.correction == "that's",
+			"thads: correction=\(thads.correction ?? "nil") sugg=\(thads.suggestions)")
+		// "id" is a kept dictionary word; it must restore to "I'd" at a sentence start
+		// and must never be "corrected" to the generic neighbour "is".
+		let idStart = await decode(engine, word: "id", context: [])
+		#expect(idStart.correction == "i'd",
+			"id at start: correction=\(idStart.correction ?? "nil")")
+		let idNoun = await decode(engine, word: "id", context: ["send", "your"])
+		#expect(idNoun.correction != "is",
+			"id after determiner must not become is: correction=\(idNoun.correction ?? "nil")")
+		// Overwhelming context wins: after "this", the LM must correct "id" to "is".
+		let idContext = await decode(engine, word: "id", context: ["this"])
+		#expect(idContext.correction == "is",
+			"id after 'this' should be context-corrected to is: correction=\(idContext.correction ?? "nil")")
 	}
 
 	private func decode(_ engine: KeyboardEngine, word: String,
