@@ -480,13 +480,17 @@ nonisolated final class LangData {
 	/// buffer for the whole walk; one `withUnsafeBytes` for the whole walk so the hot
 	/// loop does raw unaligned loads, not per-node closures.
 	func trieSearch(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil,
+					prior: TrieSearchPrior? = nil,
 					shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
 		let chars = Array(typed.utf8)
 		guard hasTrie, !chars.isEmpty else { return [] }
 		let n = chars.count
 		let tapRow: [KeyTap?]? = taps?.count == n ? taps : nil
 		// +2 headroom: an apostrophe level adds only apostropheSkipCost (see Trie.search).
-		let maxDepth = n + Int(maxCost / Trie.delCost) + 2
+		// The context prior can relax the budget by up to maxBonus (byte-identical to
+		// Trie.search), so its headroom is folded into the depth bound.
+		let priorHeadroom = prior != nil ? TrieSearchPrior.maxBonus : 0
+		let maxDepth = n + Int((maxCost + priorHeadroom) / Trie.delCost) + 2
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
 		for i in 0...n { dp[i] = Double(i) * Trie.insCost }
 		var hits: [(id: Int32, cost: Double)] = []
@@ -509,7 +513,7 @@ nonisolated final class LangData {
 				return id == UInt16(Self.empty16) ? UInt32(Self.empty) : UInt32(id)
 			}
 			func recurse(_ node: Int, _ letter: UInt8, _ prevLetter: UInt8,
-				_ depth: Int, _ firstPenalty: Double) {
+				_ depth: Int, _ firstPenalty: Double, _ priorNode: PriorNode?) {
 				guard !cancelled, depth <= maxDepth else { return }
 				visits &+= 1
 				if visits & 127 == 0, shouldCancel?() == true {
@@ -532,16 +536,20 @@ nonisolated final class LangData {
 					dp[base + col] = v
 					if v < rowMin { rowMin = v }
 				}
+				// Context bonus for this prefix — see Trie.recurse. Reported cost stays the
+				// pure channel cost; only the search budget widens for plausible word-starts.
+				let bonus = priorNode?.bonus ?? 0
 				let id = wordID(node)
 				let finalCost = dp[base + n] + firstPenalty
-				if id != UInt32(Self.empty), finalCost <= maxCost {
+				if id != UInt32(Self.empty), finalCost - bonus <= maxCost {
 					hits.append((Int32(bitPattern: id), finalCost))
 				}
-				if rowMin + firstPenalty <= maxCost {
+				if rowMin + firstPenalty - bonus <= maxCost {
 					let first = Int(u32le(node, 2)), count = Int(byte(node, 1))
 					for c in 0..<count {
-						recurse(first + c, byte(first + c, 0), letter,
-							depth + 1, firstPenalty)
+						let childLetter = byte(first + c, 0)
+						recurse(first + c, childLetter, letter,
+							depth + 1, firstPenalty, priorNode?.child(childLetter))
 					}
 				}
 			}
@@ -550,7 +558,7 @@ nonisolated final class LangData {
 				let letter = byte(first + c, 0)
 				let penalty = Trie.firstLetterPenaltyPolicy(typedLength: n,
 					candidateFirst: letter, typedFirst: chars[0])
-				recurse(first + c, letter, 0, 1, penalty)
+				recurse(first + c, letter, 0, 1, penalty, prior?.rootChild(letter))
 			}
 		}
 		guard !cancelled else { return [] }

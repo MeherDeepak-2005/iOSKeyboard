@@ -1297,6 +1297,27 @@ struct KeyboardTests {
 			"live severe context: correction=\(liveContext.correction ?? "nil"); candidates=\(liveEvidence)")
 	}
 
+	// LM-in-the-trie: a context prior must GENERATE a plausible word that sits just outside
+	// the base edit radius (the recall win), without lowering its channel cost, and without
+	// fabricating words whose prefix the prior never funded.
+	@Test func trieSearchPriorExpandsContextPlausibleWords() {
+		let trie = Trie()
+		trie.insert("go", freq: 100)
+		trie.insert("got", freq: 50)
+		// "got" is one insertion (1.6) beyond "go" — outside a tight 1.0 budget.
+		let base = trie.search("go", maxCost: 1.0)
+		#expect(base.contains { $0.word == "go" })
+		#expect(!base.contains { $0.word == "got" }, "got is outside the base radius")
+		// With the LM saying "got" is a likely continuation, the search reaches and emits it.
+		let guided = trie.search("go", maxCost: 1.0, prior: TrieSearchPrior(likelyWords: ["got"]))
+		#expect(guided.contains { $0.word == "got" }, "prior must expand the search to got")
+		#expect((guided.first { $0.word == "got" }?.cost ?? 0) > 1.0,
+			"reported channel cost is unchanged — only the search budget widened")
+		// An unrelated prior funds a different prefix, so it must NOT conjure "got".
+		let off = trie.search("go", maxCost: 1.0, prior: TrieSearchPrior(likelyWords: ["xyz"]))
+		#expect(!off.contains { $0.word == "got" })
+	}
+
 	@Test func contractionCorrectionsPreserveTypedForms() async {
 		let engine = KeyboardEngine(languageDataURL: langdataURL())
 		// Typo + missing apostrophe: exact restoration fails, but the typed trailing 's'
