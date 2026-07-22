@@ -642,6 +642,29 @@ struct KeyboardTests {
 		#expect(prior.scoredSessions == [41, 41])
 	}
 
+	// The GRU search prior conforms to the same NeuralLanguagePrior seam, so the engine
+	// must select the .neuralGRU tier, prepare context once, score the candidate pool, and
+	// fold a neural log-prob into every candidate — the wiring the real Core ML GRU rides.
+	@Test func gruSearchPriorTierBlendsIntoRanking() async throws {
+		let prior = TestNeuralPrior(tier: .neuralGRU)
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), neuralPrior: prior)
+		#expect(engine.preferredModelTier(for: .english) == .neuralGRU)
+		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
+
+		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
+			wordSessionID: 7, generation: 1, layoutRevision: 1,
+			currentWord: "migh", context: ["they"], taps: nil,
+			languageMode: .english, requestedModelTier: .neuralGRU)
+		let snapshot = await withCheckedContinuation { continuation in
+			engine.decode(request) { continuation.resume(returning: $0) }
+		}
+		#expect(snapshot.modelTier == .neuralGRU)
+		#expect(!snapshot.candidates.isEmpty)
+		#expect(snapshot.candidates.allSatisfy { $0.neuralLogProbability != nil })
+		#expect(prior.preparedSessions == [7])
+		#expect(prior.scoredSessions == [7])
+	}
+
 	@Test func teluguBinaryPacksAreVersionedAndAvailable() throws {
 		let layoutPack = TeluguLanguagePack(url:
 			keyboardResourceURL("telugu_layout.kbpack"))

@@ -4,6 +4,7 @@ enum DecodeModelTier: String, Codable, Equatable {
 	case ngram
 	case neuralW8
 	case neuralW8A8
+	case neuralGRU
 }
 
 /// Immutable identity for one decoder request. A result may be presented or committed
