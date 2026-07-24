@@ -543,7 +543,7 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 /// compiles against the generic MLModel API, but its numeric path — and the streaming-vs-
 /// batched score-export choice — can only be validated with the real model plus a running
 /// keyboard. See the GRU integration walkthrough.
-final class GRULanguagePrior: NeuralLanguagePrior, @unchecked Sendable {
+final class GRULanguagePrior: NeuralLanguagePrior, SearchPriorProvider, @unchecked Sendable {
 	let modelTier: DecodeModelTier = .neuralGRU
 
 	private enum GRUError: Error { case notReady, badOutput }
@@ -559,6 +559,14 @@ final class GRULanguagePrior: NeuralLanguagePrior, @unchecked Sendable {
 	private var model: MLModel?
 	private var loading = false
 	private var sessions: [UInt64: Session] = [:]
+	// Search-prior cache: GRU-ranked next-words per context key. Populated async by
+	// warmSearchPrior, read sync by searchPriorWords; bounded LRU so it never grows with
+	// the conversation. `inFlightPriors` collapses duplicate warms for the same context.
+	private var searchPriorCache: [String: [String]] = [:]
+	private var searchPriorOrder: [String] = []
+	private var inFlightPriors: Set<String> = []
+	private static let searchPriorCacheCapacity = 32
+	private static let searchPriorKeep = 16
 
 	static func bundled() -> GRULanguagePrior {
 		GRULanguagePrior(
@@ -615,7 +623,76 @@ final class GRULanguagePrior: NeuralLanguagePrior, @unchecked Sendable {
 	}
 
 	func handleMemoryPressure() {
-		lock.lock(); model = nil; lock.unlock()
+		lock.lock()
+		model = nil
+		searchPriorCache.removeAll()
+		searchPriorOrder.removeAll()
+		inFlightPriors.removeAll()
+		lock.unlock()
+	}
+
+	// MARK: SearchPriorProvider — GRU-conditioned in-trie search prior
+
+	private func searchPriorKey(_ context: [String]) -> String {
+		context.suffix(12).joined(separator: " ").lowercased()
+	}
+
+	func searchPriorWords(context: [String]) -> [String]? {
+		let key = searchPriorKey(context)
+		lock.lock(); defer { lock.unlock() }
+		return searchPriorCache[key]
+	}
+
+	/// Rank `pool` for `context` with the GRU and cache it, at most one pass in flight per
+	/// context. Never blocks the caller: it returns immediately and fills the cache when the
+	/// async pass lands, so early decodes for a context use the n-gram until the GRU warms.
+	func warmSearchPrior(context: [String], pool: [String]) {
+		guard let tokenizer, !pool.isEmpty, !context.isEmpty else { return }
+		let key = searchPriorKey(context)
+		lock.lock()
+		let ready = model
+		guard searchPriorCache[key] == nil, !inFlightPriors.contains(key), let model = ready else {
+			lock.unlock()
+			if ready == nil { prepareForSelection() }
+			return
+		}
+		inFlightPriors.insert(key)
+		lock.unlock()
+		let bounded = Array(pool.prefix(24))
+		queue.async { [weak self] in
+			guard let self else { return }
+			let ranked = self.rankPool(bounded, context: context, model: model, tokenizer: tokenizer)
+			self.lock.lock()
+			self.inFlightPriors.remove(key)
+			if !ranked.isEmpty {
+				if self.searchPriorCache[key] == nil { self.searchPriorOrder.append(key) }
+				self.searchPriorCache[key] = ranked
+				if self.searchPriorOrder.count > Self.searchPriorCacheCapacity {
+					let drop = self.searchPriorOrder.count - Self.searchPriorKeep
+					for old in self.searchPriorOrder.prefix(drop) { self.searchPriorCache[old] = nil }
+					self.searchPriorOrder.removeFirst(drop)
+				}
+			}
+			self.lock.unlock()
+		}
+	}
+
+	/// GRU log P(word | context) for each pool word, best first. Reuses the same streaming
+	/// score path as candidate scoring, so the pool words are re-ranked by the neural LM.
+	/// Best-effort: a Core ML failure yields [] and the caller keeps the n-gram pool.
+	/// NOTE: candidates are the n-gram pool — the GRU chooses which plausible words to fund
+	/// in the trie; generating novel next-words from the GRU (a subword beam) is the further step.
+	private func rankPool(_ pool: [String], context: [String], model: MLModel,
+		tokenizer: KeyboardSentencePieceTokenizer) -> [String] {
+		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
+		tokens += tokenizer.encode(context.suffix(12).joined(separator: " ").lowercased())
+		let session = Session(contextTokens: tokens)
+		guard let scored = try? streamScore(pool, session: session, model: model,
+			tokenizer: tokenizer) else { return [] }
+		return pool
+			.compactMap { word in scored[word.lowercased()].map { (word, $0) } }
+			.sorted { $0.1 > $1.1 }
+			.map(\.0)
 	}
 
 	func score(candidates: [String], wordSessionID: UInt64,

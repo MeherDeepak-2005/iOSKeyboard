@@ -1918,12 +1918,25 @@ final class KeyboardEngine {
 	/// Context-conditioned trie search prior (NN-LM in the trie). The words the LM expects
 	/// to come next fund extra edit budget along their prefixes inside the trie walk, so a
 	/// context-plausible word just outside the fixed edit radius is generated. Empty context
-	/// or no predictions → nil, which reproduces today's exact pure-channel search. Source is
-	/// the shipped n-gram now; the GRU's next-word distribution is the drop-in upgrade — same
-	/// search, richer prior. Must run on `queue`.
+	/// or no predictions → nil, which reproduces today's exact pure-channel search. Must run
+	/// on `queue`.
+	///
+	/// Source is the n-gram by default. Under `INTERNAL_GRU` the neural LM re-ranks that
+	/// pool: `warmSearchPrior` kicks off an async GRU pass (idempotent per context) and
+	/// `searchPriorWords` returns its cached result once ready — until then this transparently
+	/// falls back to the n-gram, so the prior is never blocked on Core ML.
 	private func contextSearchPrior(_ context: [String]) -> TrieSearchPrior? {
 		guard !context.isEmpty else { return nil }
-		let likely = ngram.nextWords(context: context, limit: 24)
+		let pool = ngram.nextWords(context: context, limit: 24)
+		var likely = pool
+		#if INTERNAL_GRU
+		if let provider = neuralPrior as? SearchPriorProvider {
+			provider.warmSearchPrior(context: context, pool: pool)
+			if let gruWords = provider.searchPriorWords(context: context), !gruWords.isEmpty {
+				likely = gruWords
+			}
+		}
+		#endif
 		guard !likely.isEmpty else { return nil }
 		let prior = TrieSearchPrior(likelyWords: likely)
 		return prior.isEmpty ? nil : prior
