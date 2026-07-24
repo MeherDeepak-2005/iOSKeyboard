@@ -182,10 +182,24 @@ final class KeyboardEngine {
 
 	/// Process-wide engine: iOS may prewarm more than one controller, while language
 	/// data and personalization should be loaded exactly once per extension process.
+	///
+	/// This edition ships WITHOUT the neural rescorer. The GRU's value is in-trie
+	/// candidate generation (`contextSearchPrior`, always on) — a separate transformer
+	/// rescorer that only reranks the n-gram's output is redundant next to it, so the
+	/// default build (Debug and Release alike) is n-gram + in-trie search prior only.
+	///
+	/// The rescorer is disabled, not deleted, so it stays a one-switch revival:
+	///   • `INTERNAL_NEURAL` → the transformer W8 rescorer (`CoreMLNeuralLanguagePrior`).
+	///     Add it to `SWIFT_ACTIVE_COMPILATION_CONDITIONS` and set
+	///     `INTERNAL_NEURAL_ENABLED = YES` (Config/Secrets.xcconfig) to also bundle the
+	///     model. Previously this branch also fired for plain `DEBUG`; that was dropped
+	///     so day-to-day dev builds match what ships.
+	///   • `INTERNAL_GRU` → the GRU streaming prior (`GRULanguagePrior`), for profiling
+	///     the exported `gru.mlpackage` once it is bundled.
 	static let shared: KeyboardEngine = {
 		#if INTERNAL_GRU
 		return KeyboardEngine(neuralPrior: GRULanguagePrior.bundled())
-		#elseif DEBUG || INTERNAL_NEURAL
+		#elseif INTERNAL_NEURAL
 		return KeyboardEngine(neuralPrior: CoreMLNeuralLanguagePrior.bundled())
 		#else
 		return KeyboardEngine()
