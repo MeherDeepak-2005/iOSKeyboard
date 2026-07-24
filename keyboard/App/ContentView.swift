@@ -459,17 +459,39 @@ struct DiagnosticsView: View {
 				row("Peak footprint", mb(snap.peakFootprintMB))
 				row("Lowest headroom", snap.minAvailableMB > 0 ? mb(snap.minAvailableMB) : "—")
 				row("Inferred kill limit", snap.limitMB > 0 ? mb(snap.limitMB) : "—")
+				row("Peak CPU (dynamic search)", snap.peakCPUPercent.map { String(format: "%.0f%%", $0) } ?? "—")
 				row("Memory warnings", "\(snap.warningCount)")
 				row("Critical events", "\(snap.criticalCount)")
 			} header: {
-				Text("Memory (jetsam)")
+				Text("Memory & CPU")
 			} footer: {
-				Text("iOS can terminate a keyboard extension under memory pressure. These counters contain no typed text.")
+				Text("iOS can terminate a keyboard extension under memory pressure. Peak CPU is sampled while a search is running (can exceed 100% across cores). These counters contain no typed text.")
+			}
+
+			Section {
+				row("Words / minute (WPM)", wpm())
+				row("Keystrokes / char (KPC)", kpc())
+			} header: {
+				Text("Speed")
+			} footer: {
+				Text("WPM = committed words ÷ active typing time. KPC = physical taps (incl. backspaces) ÷ characters committed; predictions, picks, and glide push it below 1.0. Based on \(snap.wordsCommitted ?? 0) committed words.")
+			}
+
+			Section {
+				row("Words Modified Ratio (WMR)", ratio(snap.wordsModified, snap.wordsCommitted))
+				row("Next-word prediction hit", ratio(snap.nwpHits, snap.nwpOpportunities))
+				row("Autocorrect rate", ratio(snap.wordsAutocorrected, snap.wordsCommitted))
+				row("Autocorrect reverted", ratio(snap.correctionsReverted, snap.wordsAutocorrected))
+			} header: {
+				Text("Accuracy")
+			} footer: {
+				Text("WMR = committed words the user went back and edited ÷ words committed (lower is better). NWP hit = intended word already in the top-3 before the first letter. Reverted = autocorrections the user undid. Word Error Rate (WER) needs ground-truth intent and is measured offline in tools/lm — not on device.")
 			}
 
 			Section("Latency histograms") {
 				row("Host insert p95", latency(snap.hostInsertLatencyBins, 0.95))
 				row("Tap decode p95", latency(snap.tapDecodeLatencyBins, 0.95))
+				row("Init / UpdateLM p95", latency(snap.initLatencyBins, 0.95))
 				row("Glide preview p95", latency(snap.glidePreviewLatencyBins, 0.95))
 				row("Glide final p95", latency(snap.glideFinalLatencyBins, 0.95))
 				row("Lift to insert p95", latency(snap.glideCommitLatencyBins, 0.95))
@@ -581,6 +603,22 @@ struct DiagnosticsView: View {
 		HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
 	}
 	private func mb(_ v: Double) -> String { String(format: "%.1f MB", v) }
+	/// A "hits / total" ratio rendered as a percentage with its raw counts, or a dash
+	/// when no data has been collected yet.
+	private func ratio(_ numerator: Int?, _ denominator: Int?) -> String {
+		guard let denominator, denominator > 0 else { return "\u{2014}" }
+		let n = numerator ?? 0
+		return String(format: "%.1f%% (%d/%d)", Double(n) / Double(denominator) * 100, n, denominator)
+	}
+	private func wpm() -> String {
+		guard let words = snap.wordsCommitted, words > 0,
+			let ms = snap.activeTypingMs, ms > 0 else { return "\u{2014}" }
+		return String(format: "%.0f", Double(words) / (ms / 60_000))
+	}
+	private func kpc() -> String {
+		guard let chars = snap.committedChars, chars > 0 else { return "\u{2014}" }
+		return String(format: "%.2f", Double(snap.physicalTaps ?? 0) / Double(chars))
+	}
 	private func latency(_ bins: [Int]?, _ fraction: Double) -> String {
 		KBDiagnostics.percentile(bins, fraction: fraction) ?? "—"
 	}

@@ -21,6 +21,28 @@ enum KBDiagnostics {
 		var glidePreviewLatencyBins: [Int]?
 		var glideFinalLatencyBins: [Int]?
 		var glideCommitLatencyBins: [Int]?
+		// Word-start search-space setup latency (Gboard's UpdateLM analog): the decode that
+		// builds the prediction/context search space when a new word begins.
+		var initLatencyBins: [Int]?
+
+		// MARK: Typing-quality benchmark metrics (aggregate counters only — never any text).
+		// These let the keyboard be measured against Gboard's TypingTester pillars. Each is a
+		// running total; the app derives the published ratios (WMR, NWP accuracy, WPM, KPC)
+		// from them. All optional so snapshots written before this field existed still decode.
+		//
+		// Accuracy pillar:
+		var wordsCommitted: Int?          // words finalized (space / punctuation / return / pick / glide)
+		var wordsModified: Int?           // committed words the user went back and edited → WMR numerator
+		var wordsAutocorrected: Int?      // commits where the engine changed the typed word
+		var correctionsReverted: Int?     // engine autocorrects the user undid (over-correction signal)
+		var nwpOpportunities: Int?        // next-word predictions shown at a word start (in-context)
+		var nwpHits: Int?                 // the committed word was among the shown top-3 → NWP numerator
+		// Speed pillar:
+		var activeTypingMs: Double?       // idle-capped active typing time → WPM denominator
+		var committedChars: Int?          // characters committed → KPC denominator
+		var physicalTaps: Int?            // key taps incl. backspaces (a pick / glide is one tap) → KPC numerator
+		// System pillar:
+		var peakCPUPercent: Double?       // highest process CPU% seen during a dynamic search
 	}
 
 	static let key = "kb.diag"
@@ -33,7 +55,14 @@ enum KBDiagnostics {
 	private static let latencyThresholds: [Double] = [1, 2, 4, 8, 16, 32, 50, 75, 120, 250]
 
 	enum LatencyOperation: Sendable {
-		case hostInsert, tapDecode, glidePreview, glideFinal, glideCommit
+		case hostInsert, tapDecode, glidePreview, glideFinal, glideCommit, initialization
+	}
+
+	/// Record the word-start search-space setup latency (UpdateLM analog). Called by the
+	/// engine only for the decode that opens a new word, so it never double-counts an
+	/// ordinary mid-word tap decode.
+	static func recordInitializationLatency(milliseconds: Double) {
+		recordLatency(.initialization, milliseconds: milliseconds)
 	}
 
 	static func beginHostInsert() -> OSSignpostID {
@@ -75,6 +104,34 @@ enum KBDiagnostics {
 
 	private static func recordLatency(_ operation: LatencyOperation, milliseconds: Double) {
 		metricsQueue.async { Recorder.shared.recordLatency(operation, milliseconds: milliseconds) }
+	}
+
+	// MARK: Typing-quality metric events (extension side, off the host-insert path)
+	// Every entry hops onto metricsQueue so nothing here can delay a visible keystroke.
+
+	/// One physical screen tap (letter, space, punctuation, backspace, suggestion pick, or
+	/// a whole glide gesture). `atUptime` is `ProcessInfo.systemUptime` at the tap; the
+	/// recorder derives active typing time from the gaps between consecutive taps.
+	static func noteTap(atUptime uptime: Double) {
+		metricsQueue.async { Recorder.shared.noteTap(atUptime: uptime) }
+	}
+
+	/// A word was finalized. `chars` counts the committed characters (word + its boundary),
+	/// `autocorrected` is true when the engine changed the typed word, and the prediction
+	/// pair records whether an in-context next-word suggestion was shown and whether the
+	/// committed word was among that shown top-3.
+	static func noteWordCommitted(chars: Int, autocorrected: Bool,
+		predictionShown: Bool, predictionHit: Bool) {
+		metricsQueue.async {
+			Recorder.shared.noteWordCommitted(chars: chars, autocorrected: autocorrected,
+				predictionShown: predictionShown, predictionHit: predictionHit)
+		}
+	}
+
+	/// The user went back and edited an already-committed word (WMR numerator). Pass
+	/// `revertedCorrection: true` when the edit specifically undid an engine autocorrect.
+	static func noteWordModified(revertedCorrection: Bool) {
+		metricsQueue.async { Recorder.shared.noteWordModified(revertedCorrection: revertedCorrection) }
 	}
 
 	static func percentile(_ bins: [Int]?, fraction: Double) -> String? {
@@ -379,6 +436,37 @@ enum KBDiagnostics {
 		return a > 0 ? UInt64(a) : 0
 	}
 
+	/// Instantaneous process CPU load as a percentage (summed over non-idle threads; can
+	/// exceed 100 on multiple cores). Sampled during background decodes to characterize
+	/// "CPU during dynamic searches" — the cost Gboard optimizes for battery / low-end
+	/// devices. Reads live thread info only; retains nothing.
+	static func cpuUsagePercent() -> Double {
+		var threads: thread_act_array_t?
+		var count: mach_msg_type_number_t = 0
+		guard task_threads(mach_task_self_, &threads, &count) == KERN_SUCCESS,
+			let threads else { return 0 }
+		defer {
+			vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: threads)),
+				vm_size_t(Int(count) * MemoryLayout<thread_t>.stride))
+		}
+		let infoCount = mach_msg_type_number_t(
+			MemoryLayout<thread_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
+		var total = 0.0
+		for index in 0..<Int(count) {
+			var info = thread_basic_info_data_t()
+			var infoSize = infoCount
+			let kr = withUnsafeMutablePointer(to: &info) { pointer in
+				pointer.withMemoryRebound(to: integer_t.self, capacity: Int(infoSize)) {
+					thread_info(threads[index], thread_flavor_t(THREAD_BASIC_INFO), $0, &infoSize)
+				}
+			}
+			if kr == KERN_SUCCESS, info.flags & TH_FLAGS_IDLE == 0 {
+				total += Double(info.cpu_usage) / Double(TH_USAGE_SCALE) * 100.0
+			}
+		}
+		return total
+	}
+
 	// MARK: Extension side — the accumulator
 
 	static var recorder: Recorder { Recorder.shared }
@@ -419,9 +507,57 @@ enum KBDiagnostics {
 				snap.glideFinalLatencyBins = bucket(snap.glideFinalLatencyBins, milliseconds)
 			case .glideCommit:
 				snap.glideCommitLatencyBins = bucket(snap.glideCommitLatencyBins, milliseconds)
+			case .initialization:
+				snap.initLatencyBins = bucket(snap.initLatencyBins, milliseconds)
 			}
 			tick += 1
 			if tick % 32 == 0 { persistLocked() }
+			lock.unlock()
+		}
+
+		// MARK: Typing-quality accumulators
+
+		private var lastTapUptime = 0.0
+		/// Gaps longer than this are treated as "stopped typing", not typing time, so a
+		/// paused-then-resumed session does not inflate the WPM denominator.
+		private static let idleCapSeconds = 5.0
+
+		func noteTap(atUptime uptime: Double) {
+			lock.lock()
+			snap.physicalTaps = (snap.physicalTaps ?? 0) + 1
+			if lastTapUptime > 0 {
+				let delta = uptime - lastTapUptime
+				if delta > 0, delta <= Self.idleCapSeconds {
+					snap.activeTypingMs = (snap.activeTypingMs ?? 0) + delta * 1_000
+				}
+			}
+			lastTapUptime = uptime
+			tick += 1
+			if tick % 32 == 0 { persistLocked() }
+			lock.unlock()
+		}
+
+		func noteWordCommitted(chars: Int, autocorrected: Bool,
+			predictionShown: Bool, predictionHit: Bool) {
+			lock.lock()
+			snap.wordsCommitted = (snap.wordsCommitted ?? 0) + 1
+			snap.committedChars = (snap.committedChars ?? 0) + max(0, chars)
+			if autocorrected { snap.wordsAutocorrected = (snap.wordsAutocorrected ?? 0) + 1 }
+			if predictionShown {
+				snap.nwpOpportunities = (snap.nwpOpportunities ?? 0) + 1
+				if predictionHit { snap.nwpHits = (snap.nwpHits ?? 0) + 1 }
+			}
+			persistLocked()          // commits are infrequent relative to taps — persist each
+			lock.unlock()
+		}
+
+		func noteWordModified(revertedCorrection: Bool) {
+			lock.lock()
+			snap.wordsModified = (snap.wordsModified ?? 0) + 1
+			if revertedCorrection {
+				snap.correctionsReverted = (snap.correctionsReverted ?? 0) + 1
+			}
+			persistLocked()
 			lock.unlock()
 		}
 
@@ -464,6 +600,10 @@ enum KBDiagnostics {
 				snap.minAvailableMB = avail
 				snap.limitMB = foot + avail        // the ceiling, inferred at the tightest point
 			}
+			// sample() fires at the head of a background decode, so this reads CPU while a
+			// dynamic search is actually running.
+			let cpu = KBDiagnostics.cpuUsagePercent()
+			if cpu > (snap.peakCPUPercent ?? 0) { snap.peakCPUPercent = cpu }
 		}
 		private func persistLocked() {
 			var out = snap
