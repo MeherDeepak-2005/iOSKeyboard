@@ -1,11 +1,14 @@
 #!/bin/sh
 set -eu
 
-# The research scorer is a Debug artifact unless an optimized internal build opts in
-# explicitly. Ordinary Release builds leave no model/tokenizer behind even when a
-# developer has local paths configured.
-if [ "${CONFIGURATION:-}" != "Debug" ] \
-        && [ "${INTERNAL_NEURAL_ENABLED:-NO}" != "YES" ]; then
+# The neural W8 rescorer is retired for this edition (see KeyboardEngine.shared): the
+# default build ships n-gram + in-trie search prior with no neural model. Bundle the
+# rescorer ONLY for an explicit internal profiling build — never for ordinary Debug or
+# Release builds, even when a developer has local model paths configured. This was
+# previously auto-installed for any Debug build; revival is now the single opt-in below,
+# paired with the INTERNAL_NEURAL compile flag.
+if [ "${INTERNAL_NEURAL_ENABLED:-NO}" != "YES" ]; then
+    echo "note: neural rescorer retired for this edition (set INTERNAL_NEURAL_ENABLED=YES to bundle)"
     exit 0
 fi
 
