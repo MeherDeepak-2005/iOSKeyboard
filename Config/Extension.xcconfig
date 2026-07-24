@@ -10,5 +10,12 @@ INTERNAL_NEURAL_TOKENIZER_MODEL =
 // any accidentally bundled neural files.
 INTERNAL_NEURAL_ENABLED = NO
 
+// GRU streaming search prior (NN-LM in the trie). Independent of the W8 rescorer
+// above: pair INTERNAL_GRU_ENABLED = YES with the INTERNAL_GRU Swift compile flag
+// to both bundle gru.mlpackage and wire GRULanguagePrior into contextSearchPrior.
+INTERNAL_GRU_MODEL_PACKAGE =
+INTERNAL_GRU_TOKENIZER_MODEL =
+INTERNAL_GRU_ENABLED = NO
+
 #include? "Secrets.xcconfig"
 #include? "Klipy.xcconfig"

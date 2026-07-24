@@ -84,13 +84,22 @@ def main():
         traced = torch.jit.trace(step, (token, seed))
 
     import coremltools as ct
+    # The recurrent state is threaded OUT of one step and back IN to the next by the
+    # in-trie decoder, so state_in and state_out must be the SAME dtype — otherwise the
+    # caller feeds an fp16 array into an fp32-declared input (or vice versa) every step and
+    # relies on an implicit host coercion. Pin both to fp32 explicitly. Under fp16 compute
+    # the GRU still runs in fp16 internally (state is fp16-precision either way); the fp32
+    # I/O containers just make the threading exact and coercion-free on the Swift side.
     mlmodel = ct.convert(
         traced,
         inputs=[
             ct.TensorType(name="token", shape=(1, 1), dtype=np.int32),
             ct.TensorType(name="state_in", shape=(layers, 1, hidden), dtype=np.float32),
         ],
-        outputs=[ct.TensorType(name="logits"), ct.TensorType(name="state_out")],
+        outputs=[
+            ct.TensorType(name="logits"),
+            ct.TensorType(name="state_out", dtype=np.float32),
+        ],
         minimum_deployment_target=ct.target.iOS18,
         compute_precision=ct.precision.FLOAT16 if args.precision == "fp16" else ct.precision.FLOAT32,
         compute_units=ct.ComputeUnit.ALL,

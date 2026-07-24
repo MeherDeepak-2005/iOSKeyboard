@@ -90,6 +90,21 @@ protocol NeuralLanguagePrior: AnyObject {
 	func handleMemoryPressure()
 }
 
+/// Source of the in-trie search prior's likely-next-words (the words that fund extra edit
+/// budget along their prefixes inside the trie walk — see `TrieSearchPrior`). The GRU
+/// implements this so `contextSearchPrior` can be conditioned on the neural LM instead of
+/// the n-gram. Both calls are cheap and synchronous on the decoder queue:
+///   • `warmSearchPrior` kicks off (at most one in-flight per context) an ASYNC pass that
+///     ranks the candidate pool for the context and caches it — it never blocks decode.
+///   • `searchPriorWords` reads that cache, returning nil until the async pass lands, so
+///     the caller transparently falls back to the n-gram pool while the GRU warms up.
+/// A model that only reranks a supplied pool sidesteps subword→word generation; producing
+/// novel next-words from the GRU (a subword beam) is the further step.
+protocol SearchPriorProvider: AnyObject {
+	func warmSearchPrior(context: [String], pool: [String])
+	func searchPriorWords(context: [String]) -> [String]?
+}
+
 extension NeuralLanguagePrior {
 	func prepareForSelection() {}
 	func handleMemoryPressure() {}
