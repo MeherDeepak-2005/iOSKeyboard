@@ -607,23 +607,15 @@ final class KeyboardViewController: UIInputViewController {
 		guard let initial = textDocumentProxy.documentContextBeforeInput,
 			let plan = HostSuffixReplacementPlan(contextBeforeInput: initial,
 				suffix: suffix, replacement: replacement) else { return false }
-		var context = initial
-		for _ in 0...plan.maximumDeleteCount {
-			switch plan.state(for: context) {
-			case .readyToInsert:
-				if !plan.replacement.isEmpty { insertIntoHost(plan.replacement) }
-				return true
-			case .invalid:
-				return false
-			case .deleteBackward:
+		return plan.apply(initialContext: initial,
+			deleteBackward: {
 				textDocumentProxy.deleteBackward()
 				lastReplaceDeleteCount += 1
-				guard let updated = textDocumentProxy.documentContextBeforeInput,
-					updated != context else { return false }
-				context = updated
-			}
-		}
-		return false
+				// An empty field reports nil; the plan reads that as the terminal state
+				// for a first-word replacement rather than a stuck host.
+				return textDocumentProxy.documentContextBeforeInput
+			},
+			insert: { insertIntoHost($0) })
 	}
 
 	// MARK: Clipboard — capture on panel open, insert from saved history
