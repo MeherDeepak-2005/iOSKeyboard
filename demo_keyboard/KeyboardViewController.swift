@@ -31,6 +31,12 @@ final class KeyboardViewController: UIInputViewController {
 	private var presentedDecodeSnapshot: PresentedDecodeSnapshot?
 	private var currentWordBuffer = ""
 	private var currentContextBuffer: [String] = []
+	/// Next-word-prediction (NWP) benchmark state: the lowercased top-3 shown at the current
+	/// word's start and whether an in-context prediction was actually armed. Read once when
+	/// the word commits (was the intended word already offered before the first letter?),
+	/// then disarmed. Counts only — no text leaves the process.
+	private var nwpPredictedTop3: Set<String> = []
+	private var nwpPredictionArmed = false
 	private var suggestionModeResolved = false
 	private var suggestionsVisible = true
 	private var hostConnectionReady = false
@@ -553,6 +559,25 @@ final class KeyboardViewController: UIInputViewController {
 		engine.dontCorrect(word)
 	}
 
+	// MARK: Typing-quality benchmark hooks (aggregate counters in KBDiagnostics; no text)
+
+	/// One physical screen tap. Called at the discrete key handlers, so a suggestion pick
+	/// or a whole glide gesture is a single tap even though it produces many characters —
+	/// exactly what makes the keystrokes-per-character ratio drop below 1.0.
+	private func noteTap() {
+		KBDiagnostics.noteTap(atUptime: ProcessInfo.processInfo.systemUptime)
+	}
+
+	/// Record a finalized word for the accuracy/speed counters, and settle the pending NWP
+	/// opportunity. `autocorrected` is true only when the engine changed the typed word.
+	private func recordCommitMetrics(_ word: String, autocorrected: Bool) {
+		let armed = nwpPredictionArmed
+		nwpPredictionArmed = false
+		guard !word.isEmpty, !isSecureField else { return }
+		KBDiagnostics.noteWordCommitted(chars: word.count + 1, autocorrected: autocorrected,
+			predictionShown: armed, predictionHit: armed && nwpPredictedTop3.contains(word.lowercased()))
+	}
+
 	/// Timestamp of the last plain space, for the double-space → ". " shortcut.
 	private var lastSpaceAt: TimeInterval = 0
 
@@ -723,6 +748,7 @@ final class KeyboardViewController: UIInputViewController {
 			let revision = documentRevision
 			DispatchQueue.main.async { [weak self] in
 				guard let self else { return }
+				self.noteTap()          // counted off the host path — never before the insert
 				if let acceptedCorrection, acceptedCorrection.fromAutocorrect,
 				   self.activeLanguageMode == .english {
 					self.engine.correctionStood(acceptedCorrection.original)
@@ -736,6 +762,7 @@ final class KeyboardViewController: UIInputViewController {
 			return
 		}
 
+		noteTap()          // space / punctuation / other single-character key
 		resolveCorrectionAsAccepted()
 		resolveGlideUnverified()
 
@@ -775,6 +802,7 @@ final class KeyboardViewController: UIInputViewController {
 				engine.learnTouchProfile(word: typedWord, taps: wordTaps)
 			}
 			let committedWord = correction?.corrected ?? typedWord
+			recordCommitMetrics(committedWord, autocorrected: correction != nil)
 			// Never learn from secure fields — password fragments must not enter the
 			// persisted personal model. (Stats ride the same gate: password words
 			// shouldn't count toward streaks either.)
@@ -814,6 +842,7 @@ final class KeyboardViewController: UIInputViewController {
 			return
 		}
 		guard activeLanguageMode == .telugu, !isSecureField else { return }
+		noteTap()          // Telugu composition key (.text keys are counted inside handleInsert)
 		resolveCorrectionAsAccepted()
 		resolveGlideUnverified()
 		let before = textDocumentProxy.documentContextBeforeInput ?? ""
@@ -920,6 +949,7 @@ final class KeyboardViewController: UIInputViewController {
 	}
 
 	private func handleReturn() {
+		noteTap()
 		resolveCorrectionAsAccepted()
 		resolveGlideUnverified()
 		let typedWord = currentWordBuffer
@@ -930,6 +960,7 @@ final class KeyboardViewController: UIInputViewController {
 			engine.learnTouchProfile(word: typedWord, taps: wordTaps)
 		}
 		let committedWord = correction?.corrected ?? typedWord
+		recordCommitMetrics(committedWord, autocorrected: correction != nil)
 		if !committedWord.isEmpty, !isSecureField {
 			learnCommittedWord(context: decodeContext, word: committedWord)
 			KBStats.noteCommitted(glided: false)
@@ -965,6 +996,7 @@ final class KeyboardViewController: UIInputViewController {
 
 	private func handleDelete() {
 		noteProxyEdit()
+		noteTap()
 		// A single Backspace right after a correction undoes it back to the typed word.
 		if let c = lastCorrection {
 			// Validate the correction is still present in the document before undoing.
@@ -1006,6 +1038,10 @@ final class KeyboardViewController: UIInputViewController {
 				scheduleSuggestions()
 				return
 			}
+			// WMR: backspacing away a committed correction/pick/glide is the clearest
+			// "user edited a word after committing it" signal. A reverted engine autocorrect
+			// additionally counts toward the over-correction rate.
+			KBDiagnostics.noteWordModified(revertedCorrection: c.fromAutocorrect)
 			// Walk back the exact learned replacement for every source (autocorrect,
 			// completion, or Glide). Autocorrect additionally needs a session keep so
 			// the next boundary does not immediately fight the user's undo.
@@ -1030,6 +1066,7 @@ final class KeyboardViewController: UIInputViewController {
 
 	private func handlePick(_ s: String) {
 		noteProxyEdit()
+		noteTap()              // tapping the suggestion bar is one physical tap
 		resetEraseTracking()   // picking from the bar is its own flow with its own signals
 		wordTaps.removeAll(keepingCapacity: true)
 
@@ -1072,12 +1109,16 @@ final class KeyboardViewController: UIInputViewController {
 			if partial.lowercased() != s.lowercased() {
 				recordReplacement(original: partial, replacement: s)
 			}
+			// A completion pick finalizes a word the user chose (not an engine autocorrect).
+			recordCommitMetrics(s, autocorrected: false)
 			lastCorrection = Correction(original: partial, corrected: s, trailing: " ", fromAutocorrect: false)
 		case .predict:
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
 			insertIntoHost(s + " ")
 			learnCommittedWord(context: ctx, word: s)
 			if !isSecureField { KBStats.noteCommitted(glided: false) }
+			// Tapping a next-word prediction: a finalized word and, if it was armed, a direct NWP hit.
+			recordCommitMetrics(s, autocorrected: false)
 			lastCorrection = nil        // nothing the user "typed" to revert to
 		case .revert(let original):
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
@@ -1085,6 +1126,8 @@ final class KeyboardViewController: UIInputViewController {
 				guard replaceHostSuffix(corrected + " ", with: original + " ") else { return }
 				rejectCorrection(original)
 				recordReplacement(original: corrected, replacement: original)
+				// Tapping the undo chip edits an already-committed (auto)corrected word.
+				KBDiagnostics.noteWordModified(revertedCorrection: true)
 			} else {
 				insertIntoHost(s + " ")
 			}
@@ -1112,6 +1155,10 @@ final class KeyboardViewController: UIInputViewController {
 				recordReplacement(original: committed, replacement: s)
 			}
 			lastCorrection = Correction(original: "", corrected: replacement, trailing: " ", fromAutocorrect: false)
+			// Swapping a committed glide word for an alternative edits an already-committed word.
+			if committed.lowercased() != s.lowercased() {
+				KBDiagnostics.noteWordModified(revertedCorrection: false)
+			}
 			mode = .glided(replacement)          // further swaps keep working
 			let alternatives = uniqueWords([committed] + oldAlternatives, excluding: replacement)
 			setGlideSuggestionBar(winner: replacement, alternatives: alternatives)
@@ -1256,6 +1303,10 @@ final class KeyboardViewController: UIInputViewController {
 		KBDiagnostics.logGlideCommit(ms: (ProcessInfo.processInfo.systemUptime - liftAt) * 1_000)
 
 		// Everything below is bookkeeping after the visible insertion.
+		// A glide finalizes a whole word from the one touch-down tap already counted in
+		// handleInsert — so it is not re-counted as a tap here, which is exactly what drops
+		// keystrokes-per-character below 1.0.
+		recordCommitMetrics(word, autocorrected: false)
 		learnCommittedWord(context: context ?? contextWords(ctx, max: 8), word: word)
 		lastCorrection = Correction(original: "", corrected: display, trailing: " ", fromAutocorrect: false)
 		mode = .glided(display)
@@ -1479,8 +1530,15 @@ final class KeyboardViewController: UIInputViewController {
 						// Empty field + fresh clipboard text → offer Paste in place of
 						// next-word predictions (the "copied, then deleted it" moment).
 						self.setPasteBar()
+						self.nwpPredictionArmed = false
 					} else {
-						self.setSuggestionBar(presented.suggestions.map(\.text))
+						let words = presented.suggestions.map(\.text)
+						self.setSuggestionBar(words)
+						// Arm the NWP benchmark: these are the predictions offered BEFORE the
+						// user strikes the first letter. Only count it as an opportunity when
+						// there is real context (a cold word start predicts nothing meaningful).
+						self.nwpPredictedTop3 = Set(words.prefix(3).map { $0.lowercased() })
+						self.nwpPredictionArmed = !context.isEmpty && !self.nwpPredictedTop3.isEmpty
 					}
 				}
 			} else {

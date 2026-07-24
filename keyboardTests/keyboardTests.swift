@@ -857,6 +857,48 @@ struct KeyboardTests {
 		#expect(result.host == "foo hello ")
 	}
 
+	// The diagnostics Snapshot is persisted to the shared App Group and read across the app,
+	// the extension, and app upgrades. A decode regression would silently wipe it, so pin
+	// both backward compatibility and the benchmark ratio math derived from the counters.
+	@Test func diagnosticsSnapshotDecodesLegacyDataAndComputesBenchmarkRatios() throws {
+		// A snapshot written before the benchmark metrics existed must still decode, with
+		// every new counter absent (nil) rather than throwing.
+		let legacy = #"{"updated":0,"warningCount":2,"criticalCount":0,"peakFootprintMB":18.5,"minAvailableMB":40,"limitMB":58.5}"#
+		let old = try JSONDecoder().decode(KBDiagnostics.Snapshot.self, from: Data(legacy.utf8))
+		#expect(old.warningCount == 2)
+		#expect(old.peakFootprintMB == 18.5)
+		#expect(old.wordsCommitted == nil)
+		#expect(old.physicalTaps == nil)
+		#expect(old.peakCPUPercent == nil)
+		#expect(old.initLatencyBins == nil)
+
+		var snap = KBDiagnostics.Snapshot()
+		snap.wordsCommitted = 100
+		snap.wordsModified = 7
+		snap.wordsAutocorrected = 22
+		snap.correctionsReverted = 3
+		snap.nwpOpportunities = 40
+		snap.nwpHits = 18
+		snap.activeTypingMs = 120_000        // 2 active minutes
+		snap.committedChars = 520
+		snap.physicalTaps = 430
+		snap.peakCPUPercent = 63.5
+		snap.initLatencyBins = [0, 1, 2, 3]
+		let round = try JSONDecoder().decode(KBDiagnostics.Snapshot.self,
+			from: JSONEncoder().encode(snap))
+		#expect(round.wordsCommitted == 100)
+		#expect(round.nwpHits == 18)
+		#expect(round.physicalTaps == 430)
+		#expect(round.peakCPUPercent == 63.5)
+		#expect(round.initLatencyBins == [0, 1, 2, 3])
+
+		// The published ratios (mirrors DiagnosticsView): WMR, NWP hit rate, WPM, KPC.
+		#expect(abs(Double(round.wordsModified!) / Double(round.wordsCommitted!) - 0.07) < 1e-9)
+		#expect(abs(Double(round.nwpHits!) / Double(round.nwpOpportunities!) - 0.45) < 1e-9)
+		#expect(abs(Double(round.wordsCommitted!) / (round.activeTypingMs! / 60_000) - 50) < 1e-9)
+		#expect(Double(round.physicalTaps!) / Double(round.committedChars!) < 1.0)   // taps < chars
+	}
+
 	@MainActor @Test func nativeTeluguKeyboardDoesNotReuseQwertyGeometry() {
 		let keyboard = KeyboardView(theme: .system(dark: false), showsGlobe: false,
 			languageMode: .telugu)

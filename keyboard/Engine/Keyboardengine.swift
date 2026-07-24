@@ -1407,11 +1407,16 @@ final class KeyboardEngine {
 	func decode(_ request: DecodeRequest, completion: @escaping (DecodeSnapshot) -> Void) {
 		genLock.lock(); suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
 		let started = ProcessInfo.processInfo.systemUptime
+		// A decode with no partial word is a fresh word start — it builds the context /
+		// prediction search space (Gboard's UpdateLM). Time it separately as initialization
+		// latency, in addition to the ordinary tap-decode histogram.
+		let isWordStart = request.currentWord.isEmpty
 		let signpost = KBDiagnostics.beginTapDecode()
 		queue.async { [weak self] in
 			defer {
-				KBDiagnostics.endTapDecode(signpost,
-					milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
+				let ms = (ProcessInfo.processInfo.systemUptime - started) * 1_000
+				KBDiagnostics.endTapDecode(signpost, milliseconds: ms)
+				if isWordStart { KBDiagnostics.recordInitializationLatency(milliseconds: ms) }
 			}
 			guard let self, self.isLatest(gen) else { return }   // superseded — the newest pass delivers
 			KBDiagnostics.recorder.sample()   // cheap footprint/headroom probe, background only
