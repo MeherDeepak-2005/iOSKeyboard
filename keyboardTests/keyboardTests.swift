@@ -1334,6 +1334,25 @@ struct KeyboardTests {
 		#expect(KBSafetyLexicon.normalize("  It’s   Fine ") == "it's fine")
 	}
 
+	/// Legal-risk guarantee, at the runtime layer the end user actually hits: every term on
+	/// the requested Google profanity list (Shidouuu/Google-profanity-words) resolves to a
+	/// blocked action through KBSafetyLexicon — as typed AND upper-cased, since the lookup
+	/// case-folds — so none can ever be surfaced as a suggestion or autocorrect target.
+	@Test func everyRequestedProfanityTermIsBlockedAtRuntime() throws {
+		let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+			.deletingLastPathComponent()
+		let safety = try #require(KBSafetyLexicon(
+			url: root.appendingPathComponent("keyboard/safety.kbguard")))
+		let list = try String(contentsOf:
+			root.appendingPathComponent("tools/data/google_profanity_shidouuu_en.txt"),
+			encoding: .utf8)
+		let words = list.split(whereSeparator: \.isNewline)
+			.map(String.init).filter { !$0.isEmpty }
+		#expect(words.count == 451)
+		let unblocked = words.filter { !(safety.isBlocked($0) && safety.isBlocked($0.uppercased())) }
+		#expect(unblocked.count == 0, "\(unblocked.count) requested profanity terms are not blocked")
+	}
+
 	/// One-off "receive …" corpus successors are singleton evidence and must not
 	/// hijack broad lexical recovery. The compact LM keeps those records for legacy
 	/// compatibility, but the runtime backs off before ranking or context injection.
