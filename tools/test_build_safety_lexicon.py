@@ -7,10 +7,13 @@ import build_safety_lexicon as safety
 
 class SafetyLexiconArtifactTests(unittest.TestCase):
     def expected_terms(self):
+        # Mirrors build_safety_lexicon.main() exactly — both pinned English lists then
+        # the reviewed TSVs — so the packed-artifact equality test stays authoritative.
         terms = {}
-        for raw in safety.GOOGLE_EN_SOURCE.read_text(encoding="utf-8").splitlines():
-            safety.merge_term(terms, raw.strip(), safety.LANG_EN,
-                              safety.SOURCE_GOOGLE_EN)
+        safety.load_pinned_english(terms, safety.GOOGLE_EN_SOURCE,
+                                   safety.GOOGLE_EN_SHA256, safety.SOURCE_GOOGLE_EN)
+        safety.load_pinned_english(terms, safety.GOOGLE_SHIDOUUU_SOURCE,
+                                   safety.GOOGLE_SHIDOUUU_SHA256, safety.SOURCE_GOOGLE_SHIDOUUU)
         for path, source_id in (
             (safety.RECOVERED_SOURCE, safety.SOURCE_RECOVERED),
             (safety.CURATED_SOURCE, safety.SOURCE_PROJECT),
@@ -20,11 +23,52 @@ class SafetyLexiconArtifactTests(unittest.TestCase):
                 safety.merge_term(terms, term, language, row_source, action)
         return terms
 
+    def packed_actions(self):
+        """{normalized term: action id} decoded straight from the shipped safety.kbguard."""
+        data = safety.OUT.read_bytes()
+        self.assertEqual(data[:8], b"KBGUARD1")
+        _, entry_size, count, _, _ = struct.unpack_from("<HHIII", data, 8)
+        blob_base = 24 + count * entry_size
+        actions = {}
+        for index in range(count):
+            offset = 24 + index * entry_size
+            _, blob_offset, length, _, action, _, _, _ = struct.unpack_from(
+                "<QIHBBHHI", data, offset)
+            term = data[blob_base + blob_offset:blob_base + blob_offset + length].decode("utf-8")
+            actions[term] = action
+        return actions
+
     def test_pinned_english_input_is_unchanged(self):
         self.assertEqual(safety.sha256(safety.GOOGLE_EN_SOURCE), safety.GOOGLE_EN_SHA256)
         self.assertEqual(
             len(safety.GOOGLE_EN_SOURCE.read_text(encoding="utf-8").splitlines()),
             962,
+        )
+
+    def test_pinned_shidouuu_input_is_unchanged(self):
+        self.assertEqual(safety.sha256(safety.GOOGLE_SHIDOUUU_SOURCE),
+                         safety.GOOGLE_SHIDOUUU_SHA256)
+        self.assertEqual(
+            len(safety.GOOGLE_SHIDOUUU_SOURCE.read_text(encoding="utf-8").splitlines()),
+            451,
+        )
+
+    def test_every_shidouuu_term_is_suppressed_in_artifact(self):
+        # The legal guarantee: every term on the requested list resolves, in the shipped
+        # binary, to a suppress action — so it can never be suggested or corrected TO.
+        actions = self.packed_actions()
+        suppress = {safety.ACTIONS["suppress_suggest"], safety.ACTIONS["suppress_always"]}
+        not_suppressed = []
+        for raw in safety.GOOGLE_SHIDOUUU_SOURCE.read_text(encoding="utf-8").splitlines():
+            term = raw.strip()
+            if not term:
+                continue
+            norm = safety.normalize(term, safety.LANG_EN)
+            if actions.get(norm) not in suppress:
+                not_suppressed.append(norm)
+        self.assertEqual(
+            not_suppressed, [],
+            f"{len(not_suppressed)} listed profanity terms are not suppressed in safety.kbguard",
         )
 
     def test_packed_artifact_contains_every_policy_term(self):

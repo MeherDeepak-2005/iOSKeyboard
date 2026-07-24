@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Build keyboard/safety.kbguard from pinned and project-reviewed policy inputs.
 
-The English baseline is vendored from coffee-and-fun/google-profanity-words at a
-pinned commit and verified before every build. It is merged with the recovered and
-project-reviewed TSVs. Candidate-only Telugu/Tenglish rows remain reviewable in
-source control but cannot enter this artifact. The keyboard never blocks what a
-user types; these exact terms affect generated suggestions, corrections, Glide,
-learning, and neural candidates only.
+The English baseline is vendored from two pinned upstream profanity lists —
+coffee-and-fun/google-profanity-words and Shidouuu/Google-profanity-words — each
+verified by content SHA256 before every build, then merged with the recovered and
+project-reviewed TSVs. Pinning two independent copies of the canonical Google list
+is deliberate defense-in-depth: a term dropped upstream from one still ships from
+the other, so nothing on this list can silently become suggestible. Candidate-only
+Telugu/Tenglish rows remain reviewable in source control but cannot enter this
+artifact. The keyboard never blocks what a user types; these exact terms affect
+generated suggestions, corrections, Glide, learning, and neural candidates only.
 
 Storing the list as one packed binary (24 B/entry + UTF-8 blob) instead of Swift
 string literals keeps it off the heap and out of the compiled binary — the whole
@@ -35,6 +38,13 @@ T_ENGLISH_SOURCE = ROOT / "data" / "safety_tenglish_candidates.tsv"
 GOOGLE_EN_SOURCE = ROOT / "data" / "google_profanity_en.txt"
 GOOGLE_EN_COMMIT = "0ae3460863120bc671361b9403cc65d5f2075b89"
 GOOGLE_EN_SHA256 = "ea16a22f12b4fb9d32747b8fc7af21b90ce59df7313f6275ce1ef17d746b0dfe"
+# Second pinned copy of the canonical Google profanity list (451 terms), from
+# Shidouuu/Google-profanity-words @ 96139e6. Every term here is legally sensitive and
+# must never surface as a suggestion/correction — pinned by content SHA256 so the build
+# refuses an unreviewed edit, and asserted term-for-term by test_build_safety_lexicon.py.
+GOOGLE_SHIDOUUU_SOURCE = ROOT / "data" / "google_profanity_shidouuu_en.txt"
+GOOGLE_SHIDOUUU_COMMIT = "96139e6f2a4fa35ba2f9a80988e227279fd9e1c6"
+GOOGLE_SHIDOUUU_SHA256 = "8647103818e3e20d54b862636b04708e64cd07c9147a5c319fadc1c89b62ab29"
 
 MASK64 = (1 << 64) - 1
 # action ids (see manifest): allow=0, demote=1, suppress_suggest=2, suppress_always=3
@@ -43,8 +53,9 @@ SUPPRESS = ACTIONS["suppress_suggest"]
 LANGUAGES = {"en": 1, "te": 2, "tenglish": 3}
 LANG_EN, LANG_TE, LANG_TENGLISH = 1, 2, 3
 # Source bit flags stored in the existing u16 sourceID field. A merged term can
-# carry both flags without changing the runtime format.
+# carry several flags without changing the runtime format.
 SOURCE_GOOGLE_EN, SOURCE_PROJECT, SOURCE_RECOVERED, SOURCE_TENGLISH = 1, 2, 4, 8
+SOURCE_GOOGLE_SHIDOUUU = 16
 
 
 def fnv1a64(s: str) -> int:
@@ -121,18 +132,26 @@ def read_policy_tsv(path: Path, source_id: int):
             yield term, LANGUAGES[language], source_id, ACTIONS[action]
 
 
-def main():
-    if not GOOGLE_EN_SOURCE.exists():
-        raise SystemExit(f"missing pinned English safety source: {GOOGLE_EN_SOURCE}")
-    actual_sha = sha256(GOOGLE_EN_SOURCE)
-    if actual_sha != GOOGLE_EN_SHA256:
+def load_pinned_english(terms, path, expected_sha, source_id):
+    """Merge a pinned English blocklist as suppress_suggest, refusing any content that
+    does not match its reviewed SHA256 — an unreviewed edit must never reach the artifact."""
+    if not path.exists():
+        raise SystemExit(f"missing pinned English safety source: {path}")
+    actual_sha = sha256(path)
+    if actual_sha != expected_sha:
         raise SystemExit(
-            "refusing unreviewed English safety source: "
-            f"expected {GOOGLE_EN_SHA256}, got {actual_sha}"
+            "refusing unreviewed English safety source "
+            f"{path.name}: expected {expected_sha}, got {actual_sha}"
         )
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        merge_term(terms, raw.strip(), LANG_EN, source_id)
+
+
+def main():
     terms: dict[str, tuple[int, int, int]] = {}
-    for raw in GOOGLE_EN_SOURCE.read_text(encoding="utf-8").splitlines():
-        merge_term(terms, raw.strip(), LANG_EN, SOURCE_GOOGLE_EN)
+    load_pinned_english(terms, GOOGLE_EN_SOURCE, GOOGLE_EN_SHA256, SOURCE_GOOGLE_EN)
+    load_pinned_english(terms, GOOGLE_SHIDOUUU_SOURCE, GOOGLE_SHIDOUUU_SHA256,
+                        SOURCE_GOOGLE_SHIDOUUU)
 
     for path, source_id in (
         (RECOVERED_SOURCE, SOURCE_RECOVERED),
@@ -168,7 +187,7 @@ def main():
 
     print(
         f"wrote {OUT} ({OUT.stat().st_size} bytes): {len(entries)} exact terms; "
-        f"English source pinned at {GOOGLE_EN_COMMIT}"
+        f"English sources pinned at {GOOGLE_EN_COMMIT[:7]} + {GOOGLE_SHIDOUUU_COMMIT[:7]}"
     )
 
 
