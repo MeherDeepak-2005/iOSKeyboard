@@ -811,6 +811,52 @@ struct KeyboardTests {
 		#expect(scalarHost + plan.replacement == "Before anthe")
 	}
 
+	/// A UITextDocumentProxy-shaped host: deleting the last character reports the new
+	/// context before the cursor, and an EMPTY field reports nil (as UIKit does).
+	private func applyPlan(_ plan: HostSuffixReplacementPlan, host: String)
+		-> (ok: Bool, host: String) {
+		var host = host
+		let ok = plan.apply(initialContext: host,
+			deleteBackward: {
+				host.removeLast()
+				return host.isEmpty ? nil : host
+			},
+			insert: { host += $0 })
+		return (ok, host)
+	}
+
+	// Picking a suggestion for the FIRST word (or undoing its correction) empties the
+	// field on the last deletion; the host then reports a nil context. Regression: the
+	// old loop treated that nil as a failure, so it deleted the word and inserted nothing.
+	@Test func suffixReplacementCompletesWhenTheFieldEmptiesForAFirstWord() throws {
+		// First-word pick: "Helo" -> "Hello ".
+		let pick = try #require(HostSuffixReplacementPlan(
+			contextBeforeInput: "Helo", suffix: "Helo", replacement: "Hello "))
+		#expect(pick.prefix == "")
+		let picked = applyPlan(pick, host: "Helo")
+		#expect(picked.ok)
+		#expect(picked.host == "Hello ")
+
+		// First-word correction-undo on backspace: "Hello " -> "Helo".
+		let undo = try #require(HostSuffixReplacementPlan(
+			contextBeforeInput: "Hello ", suffix: "Hello ", replacement: "Helo"))
+		#expect(undo.prefix == "")
+		let reverted = applyPlan(undo, host: "Hello ")
+		#expect(reverted.ok)
+		#expect(reverted.host == "Helo")
+	}
+
+	// A word that is NOT first keeps a non-empty prefix, so the host never empties — the
+	// path that always worked must keep working after the first-word fix.
+	@Test func suffixReplacementStillReplacesAWordThatFollowsOtherText() throws {
+		let plan = try #require(HostSuffixReplacementPlan(
+			contextBeforeInput: "foo helo", suffix: "helo", replacement: "hello "))
+		#expect(plan.prefix == "foo ")
+		let result = applyPlan(plan, host: "foo helo")
+		#expect(result.ok)
+		#expect(result.host == "foo hello ")
+	}
+
 	@MainActor @Test func nativeTeluguKeyboardDoesNotReuseQwertyGeometry() {
 		let keyboard = KeyboardView(theme: .system(dark: false), showsGlobe: false,
 			languageMode: .telugu)
