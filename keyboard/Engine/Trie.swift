@@ -27,13 +27,47 @@ nonisolated final class TrieSearchPrior {
 	/// The LM widens the search but can never turn a spatially-absurd word into a hit.
 	static let maxBonus = 1.6
 
-	/// `words` are LM-ranked likely continuations (best first). Each lays a rank-decayed
-	/// bonus along its whole prefix path; a shared prefix keeps the MAX over the words
-	/// through it, so common word-starts stay well-funded.
-	init(likelyWords words: [String],
+	/// `words` are LM-ranked likely continuations (best first). Each lays a RANK-decayed bonus
+	/// along its whole prefix path. Used by the n-gram fallback path, which has no probabilities —
+	/// only an ordering — so it funds the top words generously regardless of the LM's confidence.
+	convenience init(likelyWords words: [String],
 		 weight: (Int) -> Double = { 1.5 * pow(0.82, Double($0)) }) {
-		for (rank, word) in words.enumerated() {
-			let bonus = min(Self.maxBonus, weight(rank))
+		self.init(funded: words.enumerated().map {
+			($1, min(Self.maxBonus, weight($0)))
+		})
+	}
+
+	/// PROBABILITY-derived funding — the neural path, which computes real log P(word | context)
+	/// (the beam's numbers, previously discarded). Softmax the supplied log-probs into a funding
+	/// distribution and hand each word `maxBonus · p`: a PEAKED distribution (the LM is confident)
+	/// drives its leader's bonus to ≈`maxBonus` and starves the rest — the search widens narrowly
+	/// but deeply toward one word; a FLAT distribution spreads a shallow bonus across many words —
+	/// broad but shallow. So the search relaxes exactly as much as the LM is sure. `temperature`
+	/// (<1) sharpens so a mildly-peaked context still funds its leader; the top word is floored so
+	/// the single most-likely continuation always widens the search even when the field is broad.
+	/// `scored` is assumed best-first (the `SearchPriorProvider` contract). Hand-set defaults —
+	/// the eventual source is the on-device tuner, same as the ranking blend.
+	convenience init(scoredWords scored: [(word: String, logProbability: Double)],
+		 temperature: Double = 0.66, topFloorFraction: Double = 0.4) {
+		guard !scored.isEmpty else { self.init(funded: []); return }
+		let scaled = scored.map { $0.logProbability / max(temperature, 1e-3) }
+		let maximum = scaled.max() ?? 0
+		let exps = scaled.map { Foundation.exp($0 - maximum) }
+		let total = max(exps.reduce(0, +), 1e-9)
+		let topFloor = Self.maxBonus * topFloorFraction
+		self.init(funded: scored.enumerated().map { index, entry in
+			let probability = exps[index] / total
+			let floored = index == 0 ? max(Self.maxBonus * probability, topFloor)
+				: Self.maxBonus * probability
+			return (entry.word, min(Self.maxBonus, floored))
+		})
+	}
+
+	/// Lay each `(word, bonus)` along the word's whole prefix path; a shared prefix keeps the MAX
+	/// bonus over the words through it, so common word-starts stay well-funded. Budget only ever
+	/// RELAXES (bonus ≥ 0), so an empty list reproduces the exact pure-channel search.
+	private init(funded: [(word: String, bonus: Double)]) {
+		for (word, bonus) in funded {
 			guard bonus > 0 else { continue }
 			var node = root
 			for ch in word.lowercased().utf8 {

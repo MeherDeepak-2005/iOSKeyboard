@@ -1,10 +1,43 @@
 # GRU Search-Prior Integration — Walkthrough
 
-_Branch: `gru-integration` (off `main`). Status: **seam implemented + wiring tested; Core ML
-forward pass unverified until the model is exported & bundled.**_
+_Branch: `gru-integration` (off `main`). Status: **seam implemented + wiring tested; the
+streaming/scoring/prior math is verified against the PyTorch checkpoint (`tools/lm`); AND the Core ML
+runtime is now verified on the iOS Simulator — the single-step and batched models, scored through the
+real Swift `GRULanguagePrior`, match the PyTorch reference within fp16 tolerance (`gruCoreMLScoresMatchPyTorchReference`,
+`gruBatchedCoreMLScoresMatchReference`). Remaining unknown is on-physical-device ANE latency/energy.**_
 
 This documents exactly what was built, where, how the decode path uses it, what is and
 isn't verified, and the remaining steps to make it live and measurable.
+
+---
+
+## 0. Refinement pass — drive the GRU as a GRU, not a stateless transformer
+
+The first cut drove the GRU like a stateless model, discarding the one property it was chosen for
+(cheap incremental state). This pass fixes that and separates the two neural roles. All changes are
+fail-safe (production fills neither neural slot) and compile under default **and** `-D INTERNAL_GRU`.
+
+| # | Change | Where | Verified |
+|---|---|---|---|
+| 1 | **Persist recurrent state across word boundaries.** `runContext` caches `(tokens, state)` and threads only the divergent suffix when the context grows (a committed word), instead of re-running ≤12 words from zero every pass. | `GRULanguagePrior.runContext` | Python: incremental == full rebuild, drift **0.0** |
+| 2 | **`memcpy` state copies.** `duplicate`/`zeroState` bulk-copy the fp32 state instead of boxing an NSNumber per float (512/candidate). | same file | trivial; compiles |
+| 3 | **First-piece admission filter.** One shared step off the context state scores every candidate's first piece at once; single-piece words are then EXACT (0 extra steps), and only multi-piece candidates whose first-piece upper bound can still reach the top-K are threaded. | `streamScore` | Python: bound holds (0 violations); threshold admission == full top-16 (0 mismatches) |
+| 4 | **Prefix-aware, probability-weighted trie prior.** The beam's log-probs (previously discarded) fund the trie bonus by softmax (peaked→narrow+deep, flat→broad+shallow); once the word is ≥3 chars, generation is constrained to word-starts spatially reachable from the first tap. | `TrieSearchPrior(scoredWords:)`, `generateNextWords(firstLetters:)`, `contextSearchPrior` | Python funding demo + `trieSearchPriorProbabilityWeightingFundsByConfidence` |
+| 5 | **Split the neural contract into two roles.** `searchPrior: NeuralSearchPrior` (recall/generation) and `rescorer: NeuralLanguagePrior` (precision) are independent slots — choosing one no longer evicts the other. | `DecodeContract.swift`, `KeyboardEngine` | wiring tests |
+| 6 | **Score OOV / user-adopted words.** The search-prior pool is seeded with the user's adopted next-words (`contains && !isStaticWord`) that `NgramScorer.nextWords` drops, so the GRU can rank them by P(word\|context). | `userAdoptedNextWords`, `contextSearchPrior` | compiles; wiring |
+| 7 | **Unify glide + centralize blend.** The GRU's cached next-words feed glide's rerank pools; `0.7·neural+0.3·ngram` becomes the named `neuralPriorWeight`. | `neuralNextWords`, glide augmenters | compiles |
+
+Net effect on the scoring hot path: the old per-candidate-per-token cost (`≈ candidates × (context + word)` sequential Core ML steps, twice per warm) collapses to `≈ context-suffix + 1 + Σ(admitted pieces − 1)`, and the context suffix is usually one word (state persisted).
+
+### Follow-up pass — A (runtime verification), B (context), C (batched export)
+
+| | Change | Where | Verified |
+|---|---|---|---|
+| **A** | **Core ML RUNTIME parity on the simulator.** The real `GRULanguagePrior` (compiled from `gru.mlpackage`) scored on the sim's Core ML runtime matches the PyTorch reference within fp16 tol — shapes, `token`/`state_in`/`logits`/`state_out` names, persisted state threading, and `gru_tokenizer.bin` all validated end-to-end. | `gruCoreMLScoresMatchPyTorchReference` (keyboardTests) | ✅ passes on simulator (Δ < 1 nat over 1–5-piece words) |
+| **B** | **Context is already sentence-scoped.** The controller's `contextWords` stops at `.!?\n` and caps at 8 words, which matches the GRU's measured effective memory (next-word distribution stops moving by ~6–8 words). The engine's redundant `suffix(12)` is now the named `neuralContextWordCap = 8`, in sync with the controller. | `contextWords` (KeyboardViewController), `neuralContextWordCap` | measured (tools/lm context-length TV) |
+| **C** | **Batched `[B,T]` scorer.** `export_gru_score_coreml.py` → `gru_score.mlpackage`: one Core ML call scores the whole candidate pool (context state threaded once, broadcast across the batch, gathered at candidate positions) instead of per-candidate threading. `GRULanguagePrior` loads it optionally and `streamScore` dispatches to `batchScore` when present (single-step generation + fallback unchanged). | `GRUBatchScore` (tools/lm), `batchScore` (GRULanguagePrior), `install_internal_gru.sh` | module == streamScore Δ≈5e-6; Core ML runtime parity on sim (`gruBatchedCoreMLScoresMatchReference`) |
+
+So the scoring path now has two verified implementations: single-step (persisted state + first-piece admission, no extra model) and batched (one call, needs `gru_score.mlpackage`). The remaining perf work is a physical-device ANE latency/energy measurement.
 
 ---
 
@@ -87,8 +120,9 @@ device. Until then it never loads a model, so it's inert.
 
 ## 4. Two layers — both now implemented
 
-- **Layer 1 — rescorer.** The neural prior scores the candidate list and blends into ranking.
-  Redundant with the transformer; kept only as the tested seam.
+- **Layer 1 — rescorer.** The neural prior scores the candidate list and blends into ranking. Now
+  its OWN contract slot (`rescorer: NeuralLanguagePrior`), independent of the search prior — the
+  transformer's job. Redundant for the GRU; kept only as the tested seam.
 - **Layer 2 — NN-LM IN the trie (context-aware generation).** ✅ **Implemented.** A
   `TrieSearchPrior`, built from the LM's likely next words, funds extra edit budget along
   those words' prefixes *inside* the trie walk — so a context-plausible word just outside the
@@ -102,26 +136,32 @@ device. Until then it never loads a model, so it's inert.
     prior on the close search dragged "sebd" → "see" over the spatially-correct "send"
     (`looseCandidatesCannotBeatCloseChannelMatches`). The recovery pool already rides the
     channel-dominance guards, which keep the rescue honest.
-  - **Prior source:** the shipped **n-gram** now (functional today). The **GRU's next-word
-    distribution** is the drop-in upgrade — swap `ngram.nextWords` for the GRU in
-    `contextSearchPrior`; the search is identical, only the prior gets smarter (and more
-    trustworthy, which is what lets the guards relax).
+  - **Prior source:** the shipped **n-gram**, now UNIONED with the GRU's **generated**
+    next-words. `GRULanguagePrior.warmSearchPrior` runs a bounded subword beam
+    (`generateNextWords`) that decodes the GRU's own likely next-words — including words the
+    sparse bi/trigram tables never proposed — unions them with `ngram.nextWords`, ranks the
+    whole set by the GRU, and caches it; `contextSearchPrior` then keeps the ones the lexicon
+    can emit. This is **generation, not reranking**: it attacks the n-gram's next-word recall
+    ceiling, which reranking a fixed pool could not. Reference + validation:
+    [tools/lm/generate_next_words.py](tools/lm/generate_next_words.py) (the Swift beam mirrors
+    it step for step against `gru.pt`).
   - **Test:** `trieSearchPriorExpandsContextPlausibleWords` proves a word outside the base
     radius is generated, at its true channel cost, without fabricating unfunded words.
 
-  *Honest scope:* this is word-**prefix**-funded budget expansion — a real, shipping-safe form
-  of LM-in-the-trie. A full per-**character** neural beam (a char-level GRU threaded node-by-node,
-  pruning by a joint spatial+neural score) is the further step; it needs a char-level model.
+  *Honest scope:* the beam generates whole **words** (a word-prefix-funded budget expansion,
+  shipping-safe). A full per-**character** neural beam threaded node-by-node through the trie,
+  pruning by a joint spatial+neural score, is the further step; it needs a char-level model.
 
 ---
 
 ## 5. Remaining steps to make it live + measurable
 
 1. **Export the model on Colab** (coremltools): `python export_gru_coreml.py` → `gru.mlpackage`.
-   *(Design note: `score(candidates:)` per-token prediction has call overhead. For the
-   rescorer, add a **batched** score export — context + candidate tokens → per-candidate
-   log-probs in one call, like the transformer's `KeyboardInferenceModel` — and point
-   `GRULanguagePrior` at it. The single-step export is for Layer 2.)*
+   *(Design note: DONE. §0 cut the per-token overhead (persisted context state + first-piece
+   admission on the single-step export), and the follow-up pass added the **batched** score export —
+   `export_gru_score_coreml.py` → `gru_score.mlpackage`, context + candidate tokens → per-candidate
+   log-probs in one call. `GRULanguagePrior.batchScore` uses it when bundled; both paths are Core ML
+   runtime-verified on the simulator. Physical-device ANE latency/energy is the only measurement left.)*
 2. **Bundle** `gru.mlpackage` (or compiled `gru.mlmodelc`) + `gru_tokenizer.bin` (a `tokenizer.bin`
    built from `qwen_spm.model`) into the extension target; add a `validate()` interface check
    like the transformer's.
