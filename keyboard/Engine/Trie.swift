@@ -4,6 +4,86 @@ import Foundation
 
 nonisolated struct Candidate { let word: String; let cost: Double; let logFreq: Double }
 
+nonisolated final class PriorNode {
+	fileprivate var children: [(UInt8, PriorNode)] = []
+	fileprivate(set) var bonus: Double = 0
+	func child(_ ch: UInt8) -> PriorNode? {
+		for (c, n) in children where c == ch { return n }
+		return nil
+	}
+}
+
+/// Context-conditioned search prior — the NN-LM-in-the-trie / Neural-Search-Space seam.
+/// Built from the words the language model deems likely to come next, it grants the trie
+/// walk EXTRA edit budget along the prefixes those words share, so a context-plausible word
+/// just outside the base edit radius is still GENERATED (not merely re-ranked), and a
+/// spatially-cheap branch that leads to no plausible word can be pruned. The likely-word
+/// source is pluggable: the shipped n-gram now, the GRU's next-word distribution once its
+/// Core ML model is bundled — the search is identical, only the prior improves. Budget only
+/// ever RELAXES (bonus ≥ 0, capped ≈ one edit), so a nil prior reproduces today's exact
+/// pure-channel search and this can never drop a candidate the fixed radius already found.
+nonisolated final class TrieSearchPrior {
+	fileprivate let root = PriorNode()
+	/// The LM widens the search but can never turn a spatially-absurd word into a hit.
+	static let maxBonus = 1.6
+
+	/// `words` are LM-ranked likely continuations (best first). Each lays a RANK-decayed bonus
+	/// along its whole prefix path. Used by the n-gram fallback path, which has no probabilities —
+	/// only an ordering — so it funds the top words generously regardless of the LM's confidence.
+	convenience init(likelyWords words: [String],
+		 weight: (Int) -> Double = { 1.5 * pow(0.82, Double($0)) }) {
+		self.init(funded: words.enumerated().map {
+			($1, min(Self.maxBonus, weight($0)))
+		})
+	}
+
+	/// PROBABILITY-derived funding — the neural path, which computes real log P(word | context)
+	/// (the beam's numbers, previously discarded). Softmax the supplied log-probs into a funding
+	/// distribution and hand each word `maxBonus · p`: a PEAKED distribution (the LM is confident)
+	/// drives its leader's bonus to ≈`maxBonus` and starves the rest — the search widens narrowly
+	/// but deeply toward one word; a FLAT distribution spreads a shallow bonus across many words —
+	/// broad but shallow. So the search relaxes exactly as much as the LM is sure. `temperature`
+	/// (<1) sharpens so a mildly-peaked context still funds its leader; the top word is floored so
+	/// the single most-likely continuation always widens the search even when the field is broad.
+	/// `scored` is assumed best-first (the `SearchPriorProvider` contract). Hand-set defaults —
+	/// the eventual source is the on-device tuner, same as the ranking blend.
+	convenience init(scoredWords scored: [(word: String, logProbability: Double)],
+		 temperature: Double = 0.66, topFloorFraction: Double = 0.4) {
+		guard !scored.isEmpty else { self.init(funded: []); return }
+		let scaled = scored.map { $0.logProbability / max(temperature, 1e-3) }
+		let maximum = scaled.max() ?? 0
+		let exps = scaled.map { Foundation.exp($0 - maximum) }
+		let total = max(exps.reduce(0, +), 1e-9)
+		let topFloor = Self.maxBonus * topFloorFraction
+		self.init(funded: scored.enumerated().map { index, entry in
+			let probability = exps[index] / total
+			let floored = index == 0 ? max(Self.maxBonus * probability, topFloor)
+				: Self.maxBonus * probability
+			return (entry.word, min(Self.maxBonus, floored))
+		})
+	}
+
+	/// Lay each `(word, bonus)` along the word's whole prefix path; a shared prefix keeps the MAX
+	/// bonus over the words through it, so common word-starts stay well-funded. Budget only ever
+	/// RELAXES (bonus ≥ 0), so an empty list reproduces the exact pure-channel search.
+	private init(funded: [(word: String, bonus: Double)]) {
+		for (word, bonus) in funded {
+			guard bonus > 0 else { continue }
+			var node = root
+			for ch in word.lowercased().utf8 {
+				let next: PriorNode
+				if let existing = node.child(ch) { next = existing }
+				else { let created = PriorNode(); node.children.append((ch, created)); next = created }
+				next.bonus = max(next.bonus, bonus)
+				node = next
+			}
+		}
+	}
+
+	var isEmpty: Bool { root.children.isEmpty }
+	func rootChild(_ ch: UInt8) -> PriorNode? { root.child(ch) }
+}
+
 nonisolated final class Trie {
 	private final class Node {
 		// Compact child storage: a tiny inline-sorted array beats a Dictionary here —
@@ -77,7 +157,8 @@ nonisolated final class Trie {
 		return n.logFreq
 	}
 
-	func search(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil) -> [Candidate] {
+	func search(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil,
+				prior: TrieSearchPrior? = nil) -> [Candidate] {
 		let chars = Array(typed.utf8)
 		guard !chars.isEmpty else { return [] }
 		let n = chars.count
@@ -89,8 +170,10 @@ nonisolated final class Trie {
 		// transient arrays per keystroke). Depth is bounded: every row past the typed
 		// length adds ≥ delCost to the row minimum (an apostrophe level adds only
 		// apostropheSkipCost — the +2 headroom covers the one apostrophe a real word
-		// carries), so beyond this depth no row can come back under budget.
-		let maxDepth = n + Int(maxCost / Trie.delCost) + 2
+		// carries), so beyond this depth no row can come back under budget. The prior can
+		// relax the budget by up to maxBonus, so its headroom is added to the depth bound.
+		let priorHeadroom = prior != nil ? TrieSearchPrior.maxBonus : 0
+		let maxDepth = n + Int((maxCost + priorHeadroom) / Trie.delCost) + 2
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
 		for i in 0...n { dp[i] = Double(i) * Trie.insCost }
 		var out: [Candidate] = []
@@ -98,7 +181,7 @@ nonisolated final class Trie {
 			let firstPenalty = Trie.firstLetterPenaltyPolicy(typedLength: n,
 				candidateFirst: ch, typedFirst: chars[0])
 			Trie.recurse(child, ch, 0, 1, firstPenalty, chars, tapRow,
-				&dp, maxDepth, maxCost, &out)
+				&dp, maxDepth, maxCost, prior?.rootChild(ch), &out)
 		}
 		return out
 	}
@@ -107,7 +190,8 @@ nonisolated final class Trie {
 								_ depth: Int, _ firstPenalty: Double,
 								_ typed: [UInt8], _ taps: [KeyTap?]?,
 								_ dp: inout [Double], _ maxDepth: Int,
-								_ maxCost: Double, _ out: inout [Candidate]) {
+								_ maxCost: Double, _ priorNode: PriorNode?,
+								_ out: inout [Candidate]) {
 		guard depth <= maxDepth else { return }
 		let n = typed.count
 		let base = depth * (n + 1), prev = base - (n + 1)
@@ -129,14 +213,18 @@ nonisolated final class Trie {
 			dp[base + col] = v
 			if v < rowMin { rowMin = v }
 		}
+		// Context bonus for THIS prefix: an LM-plausible word-start earns extra edit budget,
+		// so a plausible word just outside the base radius is generated (its reported cost
+		// stays the pure channel cost — ranking still owns the LM/frequency decision).
+		let bonus = priorNode?.bonus ?? 0
 		let finalCost = dp[base + n] + firstPenalty
-		if let w = node.word, finalCost <= maxCost {
+		if let w = node.word, finalCost - bonus <= maxCost {
 			out.append(Candidate(word: w, cost: finalCost, logFreq: node.logFreq))
 		}
-		if rowMin + firstPenalty <= maxCost {
+		if rowMin + firstPenalty - bonus <= maxCost {
 			for (ch, child) in node.children {
 				recurse(child, ch, letter, depth + 1, firstPenalty, typed, taps,
-					&dp, maxDepth, maxCost, &out)
+					&dp, maxDepth, maxCost, priorNode?.child(ch), &out)
 			}
 		}
 	}

@@ -4,6 +4,7 @@ enum DecodeModelTier: String, Codable, Equatable {
 	case ngram
 	case neuralW8
 	case neuralW8A8
+	case neuralGRU
 }
 
 /// Immutable identity for one decoder request. A result may be presented or committed
@@ -85,6 +86,58 @@ protocol NeuralLanguagePrior: AnyObject {
 	func score(candidates: [String], wordSessionID: UInt64,
 		 completion: @escaping (Result<[String: Double], Error>) -> Void)
 	func discardSession(_ wordSessionID: UInt64)
+	func prepareForSelection()
+	func handleMemoryPressure()
+}
+
+/// One likely next-word with the LM's log-probability. The probability is what funds a word's
+/// bonus in `TrieSearchPrior` (a peaked distribution funds its top word near the cap, a flat one
+/// funds broadly and shallowly), so the search widens exactly as much as the LM is confident —
+/// see `TrieSearchPrior(scoredWords:)`.
+struct SearchPriorWord: Equatable {
+	let word: String
+	let logProbability: Double
+}
+
+/// A typed-prefix constraint for prefix-AWARE next-word generation. Once the user has typed a
+/// few characters, the search prior can be re-warmed with the beam's start-pieces restricted to
+/// those spatially compatible with the first taps — turning "context-plausible words" into
+/// "context-AND-prefix-plausible words", which is exactly the recovery case Layer 2 exists for.
+/// `firstLetters` is the set of first characters the first tap could plausibly be (the engine
+/// owns the spatial model, so the generator stays keyboard-geometry-agnostic); `text` is the raw
+/// typed prefix, used only as the cache key. nil ⇒ context-only warm (today's behavior).
+struct SearchPrefix: Equatable, Hashable {
+	let text: String
+	let firstLetters: Set<Character>
+}
+
+/// Source of the in-trie search prior's likely-next-words (the words that fund extra edit
+/// budget along their prefixes inside the trie walk — see `TrieSearchPrior`). The GRU
+/// implements this so `contextSearchPrior` can be conditioned on the neural LM instead of
+/// the n-gram. Both calls are cheap and synchronous on the decoder queue:
+///   • `warmSearchPrior` kicks off (at most one in-flight per key) an ASYNC pass that
+///     ranks the candidate pool for the context and caches it — it never blocks decode.
+///   • `searchPriorWords` reads that cache, returning nil until the async pass lands, so
+///     the caller transparently falls back to the n-gram pool while the GRU warms up.
+/// `warmSearchPrior` GENERATES the GRU's own likely next-words (a subword beam) and unions them
+/// with the supplied n-gram pool before ranking, so `searchPriorWords` returns context-plausible
+/// words the n-gram never proposed — breaking the pool's recall ceiling, not merely re-ordering
+/// it. Each returned word carries its LM log-probability so the trie bonus is probability-derived,
+/// not rank-decayed. The `pool` argument remains the n-gram fallback/seed set; `prefix`, when
+/// non-nil, constrains generation to the typed prefix (keyed separately in the cache).
+protocol SearchPriorProvider: AnyObject {
+	func warmSearchPrior(context: [String], prefix: SearchPrefix?, pool: [String])
+	func searchPriorWords(context: [String], prefix: SearchPrefix?) -> [SearchPriorWord]?
+}
+
+/// The RECALL neural role: a streaming generator that widens in-trie candidate generation
+/// (`contextSearchPrior`). Distinct from `NeuralLanguagePrior` (the PRECISION role — batched
+/// P(word|context) rescoring on a fixed pool). Splitting the two means choosing a search prior
+/// no longer silently evicts a rescorer, and vice versa — each slot is filled independently
+/// (production fills neither). The GRU, whose cheap incremental streaming steps are structurally
+/// ideal for generation, fills this slot; the transformer fills the rescorer slot.
+protocol NeuralSearchPrior: SearchPriorProvider {
+	var isReady: Bool { get }
 	func prepareForSelection()
 	func handleMemoryPressure()
 }

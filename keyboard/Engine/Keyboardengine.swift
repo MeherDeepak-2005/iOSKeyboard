@@ -64,10 +64,17 @@ final class KeyboardEngine {
 	/// Eager and immutable. Every decode in a word session uses this same model tier;
 	/// memory pressure cannot silently change ranking semantics mid-word.
 	private let ngram: NgramScorer
-	/// Optional and promotion-gated. The production singleton intentionally supplies
-	/// no neural prior until a checkpoint passes blind quality and device gates.
-	private let neuralPrior: NeuralLanguagePrior?
-	/// Accessed only on `queue`; one prepared context is retained for the active word.
+	/// Two INDEPENDENT neural roles, both optional and promotion-gated (the production singleton
+	/// supplies neither until a checkpoint passes blind quality + device gates):
+	///   • `rescorer`  — PRECISION. Batched P(word|context) over the fixed candidate pool, folded
+	///     into the ranking blend (`rank`). The transformer's strength.
+	///   • `searchPrior` — RECALL. A streaming generator that widens in-trie candidate generation
+	///     (`contextSearchPrior`). The GRU's strength. Never gates the model tier — it is always-on
+	///     and orthogonal to the rescorer, so selecting it can't evict the rescorer (the old single
+	///     slot conflated the two roles and one silently displaced the other).
+	private let rescorer: NeuralLanguagePrior?
+	private let searchPrior: NeuralSearchPrior?
+	/// Accessed only on `queue`; one prepared rescorer context is retained for the active word.
 	private var preparedNeuralSession: (id: UInt64, context: [String])?
 	/// Static fuzzy-search DP columns retained for one append-only English word.
 	/// Cursor edits rebuild this state; ordinary taps advance one column.
@@ -94,6 +101,11 @@ final class KeyboardEngine {
 	}
 	private let lmWeight = 1.0
 	private let freqWeight = 0.3
+	/// Interpolation between the neural rescorer's log-prob and the n-gram's when a rescorer is
+	/// active: `neuralPriorWeight·neural + (1−neuralPriorWeight)·ngram`. Hand-set; the eventual
+	/// source of truth is the softmax-ranker trainer (`tools/lm/train_ranker.py`) with its
+	/// promotion gates, once it has real on-device labels — same as `lmWeight`/`freqWeight`.
+	private let neuralPriorWeight = 0.7
 	/// Completion suggestions consider more prefix matches than the UI shows, then
 	/// rerank them by context. Frequency is compressed for suggestions only so high-count
 	/// function words do not drown out more specific completions.
@@ -182,18 +194,37 @@ final class KeyboardEngine {
 
 	/// Process-wide engine: iOS may prewarm more than one controller, while language
 	/// data and personalization should be loaded exactly once per extension process.
+	///
+	/// This edition ships WITHOUT either neural role. The GRU's value is in-trie candidate
+	/// generation (`contextSearchPrior`) and the transformer's is rescoring (`rank`); the two are
+	/// now separate slots, so the default build (Debug and Release alike) is n-gram + in-trie
+	/// search prior only, and each role is a one-switch revival — independently:
+	///   • `INTERNAL_NEURAL` → the transformer W8 rescorer (`CoreMLNeuralLanguagePrior`) in the
+	///     `rescorer` slot. Add it to `SWIFT_ACTIVE_COMPILATION_CONDITIONS` and set
+	///     `INTERNAL_NEURAL_ENABLED = YES` (Config/Secrets.xcconfig) to also bundle the model.
+	///   • `INTERNAL_GRU` → the GRU streaming prior (`GRULanguagePrior`) in the `searchPrior` slot,
+	///     for profiling the exported `gru.mlpackage` once it is bundled.
+	/// Both flags together fill both slots — the GRU generates, the transformer rescores — which is
+	/// the intended end state (measure both models resident against the jetsam budget first).
 	static let shared: KeyboardEngine = {
-		#if DEBUG || INTERNAL_NEURAL
-		return KeyboardEngine(neuralPrior: CoreMLNeuralLanguagePrior.bundled())
+		#if INTERNAL_GRU && INTERNAL_NEURAL
+		return KeyboardEngine(rescorer: CoreMLNeuralLanguagePrior.bundled(),
+			searchPrior: GRULanguagePrior.bundled())
+		#elseif INTERNAL_GRU
+		return KeyboardEngine(searchPrior: GRULanguagePrior.bundled())
+		#elseif INTERNAL_NEURAL
+		return KeyboardEngine(rescorer: CoreMLNeuralLanguagePrior.bundled())
 		#else
 		return KeyboardEngine()
 		#endif
 	}()
 
-	init(languageDataURL: URL? = nil, neuralPrior: NeuralLanguagePrior? = nil) {
+	init(languageDataURL: URL? = nil, rescorer: NeuralLanguagePrior? = nil,
+		 searchPrior: NeuralSearchPrior? = nil) {
 		let ng = NgramScorer(user: user)
 		ngram = ng
-		self.neuralPrior = neuralPrior
+		self.rescorer = rescorer
+		self.searchPrior = searchPrior
 		initializationGroup.enter()
 		let ready = initializationGroup
 		queue.async { [weak self] in
@@ -218,11 +249,14 @@ final class KeyboardEngine {
 	/// return `.ngram`. Internal profiling can inject a verified prior without creating
 	/// a second ranking path in the controller.
 	func preferredModelTier(for languageMode: KBLanguageMode) -> DecodeModelTier {
-		neuralPrior?.prepareForSelection()
+		rescorer?.prepareForSelection()
+		// The search prior is always-on and orthogonal to the tier; warm it (English only) so its
+		// model is loading before the first recovery search needs it. It never freezes a tier.
+		if languageMode == .english { searchPrior?.prepareForSelection() }
 		let neuralAllowed = KBSettings.neuralEnabled
 		let tier: DecodeModelTier
-		if languageMode == .english, let neuralPrior, neuralPrior.isReady, neuralAllowed {
-			tier = neuralPrior.modelTier
+		if languageMode == .english, let rescorer, rescorer.isReady, neuralAllowed {
+			tier = rescorer.modelTier
 		} else {
 			tier = .ngram
 		}
@@ -231,12 +265,12 @@ final class KeyboardEngine {
 		if languageMode != .english {
 			KBDiagnostics.recordNeuralState(tier: .ngram, ready: false,
 				state: "disabled-for-language")
-		} else if neuralPrior == nil {
+		} else if rescorer == nil {
 			KBDiagnostics.recordNeuralState(tier: .ngram, ready: false,
 				state: "not-configured")
 		} else if !neuralAllowed {
 			KBDiagnostics.recordNeuralState(tier: .ngram,
-				ready: neuralPrior?.isReady ?? false, state: "disabled-by-setting")
+				ready: rescorer?.isReady ?? false, state: "disabled-by-setting")
 		} else if tier != .ngram {
 			KBDiagnostics.recordNeuralState(tier: tier, ready: true, state: "ready")
 		}
@@ -247,7 +281,8 @@ final class KeyboardEngine {
 	}
 
 	func handleMemoryPressure() {
-		neuralPrior?.handleMemoryPressure()
+		rescorer?.handleMemoryPressure()
+		searchPrior?.handleMemoryPressure()
 	}
 
 	func discardModelSession(_ wordSessionID: UInt64) {
@@ -259,7 +294,7 @@ final class KeyboardEngine {
 			if self.incrementalDecodeSession?.id == wordSessionID {
 				self.incrementalDecodeSession = nil
 			}
-			self.neuralPrior?.discardSession(wordSessionID)
+			self.rescorer?.discardSession(wordSessionID)
 		}
 	}
 	private func applyLearned() {
@@ -290,9 +325,11 @@ final class KeyboardEngine {
 			guard let self else { return }
 			self.initializationGroup.wait()
 			if let session = self.preparedNeuralSession {
-				self.neuralPrior?.discardSession(session.id)
+				self.rescorer?.discardSession(session.id)
 				self.preparedNeuralSession = nil
 			}
+			// Drop any cached neural next-word predictions from the reset personalization epoch.
+			self.searchPrior?.handleMemoryPressure()
 			self.savePending = false
 			self.sessionKept.removeAll(keepingCapacity: false)
 			self.user.reset(to: epoch)
@@ -805,7 +842,12 @@ final class KeyboardEngine {
 
 		var proposed: [String] = []
 		if session.candidates.isEmpty {
-			proposed.append(contentsOf: ngram.nextWords(context: session.context, limit: 48))
+			let ngramNext = ngram.nextWords(context: session.context, limit: 48)
+			proposed.append(contentsOf: ngramNext)
+			// #7: the GRU's generated next-words (the SAME cached list the recovery search funds the
+			// trie with) join glide's rerank pool, so a swipe can resolve to a context-word the sparse
+			// n-gram tables never listed. Non-blocking: reads the cache, warms it for later passes.
+			proposed.append(contentsOf: neuralNextWords(context: session.context, seed: ngramNext))
 			for first in firsts {
 				proposed.append(contentsOf: languageData.trieCompletions(
 					prefix: String(first), limit: 72).map(\.word))
@@ -976,7 +1018,10 @@ final class KeyboardEngine {
 		var knownWords = Set(candidates.map(\.word))
 
 		if !context.isEmpty {
-			for word in ngram.nextWords(context: context, limit: glideContextAugment)
+			let ngramAugment = ngram.nextWords(context: context, limit: glideContextAugment)
+			// #7: fold the GRU's cached next-words into the same context-augment loop (see
+			// augmentStreamingCandidates) so the final glide decode ranks them too.
+			for word in ngramAugment + neuralNextWords(context: context, seed: ngramAugment)
 			where !knownWords.contains(word) && word.count >= 2 && !lexicon.isProfane(word) {
 				guard shouldCancel?() != true else { return nil }
 				if let cost = GlideDecoder.shapeCost(of: word, glide), cost <= gate {
@@ -1391,11 +1436,16 @@ final class KeyboardEngine {
 	func decode(_ request: DecodeRequest, completion: @escaping (DecodeSnapshot) -> Void) {
 		genLock.lock(); suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
 		let started = ProcessInfo.processInfo.systemUptime
+		// A decode with no partial word is a fresh word start — it builds the context /
+		// prediction search space (Gboard's UpdateLM). Time it separately as initialization
+		// latency, in addition to the ordinary tap-decode histogram.
+		let isWordStart = request.currentWord.isEmpty
 		let signpost = KBDiagnostics.beginTapDecode()
 		queue.async { [weak self] in
 			defer {
-				KBDiagnostics.endTapDecode(signpost,
-					milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1_000)
+				let ms = (ProcessInfo.processInfo.systemUptime - started) * 1_000
+				KBDiagnostics.endTapDecode(signpost, milliseconds: ms)
+				if isWordStart { KBDiagnostics.recordInitializationLatency(milliseconds: ms) }
 			}
 			guard let self, self.isLatest(gen) else { return }   // superseded — the newest pass delivers
 			KBDiagnostics.recorder.sample()   // cheap footprint/headroom probe, background only
@@ -1471,6 +1521,15 @@ final class KeyboardEngine {
 				// ranking and the precomputed autocorrect decision below (previously the
 				// trie DP ran twice — once here, once inside computeCorrection).
 				let normalCost = self.maxCost(for: lw.count)
+				// NN-LM in the trie: the words the LM expects next fund extra edit budget
+				// along their prefixes, so a context-plausible word just outside the base
+				// radius is GENERATED (recall). Applied ONLY to the recovery walk below —
+				// the close search stays pure-channel so a good spatial match ("sebd"→"send")
+				// is never dragged to an LM-plausible neighbour ("see"); the recovery pool
+				// already rides the channel-dominance guards that keep the rescue honest.
+				// The typed word + taps make generation prefix-aware (word-starts spatially
+				// reachable from the first tap) once it is long enough to pin the word down.
+				let recoveryPrior = self.contextSearchPrior(context, typedPrefix: lw, taps: taps)
 				let retained = self.retainedDecodeSession(for: request, word: lw,
 					taps: taps)
 				let corrections: [Candidate]
@@ -1504,7 +1563,7 @@ final class KeyboardEngine {
 					? Array(
 						(retained?.candidates(maxCost: normalCost * 2.0)
 							?? self.lexicon.broadCorrections(for: lw,
-								maxCost: normalCost * 2.0, taps: taps,
+								maxCost: normalCost * 2.0, taps: taps, prior: recoveryPrior,
 								shouldCancel: { [weak self] in self?.isLatest(gen) != true }))
 							.sorted {
 								let lhs = $0.cost - 0.12 * $0.logFreq
@@ -1798,12 +1857,12 @@ final class KeyboardEngine {
 			return
 		}
 		guard request.languageMode == .english,
-			  let neuralPrior,
-			  neuralPrior.modelTier == request.requestedModelTier,
+			  let rescorer,
+			  rescorer.modelTier == request.requestedModelTier,
 			  !ngramRows.isEmpty else {
 			// NEURAL_DEBUG_TELEMETRY_REMOVE
 			#if DEBUG || INTERNAL_NEURAL
-			if neuralPrior == nil {
+			if rescorer == nil {
 				KBDiagnostics.recordNeuralState(tier: request.requestedModelTier,
 					ready: false, state: "not-configured")
 			}
@@ -1815,14 +1874,14 @@ final class KeyboardEngine {
 		if preparedNeuralSession?.id != request.wordSessionID
 			|| preparedNeuralSession?.context != context {
 			if let previous = preparedNeuralSession {
-				neuralPrior.discardSession(previous.id)
+				rescorer.discardSession(previous.id)
 			}
-			neuralPrior.prepareContext(context, wordSessionID: request.wordSessionID)
+			rescorer.prepareContext(context, wordSessionID: request.wordSessionID)
 			preparedNeuralSession = (request.wordSessionID, context)
 		}
 
 		let words = ngramRows.map(\.word)
-		neuralPrior.score(candidates: words, wordSessionID: request.wordSessionID) {
+		rescorer.score(candidates: words, wordSessionID: request.wordSessionID) {
 			[weak self] result in
 			guard let self else { return }
 			self.queue.async {
@@ -1842,13 +1901,14 @@ final class KeyboardEngine {
 						// NEURAL_DEBUG_TELEMETRY_REMOVE
 						#if DEBUG || INTERNAL_NEURAL
 						KBDiagnostics.recordNeuralState(tier: request.requestedModelTier,
-							ready: neuralPrior.isReady, state: "incomplete-score-result",
+							ready: rescorer.isReady, state: "incomplete-score-result",
 							detail: "Core ML omitted a score for \(row.word)")
 						#endif
 						completion(nil)
 						return
 					}
-					let prior = 0.7 * neural + 0.3 * row.logLanguageProbability
+					let prior = self.neuralPriorWeight * neural
+							+ (1 - self.neuralPriorWeight) * row.logLanguageProbability
 					let isTypedRow = row.word == request.currentWord.lowercased()
 					let score = -row.spatialCost
 						- (isTypedRow ? 0 : self.lexicon.safetyPenalty(row.word))
@@ -1885,6 +1945,109 @@ final class KeyboardEngine {
 				completion((rescored, request.requestedModelTier))
 			}
 		}
+	}
+
+	/// Context-conditioned trie search prior (NN-LM in the trie). The words the LM expects
+	/// to come next fund extra edit budget along their prefixes inside the trie walk, so a
+	/// context-plausible word just outside the fixed edit radius is generated. Empty context
+	/// or no predictions → nil, which reproduces today's exact pure-channel search. Must run
+	/// on `queue`.
+	///
+	/// Source is the n-gram by default (rank-decayed funding). When a neural `searchPrior` is
+	/// present it GENERATES its own likely next-words and ranks them WITH log-probabilities, so
+	/// the funding is probability-DERIVED (`TrieSearchPrior(scoredWords:)`) — a confident context
+	/// widens the search narrowly and deeply, an unsure one broadly and shallowly. `warmSearchPrior`
+	/// kicks off an async pass (idempotent per key) and `searchPriorWords` returns the cache once
+	/// ready — until then this transparently falls back to the n-gram, so the prior is never blocked
+	/// on Core ML. Once the typed word is long enough to pin the word down, generation is additionally
+	/// PREFIX-constrained to word-starts spatially reachable from the first tap.
+	private func contextSearchPrior(_ context: [String], typedPrefix lw: String = "",
+		taps: [KeyTap?]? = nil) -> TrieSearchPrior? {
+		guard !context.isEmpty else { return nil }
+		let pool = ngram.nextWords(context: context, limit: 24)
+		if let searchPrior {
+			// Prefix-aware generation only once a few characters pin the word down; below that the
+			// spatial first-letter set is too permissive to sharpen anything.
+			let prefix: SearchPrefix? = lw.count >= 3
+				? SearchPrefix(text: lw,
+					firstLetters: plausibleFirstLetters(typedPrefix: lw, taps: taps))
+				: nil
+			// #6: seed the pool with the user's ADOPTED next-words. The corpus n-gram's `nextWords`
+			// drops these (they're not static words, so they must not flood plain suggestions), but
+			// the GRU CAN assign them a real P(word|context) — the n-gram has only the OOV floor —
+			// so a context-plausible personal word can be generated in the recovery search where the
+			// corpus tables never proposed it. They're in the personal trie, so the trie can emit them.
+			let seeded = pool + userAdoptedNextWords(context: context,
+				excluding: Set(pool.map { $0.lowercased() }))
+			searchPrior.warmSearchPrior(context: context, prefix: prefix, pool: seeded)
+			if let scored = searchPrior.searchPriorWords(context: context, prefix: prefix) {
+				// The neural set GENERATES next-words (subword beam), not just reranks the pool.
+				// Keep only words the trie can emit — a prefix bonus on an OOV word funds a path to
+				// no candidate; the generated in-lexicon words the sparse n-gram tables missed are
+				// the recall win. Each word carries its log-prob, so the bonus is probability-derived.
+				let usable = scored.filter { lexicon.contains($0.word) }
+				if !usable.isEmpty {
+					let prior = TrieSearchPrior(
+						scoredWords: usable.map { ($0.word, $0.logProbability) })
+					return prior.isEmpty ? nil : prior
+				}
+			}
+		}
+		guard !pool.isEmpty else { return nil }
+		let prior = TrieSearchPrior(likelyWords: pool)
+		return prior.isEmpty ? nil : prior
+	}
+
+	/// First characters the opening tap could plausibly be — the literal typed first letter plus
+	/// its spatial neighbours (≤ ~one edit under the touch model). Feeds prefix-AWARE generation so
+	/// the beam only spends on words whose start is reachable from where the finger actually landed,
+	/// tolerating a first-letter slip instead of hard-filtering on the literal character. Empty ⇒
+	/// no constraint.
+	private func plausibleFirstLetters(typedPrefix lw: String, taps: [KeyTap?]?) -> Set<Character> {
+		guard let firstByte = lw.utf8.first else { return [] }
+		let aligned = taps?.count == lw.utf8.count ? taps : nil
+		let firstTap = aligned?.first ?? nil
+		var letters: Set<Character> = [Character(UnicodeScalar(firstByte))]
+		for row in KB.rows {
+			for byte in row.utf8 where KB.subCost(byte, typed: firstByte, tap: firstTap) <= 1.0 {
+				letters.insert(Character(UnicodeScalar(byte)))
+			}
+		}
+		return letters
+	}
+
+	/// The user's ADOPTED next-words for this context (#6): successors they have actually typed
+	/// here that live in the personal trie but NOT the static corpus (`contains && !isStaticWord`),
+	/// which is exactly the set `NgramScorer.nextWords` drops. Handed to the neural search prior so
+	/// the GRU can rank them by P(word|context) — signal neither the n-gram (OOV floor only) nor the
+	/// current wiring can express. Bounded and best-count-first; `seen` (the n-gram pool) is skipped.
+	/// Must run on `queue`.
+	private func userAdoptedNextWords(context: [String], excluding seen: Set<String>,
+		limit: Int = 12) -> [String] {
+		guard let last = context.last?.lowercased() else { return [] }
+		var counts: [String: Int] = [:]
+		if context.count >= 2 {
+			let key = context[context.count - 2].lowercased() + " " + last
+			for (word, count) in user.triDist(key) { counts[word, default: 0] += count }
+		}
+		for (word, count) in user.biDist(last) { counts[word, default: 0] += count }
+		return counts.sorted { $0.value > $1.value }.map(\.key).filter {
+			!seen.contains($0.lowercased()) && !lexicon.isStaticWord($0)
+				&& lexicon.contains($0) && !lexicon.isProfane($0)
+		}.prefix(limit).map { $0 }
+	}
+
+	/// #7: the neural search prior's cached context-only next-words (words only) — the SAME ranked
+	/// list `contextSearchPrior` funds the recovery trie with, now also feeding glide's rerank pools
+	/// (which previously folded only `ngram.nextWords`). Non-blocking: kicks a warm so a later pass
+	/// has it, and returns whatever is already cached (nil ⇒ empty, today's behavior). Kept to
+	/// trie-emittable words for parity with the recovery path. Safe off any queue — the provider is
+	/// internally locked. `pool` seeds the warm (the n-gram next-words already computed by the caller).
+	private func neuralNextWords(context: [String], seed pool: [String], limit: Int = 24) -> [String] {
+		guard let searchPrior, !context.isEmpty else { return [] }
+		searchPrior.warmSearchPrior(context: context, prefix: nil, pool: pool)
+		guard let scored = searchPrior.searchPriorWords(context: context, prefix: nil) else { return [] }
+		return scored.prefix(limit).map(\.word).filter { lexicon.contains($0) }
 	}
 
 	/// Must run on `queue`.

@@ -614,7 +614,7 @@ struct KeyboardTests {
 
 	@Test func internalNeuralTierIsEnglishOnlyAndPublishesOneRanking() async throws {
 		let prior = TestNeuralPrior(tier: .neuralW8)
-		let engine = KeyboardEngine(languageDataURL: langdataURL(), neuralPrior: prior)
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), rescorer: prior)
 		#expect(engine.preferredModelTier(for: .english) == .neuralW8)
 		#expect(engine.preferredModelTier(for: .tenglishToTelugu) == .ngram)
 		#expect(engine.preferredModelTier(for: .romanTelugu) == .ngram)
@@ -641,6 +641,117 @@ struct KeyboardTests {
 		#expect(prior.preparedSessions == [41])
 		#expect(prior.scoredSessions == [41, 41])
 	}
+
+	// The GRU search prior conforms to the same NeuralLanguagePrior seam, so the engine
+	// must select the .neuralGRU tier, prepare context once, score the candidate pool, and
+	// fold a neural log-prob into every candidate — the wiring the real Core ML GRU rides.
+	@Test func gruSearchPriorTierBlendsIntoRanking() async throws {
+		let prior = TestNeuralPrior(tier: .neuralGRU)
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), rescorer: prior)
+		#expect(engine.preferredModelTier(for: .english) == .neuralGRU)
+		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
+
+		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
+			wordSessionID: 7, generation: 1, layoutRevision: 1,
+			currentWord: "migh", context: ["they"], taps: nil,
+			languageMode: .english, requestedModelTier: .neuralGRU)
+		let snapshot = await withCheckedContinuation { continuation in
+			engine.decode(request) { continuation.resume(returning: $0) }
+		}
+		#expect(snapshot.modelTier == .neuralGRU)
+		#expect(!snapshot.candidates.isEmpty)
+		#expect(snapshot.candidates.allSatisfy { $0.neuralLogProbability != nil })
+		#expect(prior.preparedSessions == [7])
+		#expect(prior.scoredSessions == [7])
+	}
+
+	#if INTERNAL_GRU
+	// End-to-end PLUMBING parity: the REAL Core ML GRU (compiled from gru.mlpackage) scored through
+	// the Swift GRULanguagePrior must match the PyTorch reference (tools/lm) within fp16 tolerance.
+	// This is exactly what the mock wiring test above CANNOT check — MLMultiArray shapes, the
+	// token/state_in/logits/state_out feature names, the persisted state threading, and that
+	// gru_tokenizer.bin matches qwen_spm.model — all executing on the simulator's Core ML runtime.
+	// Goldens computed by tools/lm (PyTorch fp32); a broken shape/name/threading bug is off by nats
+	// or NaN, not the < 1 fp16 drift this allows. Artifacts are read from the repo via #filePath.
+	@Test func gruCoreMLScoresMatchPyTorchReference() async throws {
+		let dataDir = URL(fileURLWithPath: #filePath)      // …/keyboardTests/keyboardTests.swift
+			.deletingLastPathComponent().deletingLastPathComponent()
+			.appendingPathComponent("tools/lm/data")
+		let packageURL = dataDir.appendingPathComponent("gru.mlpackage")
+		let tokenizerURL = dataDir.appendingPathComponent("gru_tokenizer.bin")
+		try #require(FileManager.default.fileExists(atPath: packageURL.path),
+			"gru.mlpackage unreachable at \(packageURL.path) — run export_gru_coreml.py")
+		try #require(FileManager.default.fileExists(atPath: tokenizerURL.path),
+			"gru_tokenizer.bin unreachable at \(tokenizerURL.path) — run export_coreml.py --part tokenizer")
+
+		let prior = GRULanguagePrior(compiledURL: nil, packageURL: packageURL,
+			tokenizerURL: tokenizerURL)
+		var waited = 0.0                                   // mlpackage compiles + loads async
+		while !prior.isReady, waited < 60 {
+			try await Task.sleep(nanoseconds: 200_000_000); waited += 0.2
+		}
+		try #require(prior.isReady, "GRU model did not become ready within 60s")
+
+		prior.prepareContext(["i", "am", "going", "to"], wordSessionID: 1)
+		let goldens: [String: Double] = [                  // PyTorch fp32 log P(word | context)
+			"the": -3.3015, "work": -3.6788, "school": -4.9112,
+			"onboarding": -19.8549, "uncomfortable": -12.5023, "encyclopedia": -21.8720,
+		]
+		let scores: [String: Double] = try await withCheckedThrowingContinuation { continuation in
+			prior.score(candidates: Array(goldens.keys), wordSessionID: 1) { result in
+				continuation.resume(with: result)
+			}
+		}
+		for (word, golden) in goldens {
+			let got = try #require(scores[word], "Core ML returned no score for \(word)")
+			#expect(got.isFinite && abs(got - golden) < 1.0,
+				"\(word): Core ML \(got) vs PyTorch \(golden) (Δ=\(abs(got - golden)))")
+		}
+	}
+
+	// Same parity check, but through the BATCHED scorer (gru_score.mlpackage): one [B,T] Core ML
+	// call for the whole pool must match the same PyTorch reference. Verifies the batched export's
+	// runtime path — the buffer fill ([prev, w…]/targets/mask), the state broadcast across the batch,
+	// and log_probs read — end-to-end on the simulator's Core ML runtime (coremltools' in-process
+	// predict crashes on this graph, so this IS its runtime verification).
+	@Test func gruBatchedCoreMLScoresMatchReference() async throws {
+		let dataDir = URL(fileURLWithPath: #filePath)
+			.deletingLastPathComponent().deletingLastPathComponent()
+			.appendingPathComponent("tools/lm/data")
+		let packageURL = dataDir.appendingPathComponent("gru.mlpackage")
+		let tokenizerURL = dataDir.appendingPathComponent("gru_tokenizer.bin")
+		let scorePackageURL = dataDir.appendingPathComponent("gru_score.mlpackage")
+		try #require(FileManager.default.fileExists(atPath: packageURL.path))
+		try #require(FileManager.default.fileExists(atPath: tokenizerURL.path))
+		try #require(FileManager.default.fileExists(atPath: scorePackageURL.path),
+			"gru_score.mlpackage unreachable — run export_gru_score_coreml.py")
+
+		let prior = GRULanguagePrior(compiledURL: nil, packageURL: packageURL,
+			tokenizerURL: tokenizerURL, scorePackageURL: scorePackageURL)
+		var waited = 0.0
+		while !prior.isReady, waited < 60 {
+			try await Task.sleep(nanoseconds: 200_000_000); waited += 0.2
+		}
+		try #require(prior.isReady, "GRU model did not become ready within 60s")
+		try #require(prior.usesBatchedScorer, "batched scorer did not load; test would not exercise it")
+
+		prior.prepareContext(["i", "am", "going", "to"], wordSessionID: 2)
+		let goldens: [String: Double] = [
+			"the": -3.3015, "work": -3.6788, "school": -4.9112,
+			"onboarding": -19.8549, "uncomfortable": -12.5023, "encyclopedia": -21.8720,
+		]
+		let scores: [String: Double] = try await withCheckedThrowingContinuation { continuation in
+			prior.score(candidates: Array(goldens.keys), wordSessionID: 2) { result in
+				continuation.resume(with: result)
+			}
+		}
+		for (word, golden) in goldens {
+			let got = try #require(scores[word], "batched Core ML returned no score for \(word)")
+			#expect(got.isFinite && abs(got - golden) < 1.0,
+				"\(word): batched Core ML \(got) vs PyTorch \(golden) (Δ=\(abs(got - golden)))")
+		}
+	}
+	#endif
 
 	@Test func teluguBinaryPacksAreVersionedAndAvailable() throws {
 		let layoutPack = TeluguLanguagePack(url:
@@ -786,6 +897,94 @@ struct KeyboardTests {
 		}
 		#expect(plan.state(for: scalarHost) == .readyToInsert)
 		#expect(scalarHost + plan.replacement == "Before anthe")
+	}
+
+	/// A UITextDocumentProxy-shaped host: deleting the last character reports the new
+	/// context before the cursor, and an EMPTY field reports nil (as UIKit does).
+	private func applyPlan(_ plan: HostSuffixReplacementPlan, host: String)
+		-> (ok: Bool, host: String) {
+		var host = host
+		let ok = plan.apply(initialContext: host,
+			deleteBackward: {
+				host.removeLast()
+				return host.isEmpty ? nil : host
+			},
+			insert: { host += $0 })
+		return (ok, host)
+	}
+
+	// Picking a suggestion for the FIRST word (or undoing its correction) empties the
+	// field on the last deletion; the host then reports a nil context. Regression: the
+	// old loop treated that nil as a failure, so it deleted the word and inserted nothing.
+	@Test func suffixReplacementCompletesWhenTheFieldEmptiesForAFirstWord() throws {
+		// First-word pick: "Helo" -> "Hello ".
+		let pick = try #require(HostSuffixReplacementPlan(
+			contextBeforeInput: "Helo", suffix: "Helo", replacement: "Hello "))
+		#expect(pick.prefix == "")
+		let picked = applyPlan(pick, host: "Helo")
+		#expect(picked.ok)
+		#expect(picked.host == "Hello ")
+
+		// First-word correction-undo on backspace: "Hello " -> "Helo".
+		let undo = try #require(HostSuffixReplacementPlan(
+			contextBeforeInput: "Hello ", suffix: "Hello ", replacement: "Helo"))
+		#expect(undo.prefix == "")
+		let reverted = applyPlan(undo, host: "Hello ")
+		#expect(reverted.ok)
+		#expect(reverted.host == "Helo")
+	}
+
+	// A word that is NOT first keeps a non-empty prefix, so the host never empties — the
+	// path that always worked must keep working after the first-word fix.
+	@Test func suffixReplacementStillReplacesAWordThatFollowsOtherText() throws {
+		let plan = try #require(HostSuffixReplacementPlan(
+			contextBeforeInput: "foo helo", suffix: "helo", replacement: "hello "))
+		#expect(plan.prefix == "foo ")
+		let result = applyPlan(plan, host: "foo helo")
+		#expect(result.ok)
+		#expect(result.host == "foo hello ")
+	}
+
+	// The diagnostics Snapshot is persisted to the shared App Group and read across the app,
+	// the extension, and app upgrades. A decode regression would silently wipe it, so pin
+	// both backward compatibility and the benchmark ratio math derived from the counters.
+	@Test func diagnosticsSnapshotDecodesLegacyDataAndComputesBenchmarkRatios() throws {
+		// A snapshot written before the benchmark metrics existed must still decode, with
+		// every new counter absent (nil) rather than throwing.
+		let legacy = #"{"updated":0,"warningCount":2,"criticalCount":0,"peakFootprintMB":18.5,"minAvailableMB":40,"limitMB":58.5}"#
+		let old = try JSONDecoder().decode(KBDiagnostics.Snapshot.self, from: Data(legacy.utf8))
+		#expect(old.warningCount == 2)
+		#expect(old.peakFootprintMB == 18.5)
+		#expect(old.wordsCommitted == nil)
+		#expect(old.physicalTaps == nil)
+		#expect(old.peakCPUPercent == nil)
+		#expect(old.initLatencyBins == nil)
+
+		var snap = KBDiagnostics.Snapshot()
+		snap.wordsCommitted = 100
+		snap.wordsModified = 7
+		snap.wordsAutocorrected = 22
+		snap.correctionsReverted = 3
+		snap.nwpOpportunities = 40
+		snap.nwpHits = 18
+		snap.activeTypingMs = 120_000        // 2 active minutes
+		snap.committedChars = 520
+		snap.physicalTaps = 430
+		snap.peakCPUPercent = 63.5
+		snap.initLatencyBins = [0, 1, 2, 3]
+		let round = try JSONDecoder().decode(KBDiagnostics.Snapshot.self,
+			from: JSONEncoder().encode(snap))
+		#expect(round.wordsCommitted == 100)
+		#expect(round.nwpHits == 18)
+		#expect(round.physicalTaps == 430)
+		#expect(round.peakCPUPercent == 63.5)
+		#expect(round.initLatencyBins == [0, 1, 2, 3])
+
+		// The published ratios (mirrors DiagnosticsView): WMR, NWP hit rate, WPM, KPC.
+		#expect(abs(Double(round.wordsModified!) / Double(round.wordsCommitted!) - 0.07) < 1e-9)
+		#expect(abs(Double(round.nwpHits!) / Double(round.nwpOpportunities!) - 0.45) < 1e-9)
+		#expect(abs(Double(round.wordsCommitted!) / (round.activeTypingMs! / 60_000) - 50) < 1e-9)
+		#expect(Double(round.physicalTaps!) / Double(round.committedChars!) < 1.0)   // taps < chars
 	}
 
 	@MainActor @Test func nativeTeluguKeyboardDoesNotReuseQwertyGeometry() {
@@ -1223,6 +1422,25 @@ struct KeyboardTests {
 		#expect(KBSafetyLexicon.normalize("  It’s   Fine ") == "it's fine")
 	}
 
+	/// Legal-risk guarantee, at the runtime layer the end user actually hits: every term on
+	/// the requested Google profanity list (Shidouuu/Google-profanity-words) resolves to a
+	/// blocked action through KBSafetyLexicon — as typed AND upper-cased, since the lookup
+	/// case-folds — so none can ever be surfaced as a suggestion or autocorrect target.
+	@Test func everyRequestedProfanityTermIsBlockedAtRuntime() throws {
+		let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+			.deletingLastPathComponent()
+		let safety = try #require(KBSafetyLexicon(
+			url: root.appendingPathComponent("keyboard/safety.kbguard")))
+		let list = try String(contentsOf:
+			root.appendingPathComponent("tools/data/google_profanity_shidouuu_en.txt"),
+			encoding: .utf8)
+		let words = list.split(whereSeparator: \.isNewline)
+			.map(String.init).filter { !$0.isEmpty }
+		#expect(words.count == 451)
+		let unblocked = words.filter { !(safety.isBlocked($0) && safety.isBlocked($0.uppercased())) }
+		#expect(unblocked.count == 0, "\(unblocked.count) requested profanity terms are not blocked")
+	}
+
 	/// One-off "receive …" corpus successors are singleton evidence and must not
 	/// hijack broad lexical recovery. The compact LM keeps those records for legacy
 	/// compatibility, but the runtime backs off before ranking or context injection.
@@ -1272,6 +1490,47 @@ struct KeyboardTests {
 			"live severe context: sugg=\(liveContext.suggestions); candidates=\(liveEvidence)")
 		#expect(liveContext.correction == "correction",
 			"live severe context: correction=\(liveContext.correction ?? "nil"); candidates=\(liveEvidence)")
+	}
+
+	// LM-in-the-trie: a context prior must GENERATE a plausible word that sits just outside
+	// the base edit radius (the recall win), without lowering its channel cost, and without
+	// fabricating words whose prefix the prior never funded.
+	@Test func trieSearchPriorExpandsContextPlausibleWords() {
+		let trie = Trie()
+		trie.insert("go", freq: 100)
+		trie.insert("got", freq: 50)
+		// "got" is one insertion (1.6) beyond "go" — outside a tight 1.0 budget.
+		let base = trie.search("go", maxCost: 1.0)
+		#expect(base.contains { $0.word == "go" })
+		#expect(!base.contains { $0.word == "got" }, "got is outside the base radius")
+		// With the LM saying "got" is a likely continuation, the search reaches and emits it.
+		let guided = trie.search("go", maxCost: 1.0, prior: TrieSearchPrior(likelyWords: ["got"]))
+		#expect(guided.contains { $0.word == "got" }, "prior must expand the search to got")
+		#expect((guided.first { $0.word == "got" }?.cost ?? 0) > 1.0,
+			"reported channel cost is unchanged — only the search budget widened")
+		// An unrelated prior funds a different prefix, so it must NOT conjure "got".
+		let off = trie.search("go", maxCost: 1.0, prior: TrieSearchPrior(likelyWords: ["xyz"]))
+		#expect(!off.contains { $0.word == "got" })
+	}
+
+	// The neural prior funds the trie by PROBABILITY, not rank: a confident context widens the
+	// search narrowly and deeply toward its one likely word; an unsure context funds its top
+	// candidates broadly. Both "got" and "gob" sit one insertion (1.6) beyond a tight 1.0 budget.
+	@Test func trieSearchPriorProbabilityWeightingFundsByConfidence() {
+		let trie = Trie()
+		trie.insert("go", freq: 100)
+		trie.insert("got", freq: 50)
+		trie.insert("gob", freq: 50)
+		// PEAKED: the LM is almost certain the next word is "got" — fund it to the cap, starve "gob".
+		let peaked = trie.search("go", maxCost: 1.0,
+			prior: TrieSearchPrior(scoredWords: [("got", -0.1), ("gob", -8.0)]))
+		#expect(peaked.contains { $0.word == "got" }, "the confident leader is reached")
+		#expect(!peaked.contains { $0.word == "gob" }, "the starved tail stays outside the radius")
+		// FLAT: the LM can't separate "got" and "gob" — fund both shallowly, and both are reached.
+		let flat = trie.search("go", maxCost: 1.0,
+			prior: TrieSearchPrior(scoredWords: [("got", -1.0), ("gob", -1.05)]))
+		#expect(flat.contains { $0.word == "got" } && flat.contains { $0.word == "gob" },
+			"an unsure context funds its top candidates broadly")
 	}
 
 	@Test func contractionCorrectionsPreserveTypedForms() async {

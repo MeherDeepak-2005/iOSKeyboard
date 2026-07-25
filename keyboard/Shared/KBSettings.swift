@@ -362,10 +362,12 @@ enum KBSettings {
 		set { store.set(newValue, forKey: Key.glideCap) }
 	}
 
-	/// On/off switch for the neural rescorer. Default on. Inert in Release builds, which
-	/// bundle no neural prior (the tier is always n-gram there); it only has an effect in
-	/// Debug / INTERNAL_NEURAL builds that load a prior. The engine reads it fresh at each
-	/// word-session boundary, so toggling it takes effect on the next word — no rebuild.
+	/// On/off switch for the neural rescorer. Default on, but inert unless a build
+	/// actually loads a neural prior. This edition ships none: Release and ordinary Debug
+	/// builds are n-gram + in-trie search prior only, so the tier is always n-gram and
+	/// this flag has no effect. It matters solely in `INTERNAL_NEURAL` / `INTERNAL_GRU`
+	/// builds (see `KeyboardEngine.shared`). The engine reads it fresh at each word-session
+	/// boundary, so toggling it takes effect on the next word — no rebuild.
 	static var neuralEnabled: Bool {
 		get { store.object(forKey: Key.neuralEnabled) as? Bool ?? true }
 		set {

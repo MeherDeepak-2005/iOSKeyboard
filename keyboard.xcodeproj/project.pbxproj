@@ -406,7 +406,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"${CONFIGURATION}\" = \"Debug\" ] || [ \"${INTERNAL_NEURAL_ENABLED:-NO}\" = \"YES\" ]; then\n    \"${SRCROOT}/tools/lm/install_internal_coreml.sh\"\nfi\n";
+			shellScript = "# Each installer self-gates (INTERNAL_NEURAL_ENABLED / INTERNAL_GRU_ENABLED)\n# and no-ops otherwise, so ordinary Debug and Release builds bundle no model.\n\"${SRCROOT}/tools/lm/install_internal_coreml.sh\"\n\"${SRCROOT}/tools/lm/install_internal_gru.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

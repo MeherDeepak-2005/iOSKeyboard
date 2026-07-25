@@ -36,6 +36,36 @@ nonisolated struct HostSuffixReplacementPlan: Equatable, Sendable {
 		guard contextBeforeInput.hasPrefix(prefix) else { return .invalid }
 		return .deleteBackward
 	}
+
+	/// Drives the plan against a host. `deleteBackward` removes one unit and returns the
+	/// new text before the cursor — `nil` when the field is now empty, matching
+	/// `UITextDocumentProxy.documentContextBeforeInput`. `insert` commits the replacement.
+	/// Returns whether the replacement completed.
+	///
+	/// An empty field (nil context) is the LEGITIMATE terminal state when replacing a
+	/// suffix at the very start of the document — i.e. the first word, whose `prefix` is
+	/// empty. Coalescing nil → "" here (instead of treating it as a failure) is what lets
+	/// a first-word pick or first-word correction-undo insert its replacement instead of
+	/// deleting the word and stopping.
+	func apply(initialContext: String,
+		 deleteBackward: () -> String?,
+		 insert: (String) -> Void) -> Bool {
+		var context = initialContext
+		for _ in 0...maximumDeleteCount {
+			switch state(for: context) {
+			case .readyToInsert:
+				if !replacement.isEmpty { insert(replacement) }
+				return true
+			case .invalid:
+				return false
+			case .deleteBackward:
+				let updated = deleteBackward() ?? ""   // nil = now-empty field, not a failure
+				guard updated != context else { return false }
+				context = updated
+			}
+		}
+		return false
+	}
 }
 
 /// Validates Telugu scalar transitions while keeping the host mutation append-only.
