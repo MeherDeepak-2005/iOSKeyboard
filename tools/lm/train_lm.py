@@ -24,7 +24,7 @@ SEQ = L + 1               # pack one extra token for the shifted target
 
 def load_batches(sp, path, batch_tokens=65536, val_every=50, max_lines=0):
     """Yield (train, {tag: val_lines}) packed [B, SEQ] batches, streaming."""
-    val = {"<en>": [], "<te>": [], "<xlit>": []}
+    val = {"<en>": [], "<te>": [], "<xlit>": [], "<hlit>": []}
     buf, batches = [], []
     lines = path.read_text().splitlines()
     random.Random(0).shuffle(lines)

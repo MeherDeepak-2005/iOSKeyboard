@@ -614,7 +614,7 @@ struct KeyboardTests {
 
 	@Test func internalNeuralTierIsEnglishOnlyAndPublishesOneRanking() async throws {
 		let prior = TestNeuralPrior(tier: .neuralW8)
-		let engine = KeyboardEngine(languageDataURL: langdataURL(), neuralPrior: prior)
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), rescorer: prior)
 		#expect(engine.preferredModelTier(for: .english) == .neuralW8)
 		#expect(engine.preferredModelTier(for: .tenglishToTelugu) == .ngram)
 		#expect(engine.preferredModelTier(for: .romanTelugu) == .ngram)
@@ -647,7 +647,7 @@ struct KeyboardTests {
 	// fold a neural log-prob into every candidate — the wiring the real Core ML GRU rides.
 	@Test func gruSearchPriorTierBlendsIntoRanking() async throws {
 		let prior = TestNeuralPrior(tier: .neuralGRU)
-		let engine = KeyboardEngine(languageDataURL: langdataURL(), neuralPrior: prior)
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), rescorer: prior)
 		#expect(engine.preferredModelTier(for: .english) == .neuralGRU)
 		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
 
@@ -664,6 +664,94 @@ struct KeyboardTests {
 		#expect(prior.preparedSessions == [7])
 		#expect(prior.scoredSessions == [7])
 	}
+
+	#if INTERNAL_GRU
+	// End-to-end PLUMBING parity: the REAL Core ML GRU (compiled from gru.mlpackage) scored through
+	// the Swift GRULanguagePrior must match the PyTorch reference (tools/lm) within fp16 tolerance.
+	// This is exactly what the mock wiring test above CANNOT check — MLMultiArray shapes, the
+	// token/state_in/logits/state_out feature names, the persisted state threading, and that
+	// gru_tokenizer.bin matches qwen_spm.model — all executing on the simulator's Core ML runtime.
+	// Goldens computed by tools/lm (PyTorch fp32); a broken shape/name/threading bug is off by nats
+	// or NaN, not the < 1 fp16 drift this allows. Artifacts are read from the repo via #filePath.
+	@Test func gruCoreMLScoresMatchPyTorchReference() async throws {
+		let dataDir = URL(fileURLWithPath: #filePath)      // …/keyboardTests/keyboardTests.swift
+			.deletingLastPathComponent().deletingLastPathComponent()
+			.appendingPathComponent("tools/lm/data")
+		let packageURL = dataDir.appendingPathComponent("gru.mlpackage")
+		let tokenizerURL = dataDir.appendingPathComponent("gru_tokenizer.bin")
+		try #require(FileManager.default.fileExists(atPath: packageURL.path),
+			"gru.mlpackage unreachable at \(packageURL.path) — run export_gru_coreml.py")
+		try #require(FileManager.default.fileExists(atPath: tokenizerURL.path),
+			"gru_tokenizer.bin unreachable at \(tokenizerURL.path) — run export_coreml.py --part tokenizer")
+
+		let prior = GRULanguagePrior(compiledURL: nil, packageURL: packageURL,
+			tokenizerURL: tokenizerURL)
+		var waited = 0.0                                   // mlpackage compiles + loads async
+		while !prior.isReady, waited < 60 {
+			try await Task.sleep(nanoseconds: 200_000_000); waited += 0.2
+		}
+		try #require(prior.isReady, "GRU model did not become ready within 60s")
+
+		prior.prepareContext(["i", "am", "going", "to"], wordSessionID: 1)
+		let goldens: [String: Double] = [                  // PyTorch fp32 log P(word | context)
+			"the": -3.3015, "work": -3.6788, "school": -4.9112,
+			"onboarding": -19.8549, "uncomfortable": -12.5023, "encyclopedia": -21.8720,
+		]
+		let scores: [String: Double] = try await withCheckedThrowingContinuation { continuation in
+			prior.score(candidates: Array(goldens.keys), wordSessionID: 1) { result in
+				continuation.resume(with: result)
+			}
+		}
+		for (word, golden) in goldens {
+			let got = try #require(scores[word], "Core ML returned no score for \(word)")
+			#expect(got.isFinite && abs(got - golden) < 1.0,
+				"\(word): Core ML \(got) vs PyTorch \(golden) (Δ=\(abs(got - golden)))")
+		}
+	}
+
+	// Same parity check, but through the BATCHED scorer (gru_score.mlpackage): one [B,T] Core ML
+	// call for the whole pool must match the same PyTorch reference. Verifies the batched export's
+	// runtime path — the buffer fill ([prev, w…]/targets/mask), the state broadcast across the batch,
+	// and log_probs read — end-to-end on the simulator's Core ML runtime (coremltools' in-process
+	// predict crashes on this graph, so this IS its runtime verification).
+	@Test func gruBatchedCoreMLScoresMatchReference() async throws {
+		let dataDir = URL(fileURLWithPath: #filePath)
+			.deletingLastPathComponent().deletingLastPathComponent()
+			.appendingPathComponent("tools/lm/data")
+		let packageURL = dataDir.appendingPathComponent("gru.mlpackage")
+		let tokenizerURL = dataDir.appendingPathComponent("gru_tokenizer.bin")
+		let scorePackageURL = dataDir.appendingPathComponent("gru_score.mlpackage")
+		try #require(FileManager.default.fileExists(atPath: packageURL.path))
+		try #require(FileManager.default.fileExists(atPath: tokenizerURL.path))
+		try #require(FileManager.default.fileExists(atPath: scorePackageURL.path),
+			"gru_score.mlpackage unreachable — run export_gru_score_coreml.py")
+
+		let prior = GRULanguagePrior(compiledURL: nil, packageURL: packageURL,
+			tokenizerURL: tokenizerURL, scorePackageURL: scorePackageURL)
+		var waited = 0.0
+		while !prior.isReady, waited < 60 {
+			try await Task.sleep(nanoseconds: 200_000_000); waited += 0.2
+		}
+		try #require(prior.isReady, "GRU model did not become ready within 60s")
+		try #require(prior.usesBatchedScorer, "batched scorer did not load; test would not exercise it")
+
+		prior.prepareContext(["i", "am", "going", "to"], wordSessionID: 2)
+		let goldens: [String: Double] = [
+			"the": -3.3015, "work": -3.6788, "school": -4.9112,
+			"onboarding": -19.8549, "uncomfortable": -12.5023, "encyclopedia": -21.8720,
+		]
+		let scores: [String: Double] = try await withCheckedThrowingContinuation { continuation in
+			prior.score(candidates: Array(goldens.keys), wordSessionID: 2) { result in
+				continuation.resume(with: result)
+			}
+		}
+		for (word, golden) in goldens {
+			let got = try #require(scores[word], "batched Core ML returned no score for \(word)")
+			#expect(got.isFinite && abs(got - golden) < 1.0,
+				"\(word): batched Core ML \(got) vs PyTorch \(golden) (Δ=\(abs(got - golden)))")
+		}
+	}
+	#endif
 
 	@Test func teluguBinaryPacksAreVersionedAndAvailable() throws {
 		let layoutPack = TeluguLanguagePack(url:
@@ -1423,6 +1511,26 @@ struct KeyboardTests {
 		// An unrelated prior funds a different prefix, so it must NOT conjure "got".
 		let off = trie.search("go", maxCost: 1.0, prior: TrieSearchPrior(likelyWords: ["xyz"]))
 		#expect(!off.contains { $0.word == "got" })
+	}
+
+	// The neural prior funds the trie by PROBABILITY, not rank: a confident context widens the
+	// search narrowly and deeply toward its one likely word; an unsure context funds its top
+	// candidates broadly. Both "got" and "gob" sit one insertion (1.6) beyond a tight 1.0 budget.
+	@Test func trieSearchPriorProbabilityWeightingFundsByConfidence() {
+		let trie = Trie()
+		trie.insert("go", freq: 100)
+		trie.insert("got", freq: 50)
+		trie.insert("gob", freq: 50)
+		// PEAKED: the LM is almost certain the next word is "got" — fund it to the cap, starve "gob".
+		let peaked = trie.search("go", maxCost: 1.0,
+			prior: TrieSearchPrior(scoredWords: [("got", -0.1), ("gob", -8.0)]))
+		#expect(peaked.contains { $0.word == "got" }, "the confident leader is reached")
+		#expect(!peaked.contains { $0.word == "gob" }, "the starved tail stays outside the radius")
+		// FLAT: the LM can't separate "got" and "gob" — fund both shallowly, and both are reached.
+		let flat = trie.search("go", maxCost: 1.0,
+			prior: TrieSearchPrior(scoredWords: [("got", -1.0), ("gob", -1.05)]))
+		#expect(flat.contains { $0.word == "got" } && flat.contains { $0.word == "gob" },
+			"an unsure context funds its top candidates broadly")
 	}
 
 	@Test func contractionCorrectionsPreserveTypedForms() async {

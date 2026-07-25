@@ -15,6 +15,10 @@ INTERNAL_NEURAL_ENABLED = NO
 // to both bundle gru.mlpackage and wire GRULanguagePrior into contextSearchPrior.
 INTERNAL_GRU_MODEL_PACKAGE =
 INTERNAL_GRU_TOKENIZER_MODEL =
+// Optional batched scorer (export_gru_score_coreml.py → gru_score.mlpackage). When set, one [B,T]
+// Core ML call scores the whole candidate pool instead of per-candidate single-step threading; when
+// empty, GRULanguagePrior uses the single-step + first-piece-admission path (nothing regresses).
+INTERNAL_GRU_SCORE_PACKAGE =
 INTERNAL_GRU_ENABLED = NO
 
 #include? "Secrets.xcconfig"

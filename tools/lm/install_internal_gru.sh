@@ -22,21 +22,26 @@ if [ ! -d "$model_package" ] || [ ! -f "$tokenizer_model" ]; then
     exit 0
 fi
 
+score_package="${INTERNAL_GRU_SCORE_PACKAGE:-}"
 resources="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
 compiled_output="${resources}/gru.mlmodelc"
+score_output="${resources}/gru_score.mlmodelc"
 tokenizer_output="${resources}/gru_tokenizer.bin"
 temporary="${TARGET_TEMP_DIR}/internal-gru-coreml"
 stamp="${TARGET_TEMP_DIR}/internal-gru.sha256"
 
-# Skip recompilation when neither the model package nor the tokenizer changed.
+# Skip recompilation when neither model package, the tokenizer, nor the optional score package changed.
 fingerprint=$(
-    find "$model_package" -type f -print0 \
-        | sort -z \
-        | xargs -0 shasum -a 256
+    find "$model_package" -type f -print0 | sort -z | xargs -0 shasum -a 256
     shasum -a 256 "$tokenizer_model"
+    if [ -n "$score_package" ] && [ -d "$score_package" ]; then
+        find "$score_package" -type f -print0 | sort -z | xargs -0 shasum -a 256
+    fi
 )
 fingerprint=$(printf '%s' "$fingerprint" | shasum -a 256 | awk '{print $1}')
-if [ -d "$compiled_output" ] && [ -f "$tokenizer_output" ] \
+score_current=true
+if [ -n "$score_package" ] && [ ! -d "$score_output" ]; then score_current=false; fi
+if [ -d "$compiled_output" ] && [ -f "$tokenizer_output" ] && [ "$score_current" = true ] \
         && [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$fingerprint" ]; then
     echo "note: internal GRU search prior is current"
     exit 0
@@ -57,5 +62,23 @@ python3 "${SRCROOT}/tools/lm/export_coreml.py" \
     --part tokenizer \
     --sentencepiece "$tokenizer_model" \
     --tokenizer-output "$tokenizer_output"
+
+# Optional batched scorer — bundle only when configured; GRULanguagePrior falls back to the
+# single-step path when gru_score.mlmodelc is absent, so this never blocks the search prior.
+rm -rf "$score_output"
+if [ -n "$score_package" ] && [ -d "$score_package" ]; then
+    score_temporary="${TARGET_TEMP_DIR}/internal-gru-score"
+    rm -rf "$score_temporary"
+    mkdir -p "$score_temporary"
+    xcrun coremlcompiler compile "$score_package" "$score_temporary"
+    set -- "$score_temporary"/*.mlmodelc
+    if [ "$#" -eq 1 ] && [ -d "$1" ]; then
+        ditto "$1" "$score_output"
+        echo "note: installed internal GRU batched scorer"
+    else
+        echo "warning: GRU score compiler did not emit exactly one model"
+    fi
+fi
+
 printf '%s' "$fingerprint" > "$stamp"
 echo "note: installed internal GRU search prior and tokenizer"
