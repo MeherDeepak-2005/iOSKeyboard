@@ -86,3 +86,6 @@ android/local.properties
 # Reproducible imported vocabulary and integration report.
 !tools/data/corev4/**/*.txt
 !docs/corev4-import/*.txt
+
+# Portable decoder build definitions are source, not generated text.
+!CMakeLists.txt

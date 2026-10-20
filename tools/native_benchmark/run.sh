@@ -3,7 +3,7 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/kb-native-bench.XXXXXX")
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
-for source_name in PackedLexicon SpatialModel IncrementalSearch; do
+for source_name in PackedLexicon SpatialModel IncrementalSearch CandidateGeneration; do
   xcrun clang++ -std=c++20 -O3 -c "$repo_root/native/DecoderCore/src/$source_name.cpp" -o "$work_dir/$source_name.o"
 done
 xcrun clang++ -std=c++20 -O3 -DKB_REFERENCE_DECODER_YES=1 -fobjc-arc -c "$repo_root/native/iOS/KBDecoderBridge.mm" -o "$work_dir/bridge.o"

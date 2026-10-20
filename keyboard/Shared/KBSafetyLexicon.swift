@@ -51,6 +51,13 @@ final class KBSafetyLexicon {
 		data = d
 	}
 
+    /// Immutable normalized terms for native English generation. Unicode input
+    /// normalization remains at the platform boundary; generation receives ASCII.
+    var nativeBlockedWords: [String] {
+        (0..<count).filter { entryAction($0) == .suppressSuggest || entryAction($0) == .suppressAlways }
+            .map { entryTerm($0) }
+    }
+
 	/// FNV-1a 64 over normalized UTF-8 — must match the offline builder exactly.
 	// MIGRATION: planned CPP_CORE | stage=search | target=SafetyLookup
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.

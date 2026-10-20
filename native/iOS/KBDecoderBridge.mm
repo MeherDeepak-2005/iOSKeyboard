@@ -1,11 +1,15 @@
 #import "KBDecoderBridge.h"
 #include "../DecoderCore/include/PackedLexicon.hpp"
 #include "../DecoderCore/include/IncrementalSearch.hpp"
+#include "../DecoderCore/include/CandidateGeneration.hpp"
 #include <memory>
 #include <cmath>
 #include <stdexcept>
 
 static std::vector<std::optional<kb::TouchOffset>> KBTaps(NSData *, NSData *, std::size_t);
+@interface KBPackedLexicon ()
+- (const kb::PackedLexicon *)nativeLexicon;
+@end
 @interface KBChannelCandidate ()
 - (instancetype)initWithCandidate:(const kb::ChannelCandidate&)candidate;
 @end
@@ -58,6 +62,7 @@ static void KBSetError(NSError **error, const std::exception& failure) {
     return self;
 }
 - (const void *)backingAddress { return _reader->backingAddress(); }
+- (const kb::PackedLexicon *)nativeLexicon { return _reader.get(); }
 - (NSUInteger)formatVersion { return _reader->version(); }
 - (NSUInteger)wordCount { return _reader->wordCount(); }
 #if DEBUG || KB_REFERENCE_DECODER_YES
@@ -185,6 +190,10 @@ static void KBSetError(NSError **error, const std::exception& failure) {
 @end
 
 @implementation KBChannelCandidate
++ (instancetype)candidateWithWord:(NSString *)word cost:(double)cost logFrequency:(double)frequency {
+    NSData *bytes = [word dataUsingEncoding:NSUTF8StringEncoding];
+    return [[self alloc] initWithCandidate:{std::string(static_cast<const char *>(bytes.bytes), bytes.length), cost, frequency}];
+}
 - (instancetype)initWithCandidate:(const kb::ChannelCandidate&)candidate {
     if ((self = [super init])) {
         _word = [[NSString alloc] initWithBytes:candidate.word.data() length:candidate.word.size() encoding:NSUTF8StringEncoding];
@@ -314,6 +323,152 @@ static std::vector<std::optional<kb::TouchOffset>> KBTaps(NSData *offsets, NSDat
         }
         auto values = kb::languageScores(evidence, total, {biTotal, biDiscountMass}, {triTotal, triDiscountMass});
         return [NSData dataWithBytes:values.data() length:values.size() * sizeof(double)];
+    } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
+}
+@end
+
+static std::string KBText(NSString *word) {
+    NSData *bytes = [word dataUsingEncoding:NSUTF8StringEncoding];
+    if (!bytes) throw std::invalid_argument("invalid UTF-8 input");
+    return std::string(static_cast<const char *>(bytes.bytes), bytes.length);
+}
+static NSArray<KBChannelCandidate *> *KBCandidates(const std::vector<kb::ChannelCandidate>& values) {
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:values.size()];
+    for (const auto& value : values) [out addObject:[[KBChannelCandidate alloc] initWithCandidate:value]];
+    return out;
+}
+static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *> *words, NSArray<NSNumber *> *bonuses) {
+    if (!words && !bonuses) return {};
+    if (!words || !bonuses || words.count != bonuses.count) throw std::invalid_argument("invalid funding shape");
+    std::vector<kb::WordFunding> out;
+    for (NSUInteger i = 0; i < words.count; ++i) out.push_back({KBText(words[i]), bonuses[i].doubleValue});
+    return out;
+}
+@interface KBMutableTrie ()
+- (std::shared_ptr<const kb::MutableTrie>)nativeSnapshot;
+@end
+@implementation KBMutableTrie {
+    std::shared_ptr<kb::MutableTrie> _trie;
+}
+- (instancetype)init {
+    if ((self = [super init])) _trie = std::make_shared<kb::MutableTrie>();
+    return self;
+}
+- (std::shared_ptr<const kb::MutableTrie>)nativeSnapshot { return _trie; }
+- (void)prepareMutation {
+    if (_trie.use_count() != 1) _trie = std::make_shared<kb::MutableTrie>(*_trie);
+}
+- (void)insertWord:(NSString *)word frequency:(int64_t)frequency wordID:(int32_t)wordID {
+    [self prepareMutation]; _trie->insert(KBText(word), frequency, wordID);
+}
+- (BOOL)containsWord:(NSString *)word { return _trie->contains(KBText(word)); }
+- (BOOL)hasPrefix:(NSString *)word { return _trie->hasPrefix(KBText(word)); }
+- (NSNumber *)wordIDForWord:(NSString *)word {
+    auto id = _trie->wordID(KBText(word)); return id ? @(*id) : nil;
+}
+- (NSNumber *)logFrequencyForWord:(NSString *)word {
+    auto frequency = _trie->logFrequency(KBText(word)); return frequency ? @(*frequency) : nil;
+}
+- (void)bumpWord:(NSString *)word { [self prepareMutation]; _trie->bump(KBText(word)); }
+- (NSArray<KBChannelCandidate *> *)completionsForPrefix:(NSString *)prefix limit:(NSUInteger)limit {
+    return KBCandidates(_trie->completions(KBText(prefix), limit));
+}
+- (NSArray<KBChannelCandidate *> *)searchWord:(NSString *)word maxCost:(double)cost
+    tapOffsets:(NSData *)offsets tapValidity:(NSData *)validity
+    fundedWords:(NSArray<NSString *> *)words fundedBonuses:(NSArray<NSNumber *> *)bonuses error:(NSError **)error {
+    try {
+        auto text = KBText(word); auto taps = KBTaps(offsets, validity, text.size());
+        auto funding = KBFunding(words, bonuses);
+        return KBCandidates(_trie->search(text, cost, taps,
+            funding ? std::optional<std::span<const kb::WordFunding>>(*funding) : std::nullopt));
+    } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
+}
+@end
+@interface KBGeneratedCandidates ()
+- (instancetype)initWithGeneration:(const kb::GeneratedCandidates&)generation;
+@end
+@implementation KBGeneratedCandidates
+- (instancetype)initWithGeneration:(const kb::GeneratedCandidates&)generation {
+    if ((self = [super init])) {
+        _close = KBCandidates(generation.close); _broad = KBCandidates(generation.broad);
+        _injected = KBCandidates(generation.injected); _completions = KBCandidates(generation.completions);
+        _displayCorrections = KBCandidates(generation.displayCorrections);
+        _split = generation.split ? [[KBChannelCandidate alloc] initWithCandidate:*generation.split] : nil;
+        _cancelled = generation.cancelled;
+    }
+    return self;
+}
+@end
+@interface KBGenerationSnapshot ()
+- (const kb::GenerationSnapshot *)nativeSnapshot;
+@end
+@implementation KBGenerationSnapshot {
+    kb::GenerationSnapshot _snapshot;
+}
+- (instancetype)initWithBoosts:(NSDictionary<NSString *, NSNumber *> *)boosts blockedWords:(NSArray<NSString *> *)blocked {
+    if ((self = [super init])) {
+        for (NSString *key in boosts) _snapshot.boosts.emplace(KBText(key), boosts[key].longLongValue);
+        for (NSString *key in blocked) _snapshot.blocked.insert(KBText(key));
+    }
+    return self;
+}
+- (const kb::GenerationSnapshot *)nativeSnapshot { return &_snapshot; }
+@end
+@interface KBGenerationLexicon ()
+- (kb::GenerationLexicon)nativeLexicon;
+@end
+@implementation KBGenerationLexicon {
+    KBPackedLexicon *_packed;
+    KBGenerationSnapshot *_snapshot;
+    std::shared_ptr<const kb::MutableTrie> _base, _supplementary, _personal;
+}
+- (instancetype)initWithPacked:(KBPackedLexicon *)packed base:(KBMutableTrie *)base
+    supplementary:(KBMutableTrie *)supplementary personal:(KBMutableTrie *)personal
+    snapshot:(KBGenerationSnapshot *)snapshot {
+    if ((self = [super init])) {
+        _packed = packed; _snapshot = snapshot;
+        _base = [base nativeSnapshot]; _supplementary = [supplementary nativeSnapshot]; _personal = [personal nativeSnapshot];
+    }
+    return self;
+}
+- (kb::GenerationLexicon)nativeLexicon {
+    return {[_packed nativeLexicon], _base.get(), _supplementary.get(), _personal.get(), [_snapshot nativeSnapshot]};
+}
+@end
+@implementation KBCandidateGenerator
++ (NSArray<NSNumber *> *)rankFundingBonusesWithCount:(NSUInteger)count {
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:count];
+    for (NSUInteger i = 0; i < count; ++i) [out addObject:@(kb::rankFundingBonus(i))];
+    return out;
+}
++ (NSArray<NSNumber *> *)probabilityFundingBonuses:(NSArray<NSNumber *> *)probabilities floor:(double)floor {
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:probabilities.count];
+    for (NSNumber *probability in probabilities) [out addObject:@(kb::probabilityFundingBonus(probability.doubleValue, floor))];
+    return out;
+}
++ (KBGeneratedCandidates *)generateWord:(NSString *)word lexicon:(KBGenerationLexicon *)lexiconSnapshot
+    tapOffsets:(NSData *)offsets tapValidity:(NSData *)validity contextSuccessors:(NSArray<NSString *> *)successors successorLengths:(NSArray<NSNumber *> *)lengths
+    fundedWords:(NSArray<NSString *> *)words fundedBonuses:(NSArray<NSNumber *> *)bonuses
+    retainedStatic:(NSArray<KBChannelCandidate *> *)retained gruTier:(BOOL)gru shouldCancel:(BOOL (^)(void))cancel
+    error:(NSError **)error {
+    try {
+        auto lexicon = [lexiconSnapshot nativeLexicon];
+        auto text = KBText(word); auto funding = KBFunding(words, bonuses);
+        auto taps = KBTaps(offsets, validity, text.size());
+        if (lengths.count != successors.count) throw std::invalid_argument("invalid successor lengths shape");
+        std::vector<kb::ContextSuccessor> next;
+        for (NSUInteger i = 0; i < successors.count; ++i) next.push_back({KBText(successors[i]), lengths[i].unsignedIntegerValue});
+        std::optional<std::vector<kb::ChannelCandidate>> retainedWords;
+        if (retained) {
+            retainedWords.emplace();
+            for (KBChannelCandidate *candidate in retained)
+                retainedWords->push_back({KBText(candidate.word), candidate.cost, candidate.logFrequency});
+        }
+        auto result = kb::generateCandidates(lexicon, text, taps, next,
+            funding ? std::optional<std::span<const kb::WordFunding>>(*funding) : std::nullopt,
+            retainedWords ? std::optional<std::span<const kb::ChannelCandidate>>(*retainedWords) : std::nullopt,
+            gru, cancel ? std::function<bool()>([cancel] { return bool(cancel()); }) : std::function<bool()>());
+        return [[KBGeneratedCandidates alloc] initWithGeneration:result];
     } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
 }
 @end

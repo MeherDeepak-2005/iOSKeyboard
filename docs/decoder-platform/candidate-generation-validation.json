@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-20",
+  "baseline_commit": "e9836ae",
+  "scope": "ASCII English tap candidate generation; mutable trie search; search-funding mathematics",
+  "source_isolation": "Exported staged index; concurrent NgramScorer.swift and NativeSearchParityTests.swift changes excluded",
+  "simulator": {
+    "device": "iPhone 17 Pro",
+    "os": "iOS 26.5",
+    "configuration": "Debug",
+    "suite_passed": true,
+    "tests_total": 119,
+    "tests_passed": 118,
+    "tests_skipped": 1,
+    "skipped_test": "tinyGRUStreamingAndBatchCoverWholePoolAndPressureReset",
+    "deterministic_hashing": "1 (test runner only)"
+  },
+  "replay_parity": {
+    "requests": 110,
+    "contexts": 5,
+    "suggestions": "exact",
+    "corrections": "exact",
+    "candidate_order": "exact",
+    "numeric_tolerance": 1e-09
+  },
+  "severe_typo": {
+    "typed": "coeevitjkn",
+    "intended": "correction",
+    "correct_commits": 155,
+    "replays": 155,
+    "contexts": 5,
+    "neural": "not run; trained artifacts not configured"
+  },
+  "portable": {
+    "asan_ubsan": "passed",
+    "cmake_ctest": "2/2 passed; assertions enabled in Release",
+    "glide_cli_build": "passed"
+  },
+  "release": {
+    "build": "generic iOS arm64 Release; CODE_SIGNING_ALLOWED=NO",
+    "artifact_gate_passed": true,
+    "extension_bytes": 20008775,
+    "gate_bytes": 24000000,
+    "neural_artifacts_bundled": false
+  },
+  "not_validated": [
+    "physical-iPhone runtime, latency or residency",
+    "Android SDK/NDK execution",
+    "trained GRU/transformer quality"
+  ],
+  "remaining_swift": [
+    "non-ASCII generation fallback",
+    "n-gram extraction and successor merging",
+    "final ranking and correction policy",
+    "neural multiword expansion and tokenizer/generation math",
+    "Glide algorithms",
+    "iOS UI, scheduling, persistence and publication"
+  ],
+  "source_sha256": {
+    "native/DecoderCore/include/CandidateGeneration.hpp": "713499a2ba9559d1df69fa990424885ffebf1f08328bb9b4d9f25816560a8cb7",
+    "native/DecoderCore/src/CandidateGeneration.cpp": "8d36f29ca6af02909c6c635d75b754e56ea309afb10bd6b09ea18b3960902f1b",
+    "keyboard/Engine/Keyboardengine.swift": "b36b9f84ff1a20001600d3deaa281e68d536ae90faef5f0c7ee459b80eff46c3",
+    "keyboard/Engine/NgramScorer.swift": "f4b17617edb8a0884ffbe11cb958b2dd498d0cd177318d9a53acbd9686a94b83",
+    "keyboardTests/NativeCandidateGenerationTests.swift": "5ffa397eba6318cd2a29d3a9bc1dd2fbf45456ad70edc3a91acdbf7314797a2f"
+  }
+}

@@ -22,7 +22,8 @@ final class Lexicon {
 	/// way `Trie.bump` edits heap nodes. Only words the user actually types, but the
 	/// KEY COUNT still grows one entry per distinct dictionary word ever typed, so it
 	/// is capped (halve-and-drop, like UserModel) rather than left to accrete forever.
-	private var boosts: [String: Int] = [:]
+	private var boosts: [String: Int] = [:] { didSet { nativeGenerationSnapshot = nil } }
+    private var nativeGenerationSnapshot: KBGenerationSnapshot?
 	private static let maxBoosts = 3000
 	/// A small, explicitly bounded side index lets Glide shape-score contact,
 	/// text-replacement, and confirmed personal words that are not in the mmap trie.
@@ -46,6 +47,30 @@ final class Lexicon {
 	// binary, memory-mapped and hash-indexed. It filters generated candidates only;
 	// typed input is never censored. nil only if the resource is missing in tests.
 	private let safety = KBSafetyLexicon.bundled()
+
+    private lazy var nativeBlockedWords = safety?.nativeBlockedWords ?? []
+
+    /// Retain immutable native views under the lock, then run all traversal after
+    /// unlocking. Learning uses copy-on-write if a Glide/decode still holds a view.
+    func generateEnglishCandidates(typed: String, taps: [KeyTap?]?, successors: [String],
+        prior: TrieSearchPrior?, retainedStatic: [Candidate]?, gruTier: Bool,
+        shouldCancel: @escaping () -> Bool) throws -> KBGeneratedCandidates {
+        lock.lock()
+        if nativeGenerationSnapshot == nil {
+            nativeGenerationSnapshot = KBGenerationSnapshot(boosts: boosts.mapValues { NSNumber(value: $0) },
+                blockedWords: nativeBlockedWords)
+        }
+        let view = KBGenerationLexicon(packed: staticTrie ? langData?.nativeCandidateLexicon : nil,
+            base: baseTrie.native, supplementary: supplementaryTrie.native, personal: personalTrie.native,
+            snapshot: nativeGenerationSnapshot!)
+        lock.unlock()
+        let buffers = NativeTapBuffers(taps: taps, expectedCount: typed.utf8.count)
+        let funding = prior?.nativeFundingSnapshot()
+        return try KBCandidateGenerator.generateWord(typed, lexicon: view,
+            tapOffsets: buffers?.offsets, tapValidity: buffers?.validity,
+            contextSuccessors: successors, successorLengths: successors.map { NSNumber(value: $0.count) }, fundedWords: funding?.words, fundedBonuses: funding?.bonuses,
+            retainedStatic: retainedStatic?.map(\.native), gruTier: gruTier, shouldCancel: shouldCancel)
+    }
 
 	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
 	// MIGRATION-SPLIT: SWIFT_IOS preserves normalization; CPP_CORE queries the immutable normalized safety view without search-loop callbacks.

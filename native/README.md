@@ -1,3 +1,5 @@
+> Current update: the default ASCII English tap candidate generator and mutable trie backend now run in C++. See [scope, reference paths and verification](../docs/decoder-platform/CPP_CANDIDATE_GENERATION.md). Ranking, Unicode fallback, Glide and neural algorithms still have Swift ownership.
+
 # CoreV4 vocabulary integration (2026-10-19)
 
 The active English pack is KBLM v6 with 114,283 stored forms. Both native and

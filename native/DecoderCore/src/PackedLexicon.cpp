@@ -9,6 +9,72 @@
 #include <stdexcept>
 
 namespace kb {
+std::optional<std::size_t> PackedLexicon::trieNode(std::string_view prefix) const {
+    if (!nodes_) return {};
+    std::size_t at = 0;
+    for (std::uint8_t letter : prefix) {
+        auto offset = trie_ + nodeSize_ * at;
+        auto first = u32(offset + 2);
+        auto count = std::to_integer<std::uint8_t>(bytes_[offset + 1]);
+        std::size_t next = SIZE_MAX;
+        for (std::size_t i = first; i < std::size_t(first) + count; ++i)
+            if (std::to_integer<std::uint8_t>(bytes_[trie_ + nodeSize_ * i]) == letter) { next = i; break; }
+        if (next == SIZE_MAX) return {};
+        at = next;
+    }
+    return at;
+}
+std::optional<std::int32_t> PackedLexicon::wordID(std::string_view spelling) const {
+    auto at = trieNode(spelling); if (!at) return {};
+    auto id = version_ == 5 ? std::uint32_t(u16(trie_ + nodeSize_ * *at + 6)) : u32(trie_ + nodeSize_ * *at + 6);
+    if (id == (version_ == 5 ? 0xffffu : 0xffffffffu)) return {};
+    return static_cast<std::int32_t>(id);
+}
+std::vector<ChannelCandidate> PackedLexicon::completions(std::string_view prefix, std::size_t limit) const {
+    auto start = trieNode(prefix); if (!start || !limit) return {};
+    struct Entry { std::uint32_t priority; std::size_t node; std::int32_t wordID; };
+    std::vector<Entry> heap;
+    auto maxFrequency = [&](std::size_t at) { return u32(trie_ + nodeSize_ * at + (version_ == 5 ? 8 : 10)); };
+    // Deliberately use the reference's heap comparisons. std::priority_queue has
+    // different equal-priority behavior and changes tied completion ordering.
+    auto push = [&](Entry e) {
+        heap.push_back(e); auto c = heap.size() - 1;
+        while (c > 0) {
+            auto p = (c - 1) >> 1;
+            if (heap[p].priority >= heap[c].priority) break;
+            std::swap(heap[p], heap[c]); c = p;
+        }
+    };
+    auto pop = [&] {
+        auto top = heap.front(), last = heap.back(); heap.pop_back();
+        if (!heap.empty()) {
+            heap[0] = last; std::size_t p = 0;
+            while (true) {
+                auto l = 2 * p + 1, r = l + 1, m = p;
+                if (l < heap.size() && heap[l].priority > heap[m].priority) m = l;
+                if (r < heap.size() && heap[r].priority > heap[m].priority) m = r;
+                if (m == p) break;
+                std::swap(heap[p], heap[m]); p = m;
+            }
+        }
+        return top;
+    };
+    std::vector<ChannelCandidate> out;
+    push({maxFrequency(*start), *start, -1});
+    while (!heap.empty() && out.size() < limit) {
+        auto e = pop();
+        if (e.node == SIZE_MAX) {
+            out.push_back({std::string(word(e.wordID)), 0, std::log(double(std::max(frequency(e.wordID), 1u)) + 1)});
+            continue;
+        }
+        auto offset = trie_ + nodeSize_ * e.node;
+        auto id = version_ == 5 ? std::uint32_t(u16(offset + 6)) : u32(offset + 6);
+        if (id != (version_ == 5 ? 0xffffu : 0xffffffffu)) push({frequency(id), SIZE_MAX, std::int32_t(id)});
+        auto first = u32(offset + 2); auto count = std::to_integer<std::uint8_t>(bytes_[offset + 1]);
+        for (std::size_t i = first; i < std::size_t(first) + count; ++i) push({maxFrequency(i), i, -1});
+    }
+    return out;
+}
 namespace {
 constexpr std::uint32_t empty32 = 0xffffffff;
 constexpr std::uint32_t empty16 = 0xffff;

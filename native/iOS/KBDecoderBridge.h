@@ -59,6 +59,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) double cost;
 @property(nonatomic, readonly) double logFrequency;
 - (instancetype)init NS_UNAVAILABLE;
++ (instancetype)candidateWithWord:(NSString *)word cost:(double)cost logFrequency:(double)frequency NS_SWIFT_NAME(make(word:cost:logFrequency:));
 @end
 
 @interface KBIncrementalSearch : NSObject
@@ -95,5 +96,63 @@ NS_ASSUME_NONNULL_BEGIN
 + (nullable NSData *)scoresForRows:(NSData *)rows corpusTotal:(double)total
     bigramTotal:(double)biTotal bigramDiscountMass:(double)biDiscountMass
     trigramTotal:(double)triTotal trigramDiscountMass:(double)triDiscountMass error:(NSError **)error;
+@end
+NS_ASSUME_NONNULL_END
+
+NS_ASSUME_NONNULL_BEGIN
+// Mutable native trie. Caller serializes mutation and search (Lexicon's lock).
+@interface KBMutableTrie : NSObject
+- (void)insertWord:(NSString *)word frequency:(int64_t)frequency wordID:(int32_t)wordID;
+- (BOOL)containsWord:(NSString *)word;
+- (BOOL)hasPrefix:(NSString *)prefix;
+- (nullable NSNumber *)wordIDForWord:(NSString *)word;
+- (nullable NSNumber *)logFrequencyForWord:(NSString *)word;
+- (void)bumpWord:(NSString *)word;
+- (NSArray<KBChannelCandidate *> *)completionsForPrefix:(NSString *)prefix limit:(NSUInteger)limit;
+- (nullable NSArray<KBChannelCandidate *> *)searchWord:(NSString *)word maxCost:(double)cost
+    tapOffsets:(nullable NSData *)offsets tapValidity:(nullable NSData *)validity
+    fundedWords:(nullable NSArray<NSString *> *)words fundedBonuses:(nullable NSArray<NSNumber *> *)bonuses
+    error:(NSError **)error NS_SWIFT_NAME(search(word:maxCost:tapOffsets:tapValidity:fundedWords:fundedBonuses:));
+@end
+
+@interface KBGeneratedCandidates : NSObject
+@property(nonatomic, readonly) NSArray<KBChannelCandidate *> *close;
+@property(nonatomic, readonly) NSArray<KBChannelCandidate *> *broad;
+@property(nonatomic, readonly) NSArray<KBChannelCandidate *> *injected;
+@property(nonatomic, readonly) NSArray<KBChannelCandidate *> *completions;
+@property(nonatomic, readonly) NSArray<KBChannelCandidate *> *displayCorrections;
+@property(nonatomic, readonly, nullable) KBChannelCandidate *split;
+@property(nonatomic, readonly) BOOL cancelled;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+// Immutable, cached until a vocabulary-learning event changes the boosts.
+@interface KBGenerationSnapshot : NSObject
+- (instancetype)initWithBoosts:(NSDictionary<NSString *, NSNumber *> *)boosts
+    blockedWords:(NSArray<NSString *> *)blocked;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+// Retains the mapping and copy-on-write mutable snapshots. Construct under the
+// Lexicon lock, then release that lock before any static trie walk.
+@interface KBGenerationLexicon : NSObject
+- (instancetype)initWithPacked:(nullable KBPackedLexicon *)packed base:(KBMutableTrie *)base
+    supplementary:(KBMutableTrie *)supplementary personal:(KBMutableTrie *)personal
+    snapshot:(KBGenerationSnapshot *)snapshot;
+- (instancetype)init NS_UNAVAILABLE;
+@end
+
+@interface KBCandidateGenerator : NSObject
++ (NSArray<NSNumber *> *)rankFundingBonusesWithCount:(NSUInteger)count;
++ (NSArray<NSNumber *> *)probabilityFundingBonuses:(NSArray<NSNumber *> *)probabilities floor:(double)floor;
+// One synchronous, whole-generation call. Native code owns traversal and policy;
+// no per-node, per-word, safety or frequency callback crosses into Swift.
++ (nullable KBGeneratedCandidates *)generateWord:(NSString *)word
+    lexicon:(KBGenerationLexicon *)lexicon
+    tapOffsets:(nullable NSData *)offsets tapValidity:(nullable NSData *)validity
+    contextSuccessors:(NSArray<NSString *> *)successors successorLengths:(NSArray<NSNumber *> *)lengths
+    fundedWords:(nullable NSArray<NSString *> *)words fundedBonuses:(nullable NSArray<NSNumber *> *)bonuses
+    retainedStatic:(nullable NSArray<KBChannelCandidate *> *)retained gruTier:(BOOL)gru
+    shouldCancel:(nullable BOOL (^)(void))cancel error:(NSError **)error;
 @end
 NS_ASSUME_NONNULL_END

@@ -1,3 +1,5 @@
+> Current update: the default ASCII English tap candidate generator and mutable trie backend now run in C++. See [scope, reference paths and verification](docs/decoder-platform/CPP_CANDIDATE_GENERATION.md). Ranking, Unicode fallback, Glide and neural algorithms still have Swift ownership.
+
 > Implementation update: C++ is now the primary English packed/retained search and language-score mathematics backend. The full cross-platform policy/Glide/neural migration remains in progress. See [current Android/iOS architecture](ANDROID_IOS_ARCHITECTURE.md) for exact ownership, default routing and validation.
 
 # Planned C++ / iOS decoder migration

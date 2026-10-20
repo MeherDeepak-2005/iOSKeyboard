@@ -10,7 +10,7 @@ Android dictionary.
 
 | Layer | Language | Files | Responsibility |
 |---|---|---|---|
-| Neutral core | C++20 | `native/DecoderCore/` | Checked packed vocabulary, static fuzzy traversal, terminal/prefix funding, spatial costs, immutable boosted seed preparation, retained DP, batched language-score mathematics |
+| Neutral core | C++20 | `native/DecoderCore/` | Checked packed vocabulary, ASCII English tap candidate generation, mutable tries, packed completions, terminal/prefix funding, spatial costs, immutable boosted seed preparation, retained DP, batched language-score mathematics |
 | iOS adapter | Objective-C++ | `native/iOS/KBDecoderBridge.h/.mm` | Retain immutable NSData mapping, numeric/UTF-8 transport, whole-batch conversion, native error translation |
 | iOS application | Swift | `keyboard/`, `demo_keyboard/` | UI, document insertion, resource discovery, scheduling/revisions, settings, personal storage and existing language routing |
 | Android adapter | C++ with JNI | `native/android/DecoderJni.cpp` | Read-only file mapping, lifetime-safe opaque handles, serialized sessions, Kotlin/native input and owned output conversion |
@@ -58,9 +58,11 @@ fallback; it is not a second production search engine.
 
 | Process | Current runtime | Planned destination |
 |---|---|---|
-| Packed lookup/completions, Glide anchor/index access and selected n-gram count extraction | Swift reading the shared, natively validated map | C++ packed view |
-| Mutable/adopted/supplementary trie storage and traversal | Swift | C++ with immutable lifecycle/epoch inputs |
-| Final ranking, correction gates, contraction/split and multiword policy | Swift | C++ policy layer after independent parity |
+| Packed lookup/completions used by tap generator | C++ | Implemented; other LangData/Glide callers still have Swift access |
+| Glide anchor/index access and selected n-gram count extraction | Swift reading the shared, natively validated map | C++ packed view |
+| Mutable/adopted/supplementary trie storage and traversal | C++ by default; Swift reference in tests | Implemented; learning/persistence remains Swift |
+| Tap proposal generation, recovery admission, contraction/split proposals | C++ for ASCII typed input; Swift reference/Unicode fallback | [Candidate generation details](docs/decoder-platform/CPP_CANDIDATE_GENERATION.md) |
+| Final ranking, correction gates and neural multiword policy | Swift | C++ policy layer after independent parity |
 | Context/personal distribution extraction and next-word merging | Swift; score mathematics are C++ | C++ vocabulary/personal/safety views |
 | Glide geometry/search/shape ranking | Swift | C++ after policy/Glide parity |
 | Neural tokenizer/search math and Core ML execution façade | Existing Swift; no trained artifacts available | C++ math plus iOS Objective-C++ Core ML backend |

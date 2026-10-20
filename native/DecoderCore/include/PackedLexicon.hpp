@@ -29,6 +29,8 @@ public:
     const void* backingAddress() const noexcept { return bytes_.data(); }
     std::string_view word(std::uint32_t id) const;
     std::uint32_t frequency(std::uint32_t id) const;
+    std::optional<std::int32_t> wordID(std::string_view word) const;
+    std::vector<ChannelCandidate> completions(std::string_view prefix, std::size_t limit) const;
     std::vector<std::int32_t> starterIDs(std::size_t limit) const;
     std::optional<Continuations> bigrams(std::int32_t context,
                                        std::size_t limit = SIZE_MAX) const;
@@ -61,5 +63,6 @@ private:
     Continuations readRange(std::size_t base, Range range, std::size_t limit) const;
     void validateRange(Range range, std::uint32_t count) const;
     void validate();
+    std::optional<std::size_t> trieNode(std::string_view prefix) const;
 };
 } // namespace kb

@@ -1,5 +1,5 @@
-// MIGRATION-FILE: planned CPP_CORE | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
+// IMPLEMENTED: C++ mutable storage/search and search-funding math are primary.
+// Swift retains boundary records and Debug/test references for parity.
 import Foundation
 
 // Trie: weighted fuzzy search (Damerau + touch taps) + Candidate — extracted from Keyboardengine.swift.
@@ -35,18 +35,18 @@ nonisolated final class PriorNode {
 // MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated final class TrieSearchPrior {
 	fileprivate let root = PriorNode()
+    private let funded: [(word: String, bonus: Double)]
 	/// The LM widens the search but can never turn a spatially-absurd word into a hit.
 	static let maxBonus = 1.6
 
 	/// `words` are LM-ranked likely continuations (best first). Each lays a RANK-decayed bonus
 	/// along its whole prefix path. Used by the n-gram fallback path, which has no probabilities —
 	/// only an ordering — so it funds the top words generously regardless of the LM's confidence.
-	convenience init(likelyWords words: [String],
-		 weight: (Int) -> Double = { 1.5 * pow(0.82, Double($0)) }) {
-		self.init(funded: words.enumerated().map {
-			($1, min(Self.maxBonus, weight($0)))
-		})
-	}
+    convenience init(likelyWords words: [String], weight: ((Int) -> Double)? = nil) {
+        let bonuses = weight.map { f in words.indices.map { min(Self.maxBonus, f($0)) } }
+            ?? KBCandidateGenerator.rankFundingBonuses(withCount: UInt(words.count)).map(\.doubleValue)
+        self.init(funded: zip(words, bonuses).map { ($0.0, $0.1) })
+    }
 
 	/// Absolute log-probability budget heuristic, independent of shortlist size/order.
 	/// A word at or below the floor receives no extra budget. This bounded linear ramp
@@ -54,12 +54,9 @@ nonisolated final class TrieSearchPrior {
 	/// words must never increase this word's funding.
 	convenience init(scoredWords scored: [(word: String, logProbability: Double)],
 		 logProbabilityFloor: Double = -12) {
-		let floor = min(logProbabilityFloor, -1e-3)
-		self.init(funded: scored.map { entry in
-			let bonus = entry.logProbability.isFinite && entry.logProbability <= 0
-				? Self.maxBonus * max(0, 1 - entry.logProbability / floor) : 0
-			return (entry.word, bonus)
-		})
+        let bonuses = KBCandidateGenerator.probabilityFundingBonuses(
+            scored.map { NSNumber(value: $0.logProbability) }, floor: logProbabilityFloor).map(\.doubleValue)
+        self.init(funded: zip(scored, bonuses).map { ($0.0.word, $0.1) })
 	}
 
 	/// Lay each `(word, bonus)` along the word's whole prefix path; a shared prefix keeps the MAX
@@ -68,6 +65,8 @@ nonisolated final class TrieSearchPrior {
 	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private init(funded: [(word: String, bonus: Double)]) {
+        self.funded = funded.filter { $0.bonus > 0 }.map { ($0.word.lowercased(), $0.bonus) }
+#if DEBUG || KB_REFERENCE_DECODER_YES
 		for (word, bonus) in funded {
 			guard bonus > 0 else { continue }
 			var node = root
@@ -80,24 +79,16 @@ nonisolated final class TrieSearchPrior {
 			}
 			node.terminalBonus = max(node.terminalBonus, bonus)
 		}
+#endif
 	}
 
     /// Batched terminal funding for the neutral core. Prefix maxima are rebuilt
     /// there; terminal identity never borrows a descendant's traversal budget.
     func nativeFundingSnapshot() -> (words: [String], bonuses: [NSNumber]) {
-        var words: [String] = [], bonuses: [NSNumber] = []
-        func collect(_ node: PriorNode, _ prefix: [UInt8]) {
-            if node.terminalBonus > 0 {
-                words.append(String(decoding: prefix, as: UTF8.self))
-                bonuses.append(NSNumber(value: node.terminalBonus))
-            }
-            for (byte, child) in node.children { collect(child, prefix + [byte]) }
-        }
-        collect(root, [])
-        return (words, bonuses)
+        (funded.map(\.word), funded.map { NSNumber(value: $0.bonus) })
     }
 
-	var isEmpty: Bool { root.children.isEmpty }
+	var isEmpty: Bool { funded.allSatisfy { $0.word.isEmpty } }
 	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func rootChild(_ ch: UInt8) -> PriorNode? { root.child(ch) }
@@ -105,7 +96,96 @@ nonisolated final class TrieSearchPrior {
 
 // MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
 // MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+/// Native mutable vocabulary façade. The independent Swift implementation is
+/// available only to Debug/test builds and never shadows production mutations.
 nonisolated final class Trie {
+    let native = KBMutableTrie()
+    let backend: DecoderCoreBackend
+    static let insCost = 1.6, delCost = 1.6, transCost = 0.8, firstLetterPenalty = 2.5
+#if DEBUG || KB_REFERENCE_DECODER_YES
+    private let reference: SwiftTrie?
+#endif
+    init(backend: DecoderCoreBackend = .cpp) {
+        self.backend = backend
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        reference = backend == .swiftReference ? SwiftTrie() : nil
+#else
+        precondition(backend == .cpp, "Swift mutable reference requires a test build")
+#endif
+    }
+    static func firstLetterPenaltyPolicy(typedLength: Int, candidateFirst: UInt8, typedFirst: UInt8) -> Double {
+        guard candidateFirst != typedFirst, typedLength > 2 else { return 0 }
+        return typedLength == 3 ? 0.35 : typedLength == 4 ? 0.75 : 2.5
+    }
+    func insert(_ word: String, freq: Int, id: Int32 = -1) {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { reference.insert(word, freq: freq, id: id); return }
+#endif
+        native.insertWord(word, frequency: Int64(freq), wordID: id)
+    }
+    func contains(_ word: String) -> Bool {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.contains(word) }
+#endif
+        return native.containsWord(word)
+    }
+    func hasPrefix(_ word: String) -> Bool {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.hasPrefix(word) }
+#endif
+        return native.hasPrefix(word)
+    }
+    func wordID(_ word: String) -> Int32? {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.wordID(word) }
+#endif
+        return native.wordID(forWord: word)?.int32Value
+    }
+    func logFreq(_ word: String) -> Double? {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.logFreq(word) }
+#endif
+        return native.logFrequency(forWord: word)?.doubleValue
+    }
+    func bump(_ word: String) {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { reference.bump(word); return }
+#endif
+        native.bumpWord(word)
+    }
+    func search(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil,
+                prior: TrieSearchPrior? = nil) -> [Candidate] {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.search(typed, maxCost: maxCost, taps: taps, prior: prior) }
+#endif
+        let buffers = NativeTapBuffers(taps: taps, expectedCount: typed.utf8.count)
+        let funding = prior?.nativeFundingSnapshot()
+        do {
+            return try native.search(word: typed, maxCost: maxCost,
+                tapOffsets: buffers?.offsets, tapValidity: buffers?.validity,
+                fundedWords: funding?.words, fundedBonuses: funding?.bonuses).map(Candidate.init(native:))
+        } catch { return [] }
+    }
+    func completions(prefix: String, limit: Int) -> [Candidate] {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.completions(prefix: prefix, limit: limit) }
+#endif
+        guard limit > 0 else { return [] }
+        return native.completions(forPrefix: prefix, limit: UInt(limit)).map(Candidate.init(native:))
+    }
+}
+
+extension Candidate {
+    init(native: KBChannelCandidate) {
+        self.init(word: native.word, cost: native.cost, logFreq: native.logFrequency)
+    }
+    var native: KBChannelCandidate {
+        KBChannelCandidate.make(word: word, cost: cost, logFrequency: logFreq)
+    }
+}
+
+#if DEBUG || KB_REFERENCE_DECODER_YES
+nonisolated final class SwiftTrie {
 	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private final class Node {
@@ -214,14 +294,14 @@ nonisolated final class Trie {
 		// carries), so beyond this depth no row can come back under budget. The prior can
 		// relax the budget by up to maxBonus, so its headroom is added to the depth bound.
 		let priorHeadroom = prior != nil ? TrieSearchPrior.maxBonus : 0
-		let maxDepth = n + Int((maxCost + priorHeadroom) / Trie.delCost) + 2
+		let maxDepth = n + Int((maxCost + priorHeadroom) / SwiftTrie.delCost) + 2
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
-		for i in 0...n { dp[i] = Double(i) * Trie.insCost }
+		for i in 0...n { dp[i] = Double(i) * SwiftTrie.insCost }
 		var out: [Candidate] = []
 		for (ch, child) in root.children {
-			let firstPenalty = Trie.firstLetterPenaltyPolicy(typedLength: n,
+			let firstPenalty = SwiftTrie.firstLetterPenaltyPolicy(typedLength: n,
 				candidateFirst: ch, typedFirst: chars[0])
-			Trie.recurse(child, ch, 0, 1, firstPenalty, chars, tapRow,
+			SwiftTrie.recurse(child, ch, 0, 1, firstPenalty, chars, tapRow,
 				&dp, maxDepth, maxCost, prior?.rootChild(ch), &out)
 		}
 		return out
@@ -288,3 +368,5 @@ nonisolated final class Trie {
 		for (_, child) in node.children { collect(child, &out, cap: cap) }
 	}
 }
+
+#endif

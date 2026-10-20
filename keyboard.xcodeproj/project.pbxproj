@@ -16,6 +16,8 @@
 		B12000000000000000000006 /* native/DecoderCore/src/SpatialModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000003 /* native/DecoderCore/src/SpatialModel.cpp */; };
 		B12000000000000000000007 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */; };
 		B12000000000000000000008 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */; };
+		B12000000000000000000009 /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */; };
+		B1200000000000000000000A /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +69,7 @@
 		B11000000000000000000002 /* native/iOS/KBDecoderBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = native/iOS/KBDecoderBridge.mm; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000003 /* native/DecoderCore/src/SpatialModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/SpatialModel.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/IncrementalSearch.cpp; sourceTree = SOURCE_ROOT; };
+		B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/CandidateGeneration.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -200,6 +203,7 @@
 			children = (
 				B11000000000000000000003 /* native/DecoderCore/src/SpatialModel.cpp */,
 				B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */,
+				B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */,
 				B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */,
 				B11000000000000000000002 /* native/iOS/KBDecoderBridge.mm */,
 			);
@@ -444,6 +448,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B12000000000000000000007 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */,
+				B12000000000000000000009 /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
 				B12000000000000000000005 /* native/DecoderCore/src/SpatialModel.cpp in Sources */,
 				B12000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */,
 				B12000000000000000000003 /* native/iOS/KBDecoderBridge.mm in Sources */,
@@ -469,6 +474,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B12000000000000000000008 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */,
+				B1200000000000000000000A /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
 				B12000000000000000000006 /* native/DecoderCore/src/SpatialModel.cpp in Sources */,
 				B12000000000000000000002 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */,
 				B12000000000000000000004 /* native/iOS/KBDecoderBridge.mm in Sources */,

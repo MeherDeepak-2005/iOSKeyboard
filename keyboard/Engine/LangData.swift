@@ -863,6 +863,8 @@ nonisolated final class LangData {
 
 	// MIGRATION: planned SPLIT | stage=search | target=PackedLexicon
 	// MIGRATION-SPLIT: CPP_CORE selects immutable mapped seeds/offsets and applies boost snapshots; SWIFT_IOS supplies boundary tap/personal data and owns lifetime.
+    var nativeCandidateLexicon: KBPackedLexicon? { nativeComparison }
+
 	func nativeIncrementalSeeds(typedFirst: UInt8, firstTap: KeyTap?,
 		stateCap: Int = 24_000, boosts: [String: Int] = [:]) throws -> KBIncrementalSeedSet? {
 		guard let native = nativeComparison else { throw NativeReadParityError.comparisonDisabled }

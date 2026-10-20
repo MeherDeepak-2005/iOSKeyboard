@@ -1,5 +1,7 @@
 // MIGRATION-FILE: planned SPLIT | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: CPP_CORE owns English/Glide search and policy; SWIFT_IOS owns queues, identity and publication; OBJCXX_BRIDGE executes models.
+// IMPLEMENTED: C++ owns ASCII English tap candidate generation and mutable trie search.
+// Swift retains ranking/correction policy, Unicode fallback, Glide/neural algorithms,
+// queues, identity and publication. See docs/decoder-platform/CPP_CANDIDATE_GENERATION.md.
 import Foundation
 
 // MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
@@ -128,6 +130,7 @@ final class KeyboardEngine {
 	/// Eager and immutable. Every decode in a word session uses this same model tier;
 	/// memory pressure cannot silently change ranking semantics mid-word.
 	private let ngram: NgramScorer
+    private let candidateBackend: DecoderCoreBackend
 	/// Two INDEPENDENT neural roles, both optional and promotion-gated (the production singleton
 	/// supplies neither until a checkpoint passes blind quality + device gates):
 	///   • `rescorer`  — PRECISION. Batched P(word|context) over the fixed candidate pool, folded
@@ -295,9 +298,11 @@ final class KeyboardEngine {
 		 searchPrior: NeuralSearchPrior? = nil,
          correctionPolicy: CorrectionPolicy = .baseline, userModel: UserModel? = nil,
          smoothing: NgramSmoothing = .wittenBell,
+         candidateBackend: DecoderCoreBackend = .cpp,
          correctionObserver: ((CorrectionGateEvidence) -> Void)? = nil) {
         let personal = userModel ?? UserModel()
         self.user = personal
+        self.candidateBackend = candidateBackend
         self.correctionPolicy = correctionPolicy
         self.correctionObserver = correctionObserver
 		let ng = NgramScorer(user: personal, smoothing: smoothing)
@@ -1684,6 +1689,131 @@ final class KeyboardEngine {
 
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
 	// MIGRATION-SPLIT: CPP_CORE computes English candidates, ranking and correction; SWIFT_IOS routes languages, retains revision/generation identity, schedules work and publishes on main.
+
+    private struct EnglishCandidatePool {
+        let close: [Candidate]
+        let broad: [Candidate]
+        let injected: [Candidate]
+        let completions: [Candidate]
+        let displayCorrections: [Candidate]
+        let split: (candidate: Candidate, a: String, b: String)?
+    }
+
+    /// C++ owns English candidate generation. The legacy implementation remains
+    /// independently selectable for parity, and for non-ASCII text while Unicode
+    /// segmentation/normalization is still supplied by Swift.
+    private func generateEnglishPool(request: DecodeRequest, typed lw: String, context: [String],
+        taps: [KeyTap?]?, normalCost: Double, recoveryPrior: TrieSearchPrior?,
+        retained: IncrementalDecodeSession?, generation gen: Int) -> EnglishCandidatePool? {
+        if candidateBackend == .cpp && lw.utf8.allSatisfy({ $0 < 128 }) {
+            do {
+                let successors = context.isEmpty || lw.count < 4 ? [] : ngram.nextWords(context: context, limit: 32)
+                let native = try lexicon.generateEnglishCandidates(typed: lw, taps: taps,
+                    successors: successors, prior: recoveryPrior,
+                    retainedStatic: retained?.candidates(maxCost: normalCost),
+                    gruTier: request.requestedModelTier == .neuralGRU,
+                    shouldCancel: { [weak self] in self?.isLatest(gen) != true })
+                guard !native.cancelled, isLatest(gen) else { return nil }
+                let split: (candidate: Candidate, a: String, b: String)? = native.split.flatMap {
+                    let words = $0.word.split(separator: " ").map(String.init)
+                    guard words.count == 2 else { return nil }
+                    return (Candidate(native: $0), words[0], words[1])
+                }
+                return EnglishCandidatePool(close: native.close.map(Candidate.init(native:)),
+                    broad: native.broad.map(Candidate.init(native:)), injected: native.injected.map(Candidate.init(native:)),
+                    completions: native.completions.map(Candidate.init(native:)),
+                    displayCorrections: native.displayCorrections.map(Candidate.init(native:)), split: split)
+            } catch {
+                // Publish no partial native result; the controller retains literal input.
+                return nil
+            }
+        }
+        return generateEnglishPoolReference(request: request, typed: lw, context: context,
+            taps: taps, normalCost: normalCost, recoveryPrior: recoveryPrior,
+            retained: retained, generation: gen)
+    }
+
+    private func generateEnglishPoolReference(request: DecodeRequest, typed lw: String, context: [String],
+        taps: [KeyTap?]?, normalCost: Double, recoveryPrior: TrieSearchPrior?,
+        retained: IncrementalDecodeSession?, generation gen: Int) -> EnglishCandidatePool? {
+
+        let corrections: [Candidate]
+        if let retained {
+            corrections = retained.candidates(maxCost: normalCost)
+                + self.lexicon.mutableCorrections(for: lw,
+                    maxCost: normalCost, taps: taps)
+        } else {
+            corrections = self.lexicon.corrections(for: lw,
+                maxCost: normalCost, taps: taps,
+                shouldCancel: { [weak self] in self?.isLatest(gen) != true })
+        }
+        // Exit before context expansion if a newer key or Glide superseded this pass.
+        guard self.isLatest(gen) else { return nil }
+        // Context injection: n-gram successors validated
+        // spatially. Finds candidates the fixed-radius trie DP misses when input is
+        // heavily corrupted (e.g. "coeevitjkn" → "correction" after "auto").
+        let injected = self.contextInjectedCandidates(typed: lw, context: context, taps: taps)
+        let completions = self.lexicon.completions(prefix: lw,
+            limit: self.completionCandidateLimit)
+        // Candidate recovery cannot depend on the close search returning zero: a
+        // plausible-but-wrong neighbour is exactly what hid severe intended words in
+        // the old decoder. Escalate an OOV only when it has no prefix completions and
+        // close evidence is absent or weak. Cooperative cancellation keeps an older
+        // wide walk from building a queue while the user continues typing.
+        let closestCost = corrections.map(\.cost).min() ?? .infinity
+        let shouldRecover = lw.count >= 6 && !self.lexicon.contains(lw)
+            && completions.isEmpty
+            && (lw.count >= 8 || corrections.isEmpty || closestCost > 0.65)
+        let broadCorrections: [Candidate] = shouldRecover
+            ? Array(
+                self.lexicon.broadCorrections(for: lw,
+                maxCost: normalCost * 2.0, taps: taps, prior: recoveryPrior,
+                shouldCancel: { [weak self] in self?.isLatest(gen) != true })
+                    .sorted {
+                let lhs = $0.cost - 0.12 * $0.logFreq
+                let rhs = $1.cost - 0.12 * $1.logFreq
+                return lhs == rhs ? $0.word < $1.word : lhs < rhs
+                    }
+                    .prefix(request.requestedModelTier == .neuralGRU ? Int.max : 24)
+              )
+            : []
+        // Channel-dominance guard: any match inside the NORMAL budget caps how
+        // far the loose pools may reach — they exist for when the normal search
+        // fails, not to leapfrog it ("could possibly" at spatial cost 7.2 must
+        // not beat "definitely" at 2.0). `closestCost` is ∞ when the close
+        // search found nothing, leaving the rescue path unrestricted.
+        let looseCostCeiling = closestCost <= normalCost
+            ? closestCost + self.looseCandidateWindow : .infinity
+        let admittedBroad = broadCorrections.filter { $0.cost <= looseCostCeiling }
+        let correctionWords = Set((corrections + admittedBroad).map(\.word))
+        let newFromContext = injected.filter {
+            !correctionWords.contains($0.word) && $0.cost <= looseCostCeiling
+        }
+        // Injected and broad candidates don't share the typed prefix — they only appear
+        // in the bar when there are no completions (pure correction mode). The LM
+        // ranking naturally suppresses weak candidates that don't fit context.
+        var correctionSuggestions = completions.isEmpty
+            ? corrections.filter { $0.cost <= self.suggestionCorrectionMaxCost } + admittedBroad + newFromContext
+            : corrections.filter { $0.word.hasPrefix(lw) }
+        // Contraction sibling — "its" → "it's", "cant" → "can't". A real typed word
+        // never reaches the OOV apostrophe-restoration branch, "it's" is no trie
+        // completion of "its" (the apostrophe branches at "it"), and the hasPrefix
+        // filter above drops it from corrections — so without this the bar can never
+        // offer the contraction. Cheap channel cost: the letters page has no ' key,
+        // so the missing apostrophe is a layout gap, not a typo.
+        if lw.count >= 2, let restored = self.lexicon.apostropheRestoration(of: lw),
+           !correctionSuggestions.contains(where: { $0.word == restored }) {
+            correctionSuggestions.append(Candidate(word: restored, cost: Self.apostropheCost,
+                                   logFreq: self.lexicon.logFreq(of: restored) ?? 0))
+        }
+        // Exit before ranking if Glide or a newer key took ownership.
+        guard self.isLatest(gen) else { return nil }
+        let split = self.splitCandidate(of: lw)
+        return EnglishCandidatePool(close: corrections, broad: admittedBroad, injected: newFromContext,
+            completions: completions, displayCorrections: correctionSuggestions, split: split)
+    }
+
+
 	func decode(_ request: DecodeRequest, completion: @escaping (DecodeSnapshot) -> Void) {
 		genLock.lock(); suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
 		let started = ProcessInfo.processInfo.systemUptime
@@ -1784,79 +1914,18 @@ final class KeyboardEngine {
 				let recoveryPrior = self.contextSearchPrior(context, typedPrefix: lw, taps: taps)
 				let retained = self.retainedDecodeSession(for: request, word: lw,
 					taps: taps)
-				let corrections: [Candidate]
-				if let retained {
-					corrections = retained.candidates(maxCost: normalCost)
-						+ self.lexicon.mutableCorrections(for: lw,
-							maxCost: normalCost, taps: taps)
-				} else {
-					corrections = self.lexicon.corrections(for: lw,
-						maxCost: normalCost, taps: taps,
-						shouldCancel: { [weak self] in self?.isLatest(gen) != true })
-				}
-				// Exit before context expansion if a newer key or Glide superseded this pass.
-				guard self.isLatest(gen) else { return }
-				// Context injection: n-gram successors validated
-				// spatially. Finds candidates the fixed-radius trie DP misses when input is
-				// heavily corrupted (e.g. "coeevitjkn" → "correction" after "auto").
-				let injected = self.contextInjectedCandidates(typed: lw, context: context, taps: taps)
-				let completions = self.lexicon.completions(prefix: lw,
-					limit: self.completionCandidateLimit)
-				// Candidate recovery cannot depend on the close search returning zero: a
-				// plausible-but-wrong neighbour is exactly what hid severe intended words in
-				// the old decoder. Escalate an OOV only when it has no prefix completions and
-				// close evidence is absent or weak. Cooperative cancellation keeps an older
-				// wide walk from building a queue while the user continues typing.
-				let closestCost = corrections.map(\.cost).min() ?? .infinity
-				let shouldRecover = lw.count >= 6 && !self.lexicon.contains(lw)
-					&& completions.isEmpty
-					&& (lw.count >= 8 || corrections.isEmpty || closestCost > 0.65)
-				let broadCorrections: [Candidate] = shouldRecover
-					? Array(
-						self.lexicon.broadCorrections(for: lw,
-								maxCost: normalCost * 2.0, taps: taps, prior: recoveryPrior,
-								shouldCancel: { [weak self] in self?.isLatest(gen) != true })
-							.sorted {
-								let lhs = $0.cost - 0.12 * $0.logFreq
-								let rhs = $1.cost - 0.12 * $1.logFreq
-								return lhs == rhs ? $0.word < $1.word : lhs < rhs
-							}
-							.prefix(request.requestedModelTier == .neuralGRU ? Int.max : 24)
-					  )
-					: []
-				// Channel-dominance guard: any match inside the NORMAL budget caps how
-				// far the loose pools may reach — they exist for when the normal search
-				// fails, not to leapfrog it ("could possibly" at spatial cost 7.2 must
-				// not beat "definitely" at 2.0). `closestCost` is ∞ when the close
-				// search found nothing, leaving the rescue path unrestricted.
-				let looseCostCeiling = closestCost <= normalCost
-					? closestCost + self.looseCandidateWindow : .infinity
-				let admittedBroad = broadCorrections.filter { $0.cost <= looseCostCeiling }
-				let correctionWords = Set((corrections + admittedBroad).map(\.word))
-				let newFromContext = injected.filter {
-					!correctionWords.contains($0.word) && $0.cost <= looseCostCeiling
-				}
-				let allCorrections = corrections + admittedBroad + newFromContext
-				// Injected and broad candidates don't share the typed prefix — they only appear
-				// in the bar when there are no completions (pure correction mode). The LM
-				// ranking naturally suppresses weak candidates that don't fit context.
-				var correctionSuggestions = completions.isEmpty
-					? corrections.filter { $0.cost <= self.suggestionCorrectionMaxCost } + admittedBroad + newFromContext
-					: corrections.filter { $0.word.hasPrefix(lw) }
-				// Contraction sibling — "its" → "it's", "cant" → "can't". A real typed word
-				// never reaches the OOV apostrophe-restoration branch, "it's" is no trie
-				// completion of "its" (the apostrophe branches at "it"), and the hasPrefix
-				// filter above drops it from corrections — so without this the bar can never
-				// offer the contraction. Cheap channel cost: the letters page has no ' key,
-				// so the missing apostrophe is a layout gap, not a typo.
-				if lw.count >= 2, let restored = self.lexicon.apostropheRestoration(of: lw),
-				   !correctionSuggestions.contains(where: { $0.word == restored }) {
-					correctionSuggestions.append(Candidate(word: restored, cost: Self.apostropheCost,
-														   logFreq: self.lexicon.logFreq(of: restored) ?? 0))
-				}
-				// Exit before ranking if Glide or a newer key took ownership.
-				guard self.isLatest(gen) else { return }
-				let split = self.splitCandidate(of: lw)
+
+                guard let pool = self.generateEnglishPool(request: request, typed: lw, context: context,
+                    taps: taps, normalCost: normalCost, recoveryPrior: recoveryPrior,
+                    retained: retained, generation: gen) else { return }
+                let corrections = pool.close
+                let admittedBroad = pool.broad
+                let newFromContext = pool.injected
+                let completions = pool.completions
+                let correctionSuggestions = pool.displayCorrections
+                let allCorrections = corrections + admittedBroad + newFromContext
+                let split = pool.split
+
 				func finish(_ neuralSplits: [Candidate]) {
 				let splitCandidates = (split.map { [$0.candidate] } ?? []) + neuralSplits
 				let splitWords = Set(splitCandidates.map(\.word))
