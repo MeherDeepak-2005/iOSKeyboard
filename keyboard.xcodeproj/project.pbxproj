@@ -18,6 +18,18 @@
 		B12000000000000000000008 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */; };
 		B12000000000000000000009 /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */; };
 		B1200000000000000000000A /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */; };
+		361255DFE50D2D62BD8BFB5E /* native/DecoderCore/src/LanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */; };
+		2F1B9C49352B352C1FAF550C /* native/DecoderCore/src/LanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */; };
+		A188A11F039D8AA323A727B8 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
+		ED1F51886B6A6B2857E4FA31 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
+		693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
+		8A77364AA091280987C485A1 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
+		5206758E3E61B9687AE8C5FE /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
+		537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
+		D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
+		564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
+		8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
+		D319972CC0421BE8B12A84FE /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +82,12 @@
 		B11000000000000000000003 /* native/DecoderCore/src/SpatialModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/SpatialModel.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/IncrementalSearch.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/CandidateGeneration.cpp; sourceTree = SOURCE_ROOT; };
+		D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/LanguageModel.cpp; sourceTree = SOURCE_ROOT; };
+		7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Ranking.cpp; sourceTree = SOURCE_ROOT; };
+		11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Glide.cpp; sourceTree = SOURCE_ROOT; };
+		80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Multiword.cpp; sourceTree = SOURCE_ROOT; };
+		E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralSearch.cpp; sourceTree = SOURCE_ROOT; };
+		A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Adaptation.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -204,6 +222,12 @@
 				B11000000000000000000003 /* native/DecoderCore/src/SpatialModel.cpp */,
 				B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */,
 				B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */,
+				A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */,
+				E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */,
+				80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */,
+				11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */,
+				7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */,
+				D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */,
 				B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */,
 				B11000000000000000000002 /* native/iOS/KBDecoderBridge.mm */,
 			);
@@ -449,6 +473,12 @@
 			files = (
 				B12000000000000000000007 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */,
 				B12000000000000000000009 /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
+				8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */,
+				D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */,
+				5206758E3E61B9687AE8C5FE /* native/DecoderCore/src/Multiword.cpp in Sources */,
+				693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */,
+				A188A11F039D8AA323A727B8 /* native/DecoderCore/src/Ranking.cpp in Sources */,
+				361255DFE50D2D62BD8BFB5E /* native/DecoderCore/src/LanguageModel.cpp in Sources */,
 				B12000000000000000000005 /* native/DecoderCore/src/SpatialModel.cpp in Sources */,
 				B12000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */,
 				B12000000000000000000003 /* native/iOS/KBDecoderBridge.mm in Sources */,
@@ -475,6 +505,12 @@
 			files = (
 				B12000000000000000000008 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */,
 				B1200000000000000000000A /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
+				D319972CC0421BE8B12A84FE /* native/DecoderCore/src/Adaptation.cpp in Sources */,
+				564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */,
+				537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */,
+				8A77364AA091280987C485A1 /* native/DecoderCore/src/Glide.cpp in Sources */,
+				ED1F51886B6A6B2857E4FA31 /* native/DecoderCore/src/Ranking.cpp in Sources */,
+				2F1B9C49352B352C1FAF550C /* native/DecoderCore/src/LanguageModel.cpp in Sources */,
 				B12000000000000000000006 /* native/DecoderCore/src/SpatialModel.cpp in Sources */,
 				B12000000000000000000002 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */,
 				B12000000000000000000004 /* native/iOS/KBDecoderBridge.mm in Sources */,

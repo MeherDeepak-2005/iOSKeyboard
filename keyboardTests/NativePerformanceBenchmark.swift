@@ -49,7 +49,7 @@ nonisolated enum NativePerformanceHarness {
         let seeds = try seeds(url)
         let prepared: KBIncrementalSeedSet?
         if mappedSeeds {
-            guard let data = LangData(url: url, compareNativeReads: true),
+            guard let data = LangData(url: url, compareNativeReads: false),
                   let set = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil) else {
                 throw NSError(domain: "NativeBenchmark.mappedSeeds", code: 4)
             }

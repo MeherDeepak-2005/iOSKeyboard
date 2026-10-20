@@ -121,7 +121,7 @@ nonisolated final class Trie {
 #if DEBUG || KB_REFERENCE_DECODER_YES
         if let reference { reference.insert(word, freq: freq, id: id); return }
 #endif
-        native.insertWord(word, frequency: Int64(freq), wordID: id)
+        native.insertWord(word, frequency: Int64(freq), wordID: id, characterCount: UInt(word.count))
     }
     func contains(_ word: String) -> Bool {
 #if DEBUG || KB_REFERENCE_DECODER_YES

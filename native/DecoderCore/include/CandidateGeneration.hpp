@@ -13,16 +13,18 @@ class MutableTrie final {
         std::optional<std::string> word;
         std::int32_t wordID = -1;
         double logFrequency = 0;
+        std::size_t characters = 0;
     };
     std::vector<Node> nodes_{1};
     std::optional<std::size_t> node(std::string_view) const;
 public:
-    void insert(std::string_view word, std::int64_t frequency, std::int32_t id = -1);
+    void insert(std::string_view word, std::int64_t frequency, std::int32_t id = -1, std::size_t characters = SIZE_MAX);
     bool contains(std::string_view word) const;
     bool hasPrefix(std::string_view prefix) const;
     std::optional<std::int32_t> wordID(std::string_view word) const;
     std::optional<double> logFrequency(std::string_view word) const;
     void bump(std::string_view word);
+    std::optional<std::size_t> characterCount(std::string_view word) const;
     std::vector<ChannelCandidate> search(std::string_view typed, double maxCost,
         std::span<const std::optional<TouchOffset>> taps = {},
         std::optional<std::span<const WordFunding>> funding = {}) const;
@@ -55,6 +57,7 @@ struct GenerationLexicon {
     bool isBlocked(std::string_view word) const;
     std::optional<std::int64_t> boost(std::string_view word) const;
     bool contains(std::string_view word) const;
+    std::size_t characterCount(std::string_view word) const;
     std::optional<double> logFrequency(std::string_view word) const;
     std::vector<ChannelCandidate> corrections(std::string_view typed, double cost,
         std::span<const std::optional<TouchOffset>> taps,
@@ -63,7 +66,7 @@ struct GenerationLexicon {
     std::vector<ChannelCandidate> completions(std::string_view prefix, std::size_t limit) const;
     std::optional<std::string> apostropheRestoration(std::string_view word) const;
 };
-struct ContextSuccessor { std::string word; std::size_t characterCount; };
+struct ContextSuccessor { std::string word; std::size_t characterCount; std::string first, last; };
 struct GeneratedCandidates {
     std::vector<ChannelCandidate> close, broad, injected, completions, displayCorrections;
     std::optional<ChannelCandidate> split;
@@ -74,6 +77,6 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon,
     std::span<const ContextSuccessor> contextSuccessors,
     std::optional<std::span<const WordFunding>> funding,
     std::optional<std::span<const ChannelCandidate>> retainedStatic,
-    bool gruTier, const std::function<bool()>& cancel = {});
+    bool gruTier, const std::function<bool()>& cancel = {}, std::span<const std::size_t> characterOffsets = {});
 
 } // namespace kb

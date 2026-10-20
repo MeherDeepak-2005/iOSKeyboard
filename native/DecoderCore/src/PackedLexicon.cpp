@@ -9,6 +9,57 @@
 #include <stdexcept>
 
 namespace kb {
+std::vector<std::int32_t> PackedLexicon::textMetadataIDs() const {
+    std::vector<std::int32_t> out;
+    for (std::uint32_t id = 0; id < words_; ++id) {
+        auto text = word(id);
+        if (std::any_of(text.begin(), text.end(), [](unsigned char c) { return c < 32 || c >= 127; })) out.push_back(std::int32_t(id));
+    }
+    return out;
+}
+void PackedLexicon::installTextMetadata(std::span<const TextMetadata> values) const {
+    std::call_once(metadataOnce_, [&] { for (const auto& value : values) {
+        if (value.id < 0 || std::uint32_t(value.id) >= words_) throw std::invalid_argument("invalid text metadata ID");
+        textMetadata_.emplace(value.id, value);
+    }});
+}
+std::size_t PackedLexicon::characterCount(std::string_view text) const {
+    if (auto id = wordID(text)) if (auto found = textMetadata_.find(*id); found != textMetadata_.end()) return found->second.characters;
+    return text.size();
+}
+void PackedLexicon::warmAnchors() const {
+    std::call_once(anchorsOnce_, [&] {
+        if (!nodes_) return;
+        for (std::uint32_t id = 0; id < words_; ++id) {
+            auto text = word(id); if (text.size() < 2) continue;
+            std::optional<std::uint8_t> first, last;
+            bool ascii = std::all_of(text.begin(), text.end(), [](unsigned char c) { return c >= 32 && c < 127; });
+            if (ascii) { first = std::uint8_t(text.front()); last = std::uint8_t(text.back()); }
+            else if (auto found = textMetadata_.find(std::int32_t(id)); found != textMetadata_.end() && found->second.characters >= 2) {
+                first = found->second.first; last = found->second.last;
+            }
+            if (first && last) anchors_[std::uint16_t(*first) << 8 | *last].push_back(std::int32_t(id));
+        }
+        for (auto& [key, ids] : anchors_) { (void)key; std::stable_sort(ids.begin(), ids.end(), [&](auto a, auto b) { return frequency(a) > frequency(b); }); }
+    });
+}
+std::vector<std::string> PackedLexicon::anchorWords(std::span<const std::uint8_t> first, std::span<const std::uint8_t> last, std::size_t cap) const {
+    warmAnchors(); std::vector<std::string> out; std::unordered_map<std::int32_t, bool> seen;
+    for (auto a : first) for (auto b : last) if (auto found = anchors_.find(std::uint16_t(a) << 8 | b); found != anchors_.end()) {
+        for (std::size_t i = 0; i < std::min(cap, found->second.size()); ++i) {
+            auto id = found->second[i]; if (seen.emplace(id, true).second) out.emplace_back(word(id));
+        }
+    }
+    return out;
+}
+PackedLexicon::TrieNodeRecord PackedLexicon::trieRecord(std::size_t node) const {
+    if (node >= nodes_) throw std::out_of_range("invalid trie node");
+    auto offset = trie_ + nodeSize_ * node;
+    auto id = version_ == 5 ? std::uint32_t(u16(offset + 6)) : u32(offset + 6);
+    return {std::to_integer<std::uint8_t>(bytes_[offset]), u32(offset + 2),
+        std::to_integer<std::uint8_t>(bytes_[offset + 1]), u32(offset + (version_ == 5 ? 8 : 10)),
+        id == (version_ == 5 ? 0xffffu : 0xffffffffu) ? std::nullopt : std::optional<std::int32_t>(id)};
+}
 std::optional<std::size_t> PackedLexicon::trieNode(std::string_view prefix) const {
     if (!nodes_) return {};
     std::size_t at = 0;

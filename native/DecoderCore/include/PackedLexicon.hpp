@@ -8,6 +8,8 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <unordered_map>
+#include <mutex>
 #include "SpatialModel.hpp"
 
 namespace kb {
@@ -26,6 +28,15 @@ public:
     explicit PackedLexicon(std::span<const std::byte> bytes);
     std::uint32_t version() const noexcept { return version_; }
     std::uint32_t wordCount() const noexcept { return words_; }
+    struct TextMetadata { std::int32_t id; std::size_t characters; std::optional<std::uint8_t> first, last; };
+    std::vector<std::int32_t> textMetadataIDs() const;
+    void installTextMetadata(std::span<const TextMetadata> metadata) const;
+    std::size_t characterCount(std::string_view word) const;
+    void warmAnchors() const;
+    std::vector<std::string> anchorWords(std::span<const std::uint8_t> first, std::span<const std::uint8_t> last, std::size_t perBucket) const;
+    struct TrieNodeRecord { std::uint8_t label; std::uint32_t firstChild, childCount, maxFrequency; std::optional<std::int32_t> wordID; };
+    bool hasTrie() const noexcept { return nodes_ > 0; }
+    TrieNodeRecord trieRecord(std::size_t node) const;
     const void* backingAddress() const noexcept { return bytes_.data(); }
     std::string_view word(std::uint32_t id) const;
     std::uint32_t frequency(std::uint32_t id) const;
@@ -63,6 +74,9 @@ private:
     Continuations readRange(std::size_t base, Range range, std::size_t limit) const;
     void validateRange(Range range, std::uint32_t count) const;
     void validate();
+    mutable std::once_flag metadataOnce_, anchorsOnce_;
+    mutable std::unordered_map<std::int32_t, TextMetadata> textMetadata_;
+    mutable std::unordered_map<std::uint16_t, std::vector<std::int32_t>> anchors_;
     std::optional<std::size_t> trieNode(std::string_view prefix) const;
 };
 } // namespace kb

@@ -164,7 +164,7 @@ struct SearchPriorQuery: Equatable, Hashable {
 protocol SearchPriorProvider: AnyObject {
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
 	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
-	func warmSearchPrior(_ query: SearchPriorQuery, isKnownWord: @escaping (String) -> Bool)
+	func warmSearchPrior(_ query: SearchPriorQuery, lexicon: KBGenerationLexicon)
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
 	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]?

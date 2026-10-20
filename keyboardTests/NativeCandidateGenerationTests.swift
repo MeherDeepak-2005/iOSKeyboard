@@ -81,7 +81,7 @@ struct NativeCandidateGenerationTests {
             personal: personal, snapshot: snapshot)
         func generate(_ view: KBGenerationLexicon) throws -> [Candidate] {
             try KBCandidateGenerator.generateWord("hel", lexicon: view,
-                tapOffsets: nil, tapValidity: nil, contextSuccessors: [], successorLengths: [],
+                tapOffsets: nil, tapValidity: nil, contextSuccessors: [], successorLengths: [], successorFirst: [], successorLast: [], characterOffsets: [0, 1, 2, 3],
                 fundedWords: nil, fundedBonuses: nil, retainedStatic: nil,
                 gruTier: false, shouldCancel: nil).completions.map(Candidate.init(native:))
         }

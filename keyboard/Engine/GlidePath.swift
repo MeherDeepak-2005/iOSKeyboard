@@ -32,12 +32,103 @@ nonisolated struct ProcessedGlide {
 	let dwellKeys: [Character]
 }
 
-/// Arc-length resampler that consumes only points appended since the previous
-/// gesture update. It is intentionally independent of UIKit touch objects so the
-/// engine can retain it for one Glide session on its serial preview queue.
-// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
-// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
+
+/// Numeric boundary buffers; no geometry algorithms run in these conversions.
+nonisolated enum GlideBuffers {
+    static func points(_ points: [CGPoint]) -> Data {
+        points.flatMap { [Double($0.x), Double($0.y)] }.withUnsafeBytes { Data($0) }
+    }
+    static func points(_ data: Data) -> [CGPoint] {
+        data.withUnsafeBytes { bytes in stride(from: 0, to: data.count, by: 16).map {
+            CGPoint(x: bytes.loadUnaligned(fromByteOffset: $0, as: Double.self),
+                y: bytes.loadUnaligned(fromByteOffset: $0 + 8, as: Double.self))
+        } }
+    }
+    static func keys(_ layout: GlideLayout) -> Data { Data(layout.centers.map { $0.letter.asciiValue ?? 0 }) }
+    static func letters(_ data: Data) -> [Character] { data.map { Character(UnicodeScalar($0)) } }
+}
 nonisolated struct IncrementalGlideResampler {
+    let spacing: CGFloat
+    private var state: KBNativeGlideResampler
+    var samples: [CGPoint] { GlideBuffers.points(state.samples) }
+    init(spacing: CGFloat = 0.5) { self.spacing = spacing; state = KBNativeGlideResampler(spacing: Double(spacing)) }
+    mutating func append(_ points: ArraySlice<CGPoint>) -> [CGPoint] {
+        if !isKnownUniquelyReferenced(&state) { state = state.copy() as! KBNativeGlideResampler }
+        return GlideBuffers.points(state.appendPoints(GlideBuffers.points(Array(points))))
+    }
+}
+nonisolated struct OnlineGlideCandidate {
+    let word: String
+    private var state: KBNativeOnlineGlide
+    var ideal: [CGPoint] { GlideBuffers.points(state.ideal) }
+    var sampleCount: Int { Int(state.sampleCount) }
+    var prefixCost: Double { state.prefixCost }
+    init?(word: String, idealPointCount: Int = 24) {
+        guard idealPointCount >= 2, let state = KBNativeOnlineGlide(word: word.lowercased(), count: UInt(idealPointCount)) else { return nil }
+        self.word = word; self.state = state
+    }
+    mutating func consume(_ samples: [CGPoint]) {
+        if !isKnownUniquelyReferenced(&state) { state = state.copy() as! KBNativeOnlineGlide }
+        state.consumePoints(GlideBuffers.points(samples))
+    }
+}
+nonisolated enum GlidePreprocess {
+    static func run(_ raw: [CGPoint], layout: GlideLayout, spacing: CGFloat = 0.5,
+                    times: [TimeInterval]? = nil) -> ProcessedGlide? {
+        let stamps = times.map { $0.withUnsafeBytes { Data($0) } }
+        guard let result = KBNativeGlide.preprocess(GlideBuffers.points(raw), keys: GlideBuffers.keys(layout),
+            centers: GlideBuffers.points(layout.centers.map(\.point)), xPitch: Double(layout.xPitch), yPitch: Double(layout.yPitch),
+            spacing: Double(spacing), times: stamps) else { return nil }
+        return ProcessedGlide(points: GlideBuffers.points(result.points), pivots: result.pivots.map(\.intValue),
+            dwellKeys: GlideBuffers.letters(result.dwell))
+    }
+    static func gridPoints(_ points: [CGPoint], layout: GlideLayout) -> [CGPoint] {
+        GlideBuffers.points(KBNativeGlide.toGrid(GlideBuffers.points(points), keys: GlideBuffers.keys(layout),
+            centers: GlideBuffers.points(layout.centers.map(\.point)), xPitch: Double(layout.xPitch), yPitch: Double(layout.yPitch)))
+    }
+    static func toGrid(_ p: CGPoint, layout: GlideLayout) -> CGPoint { gridPoints([p], layout: layout)[0] }
+    static func resample(_ points: [CGPoint], spacing: CGFloat) -> [CGPoint] {
+        GlideBuffers.points(KBNativeGlide.resample(GlideBuffers.points(points), spacing: Double(spacing)))
+    }
+    static func pivots(_ points: [CGPoint], cosThreshold: CGFloat = 0.5) -> [Int] {
+        KBNativeGlide.pivots(GlideBuffers.points(points), threshold: Double(cosThreshold)).map(\.intValue)
+    }
+    static func lettersNear(_ p: CGPoint, radius: CGFloat, maxN: Int) -> [Character] {
+        GlideBuffers.letters(KBNativeGlide.lettersNearX(Double(p.x), y: Double(p.y), radius: Double(radius), count: UInt(max(0, maxN))))
+    }
+    static func nearestLetter(toGrid p: CGPoint) -> Character? {
+        KBNativeGlide.nearestLetterX(Double(p.x), y: Double(p.y)).map { Character(UnicodeScalar($0.uint8Value)) }
+    }
+}
+nonisolated enum GlideDecoder {
+    static let defaultBand = 4, defaultBeamWidth = 48, defaultPruneWindow = 16
+    static let defaultFreqLambda = 0.20, defaultDirWeight = 0.0
+    static let defaultSeedRadius: CGFloat = 1.6
+    static let seedMinKeep = 4
+    static func decode(_ g: ProcessedGlide, lang: LangData, beamWidth: Int = defaultBeamWidth, limit: Int = 6,
+        band: Int = defaultBand, freqLambda: Double = defaultFreqLambda, dirWeight: Double = defaultDirWeight,
+        seedRadius: CGFloat = defaultSeedRadius, pruneWindow: Int = defaultPruneWindow,
+        shouldCancel: (() -> Bool)? = nil) -> [(word: String, cost: Double)] {
+        guard let packed = lang.nativeCandidateLexicon, beamWidth > 0, limit > 0 else { return [] }
+        let all = KBNativeGlide.decode(GlideBuffers.points(g.points), packed: packed, width: UInt(beamWidth), band: Int32(band),
+            frequency: freqLambda, direction: dirWeight, seedRadius: Double(seedRadius), window: UInt(max(0, pruneWindow)), shouldCancel: shouldCancel)
+        // Preserve the former Swift Dictionary's equal-cost emission permutation.
+        var order: [String: Double] = [:]
+        for candidate in all { order[candidate.word] = candidate.cost }
+        let values = order.map { KBChannelCandidate.make(word: $0.key, cost: $0.value, logFrequency: 0) }
+        return KBNativeGlide.sortCandidates(values, limit: UInt(limit)).map { ($0.word, $0.cost) }
+    }
+    static func shapeCost(of word: String, _ g: ProcessedGlide, band: Int = defaultBand, dirWeight: Double = defaultDirWeight) -> Double? {
+        KBNativeGlide.shapeCost(word.lowercased(), points: GlideBuffers.points(g.points), band: Int32(band), direction: dirWeight)?.doubleValue
+    }
+    static func idealPath(for word: String, pointCount: Int) -> [CGPoint]? {
+        guard pointCount >= 2 else { return nil }
+        return KBNativeGlide.idealPath(word.lowercased(), count: UInt(pointCount)).map(GlideBuffers.points)
+    }
+}
+
+#if DEBUG || KB_REFERENCE_DECODER_YES
+nonisolated struct SwiftGlideResampler {
 	let spacing: CGFloat
 	private(set) var samples: [CGPoint] = []
 	private var lastPoint: CGPoint?
@@ -82,7 +173,7 @@ nonisolated struct IncrementalGlideResampler {
 /// samples are never rescored.
 // MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
 // MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
-nonisolated struct OnlineGlideCandidate {
+nonisolated struct SwiftOnlineGlideCandidate {
 	let word: String
 	let ideal: [CGPoint]
 	private var previous: [Double]
@@ -91,7 +182,7 @@ nonisolated struct OnlineGlideCandidate {
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
 	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	init?(word: String, idealPointCount: Int = 24) {
-		guard let path = GlideDecoder.idealPath(for: word, pointCount: idealPointCount),
+		guard let path = SwiftGlideDecoder.idealPath(for: word, pointCount: idealPointCount),
 			!path.isEmpty else { return nil }
 		self.word = word
 		self.ideal = path
@@ -131,7 +222,7 @@ nonisolated struct OnlineGlideCandidate {
 
 // MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
 // MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
-nonisolated enum GlidePreprocess {
+nonisolated enum SwiftGlidePreprocess {
 
 	/// View-space raw trajectory → grid space, resampled, with pivots marked. When per-sample
 	/// `times` are supplied, velocity minima add pivots and feed dwell (double-letter) detection;
@@ -332,7 +423,7 @@ nonisolated enum GlidePreprocess {
 
 // MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
 // MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
-nonisolated enum GlideDecoder {
+nonisolated enum SwiftGlideDecoder {
 
 	private static let N = 32                        // both paths resampled to this many points
 	static let defaultBand = 4                       // DTW warp window (grid-searched in glide_eval)
@@ -651,3 +742,5 @@ nonisolated enum GlideDecoder {
 	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func dist(_ a: CGPoint, _ b: CGPoint) -> Double { Double(hypot(a.x - b.x, a.y - b.y)) }
 }
+
+#endif

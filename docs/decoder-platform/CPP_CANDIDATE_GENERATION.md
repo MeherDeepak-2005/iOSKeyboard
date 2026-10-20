@@ -1,8 +1,8 @@
-# C++ English tap candidate generation
+# C++ candidate-generation pipeline
 
-The default ASCII English tap path now calls the portable `generateCandidates`
-backend in `native/DecoderCore/src/CandidateGeneration.cpp`. This is a parity
-migration of the existing hybrid decoder, not a Neural Search Space redesign.
+The English candidate backend uses portable `native/DecoderCore` modules for
+generation, language scoring, ranking and correction. This migrates the existing
+hybrid decoder; it does not enable a new neural model or change the search space.
 
 ## Ownership
 
@@ -22,7 +22,7 @@ C++ now implements:
   its bonus to an unrelated shorter terminal.
 
 Swift supplies normalized input/tap buffers, n-gram successor words and their
-Swift Character counts, cached neural funding, and retained-static candidates.
+Unicode character offsets, cached neural funding, and retained-static candidates.
 Successor lengths preserve the old length gate for non-ASCII successor words.
 Whole result batches return close/broad/injected/completion/display pools and
 an optional split. No per-candidate lookup or safety callback runs inside C++.
@@ -35,21 +35,31 @@ request still owns the old trie. A reset can replace the personal layer without
 invalidating in-flight views. Boost snapshots invalidate on the existing learning
 and reset mutations; no second independently mutable learning database exists.
 
-## Reference and remaining work
+The additional native modules own n-gram smoothing and successor merging
+(`LanguageModel`), shortlist/final ranking and correction gates (`Ranking`),
+Glide path preprocessing and beam search (`Glide`), bounded phrase expansion and
+pruning (`Multiword`), and touch/glide adaptation statistics (`Adaptation`).
+`NeuralSearch` owns SentencePiece tokenization, legal-token filtering, beam
+generation, complete-word scoring and context planning. The Objective-C++ bridge
+constructs Core ML tensors, runs model predictions and reads dense logits directly
+from typed buffers when possible. The beam reuses legal-token masks across
+hypotheses, avoiding a vocabulary-sized allocation at each step. Swift keeps
+model loading, request identity,
+cancellation, text normalization, and UI publication. There is still no bundled
+trained GRU model, so native neural execution cannot be validated against a
+running model yet.
 
-`KeyboardEngine(candidateBackend: .swiftReference)` selects the previous pool
-construction for comparisons. Production non-ASCII typed input also keeps this
-Unicode-aware path. Swift still owns n-gram context extraction/successor merging,
-final shortlisting/ranking/correction policy, internal neural multiword expansion,
-Glide, neural tokenization/generation/scoring coordination, and iOS lifecycle/UI.
-Those algorithms are not represented as migrated by this change. The existing
-native packed/retained search and language-score arithmetic remain in place.
+## Reference path and boundaries
 
-The engine retains Swift candidate construction for the later removal phase.
-Normal Release already excludes the independent mutable-trie reference, and
-builds no redundant Swift funding-prefix tree. This change does not enable a
-neural model or change budgets, score weights, confidence thresholds, pack format,
-model-tier selection or published request identity.
+`KeyboardEngine(candidateBackend: .swiftReference)` keeps the independent Swift
+search, ranker and correction implementation for Debug/test parity. The production
+Unicode input path now supplies character offsets and first/last character
+metadata to C++ rather than reverting to Swift search. Platform-specific Core ML
+execution and mutable personalization persistence remain on iOS. Release excludes
+large reference bodies, and native personal-count snapshots are cached until a
+learning mutation invalidates them. This change does not alter budgets, score
+weights, confidence thresholds, pack format, model-tier selection or request
+identity.
 
 The existing Swift ranker iterates a Dictionary and does not specify the order of
 exactly equal scores; randomized hash seeds can even change a tied word at the
@@ -88,7 +98,7 @@ The portable runner enables ASan/UBSan; CMake keeps assertions enabled in Releas
 Device runtime latency/memory and trained-neural quality require separate checks.
 A successful simulator test or cross-compiled device build does not establish them.
 
-## Verified checkpoint — 2026-10-20
+## First-slice checkpoint — 2026-10-20
 
 Verification used an exported staged tree, excluding concurrent n-gram changes.
 The simulator suite passed: 118 tests passed and one internal GRU-fixture test
@@ -102,3 +112,28 @@ The frozen tree cross-compiled for generic iOS arm64 Release with signing disabl
 the final extension passed the 24 MB full-vocabulary artifact gate at 20,008,775 bytes.
 These are correctness/build checks, not device performance measurements.
 See [machine-readable validation](candidate-generation-validation.json).
+
+The first-slice checkpoint predates the remaining-component migration described
+above. Re-run the listed checks on the final tree before treating them as final
+validation; trained-model and physical-device measurements remain separate.
+
+## Remaining-component checkpoint — 2026-10-20
+
+The final-tree Debug device build and generic arm64 Release build succeeded. The
+simulator ran 118 unit tests across seven suites with zero failures. Portable
+ASan/UBSan goldens and all three CMake/CTest executables passed. The Release
+`.appex` passed the full-vocabulary 24 MB gate at 20,144,343 bytes. The native
+macOS benchmark measures retained-DP search kernels only, so its timings do not
+establish end-to-end keyboard latency or neural-model performance. A trained
+Core ML GRU and physical-device runtime measurements are still required for
+those paths.
+
+The isolated optimized macOS retained-DP benchmark measured 0.97 ms native
+versus 10.38 ms Swift median for a one-character append, while native session
+initialization took 22.86 ms versus 4.45 ms Swift. Five fresh-process peak-RSS
+runs put the Swift seed path near 14.2 MB, boxed native near 19.8 MB and the
+production-style mapped native path near 29.0 MB. The mapped path touches much
+more of the 15 MB vocabulary file while selecting seeds, so this RSS comparison
+does not establish a memory win; it identifies startup/page residency as the
+next optimization target. These numbers are for the retained-DP harness, not
+whole-request decode or iPhone latency.

@@ -83,52 +83,6 @@ struct NativeSearchParityTests {
         }
     }
 
-    @MainActor @Test func corpusContextCachePreservesLearningEvictionAndReattachment() throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        let lexicon = Lexicon()
-        lexicon.load(from: root.appendingPathComponent("keyboard/langdata.bin"))
-        let data = try #require(lexicon.languageDataSnapshot())
-        let user = UserModel(storageURL: FileManager.default.temporaryDirectory
-            .appendingPathComponent("cached-score-\(UUID().uuidString).json"))
-        let cached = NgramScorer(user: user)
-        cached.attach(data: data, resolveID: { lexicon.wordID($0) }, lexicon: lexicon)
-        let words = ["correction", "coercion", "hello", "world", "can't", "xyzunknown"]
-        let contexts = [[], ["auto"], ["possibly", "receive"], ["the"], ["a"], ["i"], ["you"],
-            ["we"], ["they"], ["to"], ["in"], ["of"], ["for"], ["unknowncontextxyz"],
-            ["unknowncontextxyz", "the"], ["definitely", "decided"]]
-        func fresh(_ context: [String], detached: Bool = false) -> [Double] {
-            let scorer = NgramScorer(user: user, backend: .swiftReference)
-            // Match the prior mass when reattaching nil after a real pack.
-            scorer.attach(data: data, resolveID: { lexicon.wordID($0) }, lexicon: lexicon)
-            if detached {
-                scorer.attach(data: nil, resolveID: { lexicon.wordID($0) }, lexicon: lexicon)
-            }
-            return scorer.logProbs(words, context: context)
-        }
-        for context in contexts + Array(contexts.reversed()) {
-            #expect(cached.logProbs(words, context: context) == fresh(context))
-        }
-        let context = ["possibly", "receive"]
-        let before = cached.logProbs(words, context: context)
-        for _ in 0..<7 { user.learn(context: context, word: "correction") }
-        let after = cached.logProbs(words, context: context)
-        #expect(after[0] > before[0])
-        #expect(after == fresh(context))
-        cached.attach(data: nil, resolveID: { lexicon.wordID($0) }, lexicon: lexicon)
-        #expect(cached.logProbs(words, context: context) == fresh(context, detached: true))
-        cached.attach(data: data, resolveID: { lexicon.wordID($0) }, lexicon: lexicon)
-        let expected = contexts.map { fresh($0) }
-        let failuresLock = NSLock()
-        var failures = 0
-        DispatchQueue.concurrentPerform(iterations: 64) { index in
-            if cached.logProbs(words, context: contexts[index % contexts.count]) != expected[index % contexts.count] {
-                failuresLock.lock(); failures += 1; failuresLock.unlock()
-            }
-        }
-        #expect(failures == 0)
-        #expect(cached.nativeScoringFailure == nil)
-    }
-
     @MainActor @Test func lexiconCreatesNativeProductionSessionWithoutOptIn() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let lexicon = Lexicon()

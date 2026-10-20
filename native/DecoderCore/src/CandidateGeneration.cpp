@@ -49,7 +49,7 @@ std::optional<std::size_t> MutableTrie::node(std::string_view word) const {
     }
     return at;
 }
-void MutableTrie::insert(std::string_view word, std::int64_t frequency, std::int32_t id) {
+void MutableTrie::insert(std::string_view word, std::int64_t frequency, std::int32_t id, std::size_t characters) {
     std::size_t at = 0;
     for (std::uint8_t byte : word) {
         auto next = SIZE_MAX;
@@ -61,10 +61,14 @@ void MutableTrie::insert(std::string_view word, std::int64_t frequency, std::int
         at = next;
     }
     nodes_[at].word = std::string(word); nodes_[at].wordID = id;
+    nodes_[at].characters = characters == SIZE_MAX ? word.size() : characters;
     nodes_[at].logFrequency = std::log(double(std::max<std::int64_t>(frequency, 1)) + 1);
 }
 bool MutableTrie::contains(std::string_view word) const {
     auto at = node(word); return at && nodes_[*at].word.has_value();
+}
+std::optional<std::size_t> MutableTrie::characterCount(std::string_view word) const {
+    auto at = node(word); if (!at || !nodes_[*at].word) return {}; return nodes_[*at].characters;
 }
 bool MutableTrie::hasPrefix(std::string_view word) const { return node(word).has_value(); }
 std::optional<std::int32_t> MutableTrie::wordID(std::string_view word) const {
@@ -195,6 +199,11 @@ bool GenerationLexicon::contains(std::string_view word) const {
     return (packed && packed->wordID(word)) || (base && base->contains(word)) ||
         (supplementary && supplementary->contains(word)) || (personal && personal->contains(word));
 }
+std::size_t GenerationLexicon::characterCount(std::string_view word) const {
+    if (packed && packed->wordID(word)) return packed->characterCount(word);
+    for (const auto* trie : {base, supplementary, personal}) if (trie) if (auto count = trie->characterCount(word)) return *count;
+    return word.size();
+}
 std::optional<double> GenerationLexicon::logFrequency(std::string_view word) const {
     std::optional<double> value;
     if (packed) if (auto id = packed->wordID(word))
@@ -270,11 +279,15 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
         std::span<const std::optional<TouchOffset>> taps, std::span<const ContextSuccessor> successors,
         std::optional<std::span<const WordFunding>> funding,
         std::optional<std::span<const ChannelCandidate>> retainedStatic, bool gruTier,
-        const std::function<bool()>& cancel) {
+        const std::function<bool()>& cancel, std::span<const std::size_t> offsets) {
     GeneratedCandidates out;
+    std::vector<std::size_t> asciiOffsets;
+    if (offsets.empty()) { asciiOffsets.resize(typed.size() + 1); std::iota(asciiOffsets.begin(), asciiOffsets.end(), 0); offsets = asciiOffsets; }
+    if (offsets.front() != 0 || offsets.back() != typed.size() || !std::is_sorted(offsets.begin(), offsets.end())) throw std::invalid_argument("invalid character boundaries");
+    auto length = offsets.size() - 1;
     auto cancelled = [&] { if (cancel && cancel()) { out = {}; out.cancelled = true; return true; } return false; };
     if (typed.empty() || cancelled()) return out;
-    auto normal = normalSearchCost(typed.size());
+    auto normal = normalSearchCost(length);
     if (retainedStatic) {
         out.close.assign(retainedStatic->begin(), retainedStatic->end());
         if (lexicon.supplementary) append(out.close, lexicon.supplementary->search(typed, normal, taps));
@@ -283,21 +296,21 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
     if (cancelled()) return out;
     const auto budget = normal * 2;
     std::vector<ChannelCandidate> injected;
-    if (typed.size() >= 4) for (const auto& successor : successors) {
+    if (length >= 4) for (const auto& successor : successors) {
         const auto& word = successor.word;
         if (lexicon.isBlocked(word) || word.empty()) continue;
-        auto difference = typed.size() > successor.characterCount ? typed.size() - successor.characterCount : successor.characterCount - typed.size();
+        auto difference = length > successor.characterCount ? length - successor.characterCount : successor.characterCount - length;
         if (difference > 3) continue;
         auto cost = injectedSpatialCost(typed, word, taps);
         if (cost <= budget) injected.push_back({word, cost, lexicon.logFrequency(word).value_or(0)});
-        else if (typed.size() >= 8 && (typed.front() == word.front() || typed.back() == word.back()))
+        else if (length >= 8 && (typed.substr(0, offsets[1]) == (successor.first.empty() ? word.substr(0, 1) : successor.first) || typed.substr(offsets[length - 1]) == (successor.last.empty() ? word.substr(word.size() - 1) : successor.last)))
             injected.push_back({word, budget, lexicon.logFrequency(word).value_or(0)});
     }
     out.completions = lexicon.completions(typed, 24);
     auto closest = std::numeric_limits<double>::infinity();
     for (const auto& word : out.close) closest = std::min(closest, word.cost);
-    const bool recover = typed.size() >= 6 && !lexicon.contains(typed) && out.completions.empty() &&
-        (typed.size() >= 8 || out.close.empty() || closest > 0.65);
+    const bool recover = length >= 6 && !lexicon.contains(typed) && out.completions.empty() &&
+        (length >= 8 || out.close.empty() || closest > 0.65);
     if (recover) {
         out.broad = lexicon.corrections(typed, budget, taps, funding, true, cancel);
         std::stable_sort(out.broad.begin(), out.broad.end(), [](const auto& a, const auto& b) {
@@ -316,13 +329,13 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
     for (const auto& word : out.close) if (out.completions.empty() ? word.cost <= 1.25 : word.word.starts_with(typed))
         out.displayCorrections.push_back(word);
     if (out.completions.empty()) { append(out.displayCorrections, out.broad); append(out.displayCorrections, out.injected); }
-    if (typed.size() >= 2) if (auto restored = lexicon.apostropheRestoration(typed))
+    if (length >= 2) if (auto restored = lexicon.apostropheRestoration(typed))
         if (std::none_of(out.displayCorrections.begin(), out.displayCorrections.end(), [&](const auto& c) { return c.word == *restored; }))
             out.displayCorrections.push_back({*restored, 0.5, lexicon.logFrequency(*restored).value_or(0)});
-    if (typed.size() >= 4) {
+    if (length >= 4) {
         auto strength = -std::numeric_limits<double>::infinity();
-        auto consider = [&](std::string_view a, std::string_view b, double cost) {
-            if (!(a.size() >= 2 || a == "a" || a == "i") || !(b.size() >= 2 || b == "a" || b == "i") ||
+        auto consider = [&](std::string_view a, std::string_view b, std::size_t aLength, std::size_t bLength, double cost) {
+            if (!(aLength >= 2 || a == "a" || a == "i") || !(bLength >= 2 || b == "a" || b == "i") ||
                 !lexicon.contains(a) || !lexicon.contains(b) || lexicon.isBlocked(std::string(a)) ||
                 lexicon.isBlocked(std::string(b))) return;
             auto fa = lexicon.logFrequency(a), fb = lexicon.logFrequency(b);
@@ -330,10 +343,10 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
             auto frequency = std::min(*fa, *fb), score = frequency - cost;
             if (score > strength) { strength = score; out.split = {std::string(a) + " " + std::string(b), cost, frequency}; }
         };
-        for (std::size_t i = 1; i < typed.size(); ++i) {
-            consider(typed.substr(0, i), typed.substr(i), 1.1);
-            if (std::string_view("cvbnm").find(typed[i]) != std::string_view::npos && i + 1 < typed.size())
-                consider(typed.substr(0, i), typed.substr(i + 1), 0.72);
+        for (std::size_t i = 1; i < length; ++i) {
+            consider(typed.substr(0, offsets[i]), typed.substr(offsets[i]), i, length - i, 1.1);
+            if (offsets[i + 1] - offsets[i] == 1 && std::string_view("cvbnm").find(typed[offsets[i]]) != std::string_view::npos && i + 1 < length)
+                consider(typed.substr(0, offsets[i]), typed.substr(offsets[i + 1]), i, length - i - 1, 0.72);
         }
     }
     return out;

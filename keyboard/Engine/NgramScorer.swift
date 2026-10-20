@@ -1,18 +1,96 @@
-// MIGRATION-FILE: planned CPP_CORE | See CPP_IOS_MIGRATION_PLAN.md.
-// IMPLEMENTED: C++ scores batched immutable evidence through KBLanguageScorer.
-// Swift retains context/learning snapshots, successor merging and the reference scorer.
 import Foundation
 
-/// Production uses Witten–Bell; alternatives require explicit experiment selection.
 nonisolated enum NgramSmoothing: String, Codable, CaseIterable {
     case modifiedKneserNey, wittenBell, frequencyBackoff
 }
 
-// NgramScorer: the shipped n-gram prior — extracted from Keyboardengine.swift.
-
-// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+/// iOS façade: normalization, immutable personal views and tie-order transport.
+/// Counts, smoothing, context lookup, sequence scoring and merging run in C++.
 final class NgramScorer {
+    let backend: DecoderCoreBackend
+    let smoothing: NgramSmoothing
+    private let user: UserModel
+    private weak var lexicon: Lexicon?
+    private var native: KBNativeLanguageModel?
+    private let emptyView = KBGenerationLexicon(packed: nil, base: KBMutableTrie(), supplementary: KBMutableTrie(),
+        personal: KBMutableTrie(), snapshot: KBGenerationSnapshot(boosts: [:], blockedWords: []))
+    private(set) var nativeScoringFailure: String?
+#if DEBUG || KB_REFERENCE_DECODER_YES
+    private var reference: SwiftNgramScorer?
+#endif
+    init(user: UserModel, backend: DecoderCoreBackend = .cpp, smoothing: NgramSmoothing = .wittenBell) {
+        self.user = user; self.backend = backend; self.smoothing = smoothing
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if backend == .swiftReference { reference = SwiftNgramScorer(user: user, backend: .swiftReference, smoothing: smoothing) }
+#endif
+    }
+    func attach(data: LangData?, resolveID: @escaping (String) -> Int32?, lexicon: Lexicon) {
+        self.lexicon = lexicon
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { reference.attach(data: data, resolveID: resolveID, lexicon: lexicon); return }
+#endif
+        native = KBNativeLanguageModel(packed: data?.nativeCandidateLexicon, smoothing: smoothing.rawValue)
+    }
+    func logProbs(_ candidates: [String], context: [String]) -> [Double] {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.logProbs(candidates, context: context) }
+#endif
+        guard let native else { return candidates.map { _ in log(0.5) } }
+        let result = native.scores(forWords: candidates.map { $0.lowercased() }, context: context.map { $0.lowercased() },
+            personal: user.nativeCountsSnapshot(), lexicon: lexicon?.nativeGenerationView() ?? emptyView)
+        return result.withUnsafeBytes { bytes in candidates.indices.map {
+            bytes.loadUnaligned(fromByteOffset: $0 * MemoryLayout<Double>.size, as: Double.self)
+        } }
+    }
+    func candidateLogProbs(_ words: [String], context: [String]) -> [Double] {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference {
+            var result = reference.logProbs(words, context: context)
+            for i in words.indices where words[i].contains(" ") {
+                result[i] = reference.sequenceLogProb(words[i].split(separator: " ").map(String.init), context: context)
+            }
+            return result
+        }
+#endif
+        guard let native else { return words.map { _ in log(0.5) } }
+        let result = native.scores(forPhrases: words.map { $0.lowercased() }, context: context.map { $0.lowercased() },
+            personal: user.nativeCountsSnapshot(), lexicon: lexicon?.nativeGenerationView() ?? emptyView)
+        return result.withUnsafeBytes { b in words.indices.map { b.loadUnaligned(fromByteOffset: $0 * 8, as: Double.self) } }
+    }
+    func pairLogProb(_ a: String, _ b: String, context: [String]) -> Double {
+        sequenceLogProb([a, b], context: context)
+    }
+    func sequenceLogProb(_ words: [String], context: [String]) -> Double {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.sequenceLogProb(words, context: context) }
+#endif
+        guard let native else { return Double(words.count) * log(0.5) }
+        return native.sequence(forWords: words.map { $0.lowercased() }, context: context.map { $0.lowercased() },
+            personal: user.nativeCountsSnapshot(), lexicon: lexicon?.nativeGenerationView() ?? emptyView)
+    }
+    func nextWords(context: [String], limit: Int) -> [String] {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if let reference { return reference.nextWords(context: context, limit: limit) }
+#endif
+        guard let native, limit > 0 else { return [] }
+        let context = context.map { $0.lowercased() }, personal = user.nativeCountsSnapshot()
+        let tri = native.successors(forContext: context, personal: personal, trigram: true, limit: UInt(limit))
+        let bi = native.successors(forContext: context, personal: personal, trigram: false, limit: UInt(limit))
+        // Preserve Swift Dictionary's historical tie permutation. This adapter
+        // performs no count merging, thresholding, ranking or truncation.
+        func order(_ row: KBSuccessorCounts) -> [(String, NSNumber)] {
+            var dictionary: [String: Int] = [:]
+            for (word, count) in zip(row.words, row.counts) { dictionary[word] = count.intValue }
+            return dictionary.map { ($0.key, NSNumber(value: $0.value)) }
+        }
+        let t = order(tri), b = order(bi)
+        return KBNativeLanguageModel.nextWords(withTrigramWords: t.map(\.0), counts: t.map(\.1),
+            bigramWords: b.map(\.0), counts: b.map(\.1), limit: UInt(limit))
+    }
+}
+
+#if DEBUG || KB_REFERENCE_DECODER_YES
+final class SwiftNgramScorer {
 	private let user: UserModel
 	let backend: DecoderCoreBackend
     let smoothing: NgramSmoothing
@@ -29,37 +107,6 @@ final class NgramScorer {
             self.total = total; self.discountMass = discountMass; self.counts = counts
         }
     }
-    // Corpus evidence is immutable until attach(). Typing and Glide may score on
-    // different queues, so serialize this small LRU independently of user learning.
-    // Bound both row count and successor count; no vocabulary-wide score cache.
-    private struct ContextKey: Equatable { let first: Int32; let second: Int32? }
-    private struct CachedContext { let key: ContextKey; let value: Context? }
-    private let contextCacheLock = NSLock()
-    private var contextCache: [CachedContext] = []
-    private var cachedSuccessors = 0
-    private static let contextCacheLimit = 8
-    private static let successorCacheLimit = 4_096
-
-    private func cachedContext(_ key: ContextKey, prepare: () -> Context?) -> Context? {
-        contextCacheLock.lock()
-        defer { contextCacheLock.unlock() }
-        if let index = contextCache.firstIndex(where: { $0.key == key }) {
-            let hit = contextCache.remove(at: index)
-            contextCache.append(hit)
-            return hit.value
-        }
-        let value = prepare()
-        let successors = value?.counts.count ?? 0
-        guard successors <= Self.successorCacheLimit else { return value }
-        while !contextCache.isEmpty && (contextCache.count >= Self.contextCacheLimit
-            || cachedSuccessors + successors > Self.successorCacheLimit) {
-            cachedSuccessors -= contextCache.removeFirst().value?.counts.count ?? 0
-        }
-        contextCache.append(CachedContext(key: key, value: value))
-        cachedSuccessors += successors
-        return value
-    }
-
 	private(set) var nativeScoringFailure: String?
 	private var data: LangData?
 	private var resolveID: (String) -> Int32? = { _ in nil }
@@ -90,10 +137,6 @@ final class NgramScorer {
 	// MIGRATION: planned SPLIT | stage=search | target=NgramModelView
 	// MIGRATION-SPLIT: SWIFT_IOS supplies epoch-tagged immutable vocabulary/personalization views; CPP_CORE attaches them without per-word Swift callbacks.
 	func attach(data: LangData?, resolveID: @escaping (String) -> Int32?, lexicon: Lexicon) {
-        contextCacheLock.lock()
-        contextCache.removeAll(keepingCapacity: true)
-        cachedSuccessors = 0
-        contextCacheLock.unlock()
 		self.data = data
 		self.resolveID = resolveID
 		self.lexicon = lexicon
@@ -142,27 +185,21 @@ final class NgramScorer {
 	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func score(_ words: [String], context: [String]) -> [Double] {
-        guard !words.isEmpty else { return [] }
 		let ids = words.map(resolveID)
         let n = context.count
-        let lastID = n >= 1 ? resolveID(context[n - 1]) : nil
-        let biStats = lastID.flatMap { previous in
-            cachedContext(ContextKey(first: previous, second: nil)) {
-                if smoothing == .modifiedKneserNey { return model?.bigrams[previous].map(Context.init) }
-                return prepare(data?.bigrams(after: previous))
-            }
-        }
+        let biStats: Context? = n >= 1 ? resolveID(context[n - 1]).flatMap { previous in
+            if smoothing == .modifiedKneserNey { return model?.bigrams[previous].map(Context.init) }
+            return prepare(data?.bigrams(after: previous))
+        } : nil
         let triStats: Context? = {
-            guard n >= 2, let first = resolveID(context[n - 2]), let second = lastID else { return nil }
-            return cachedContext(ContextKey(first: first, second: second)) {
-                guard let hit = data?.trigrams(after: first, second) else { return nil }
-                if smoothing == .modifiedKneserNey, let model {
-                    return Context(ModifiedKneserNeyModel.Context(entries: hit.entries, discounts: model.trigramDiscounts))
-                }
-                return prepare(hit)
+            guard n >= 2, let first = resolveID(context[n - 2]),
+                  let second = resolveID(context[n - 1]),
+                  let hit = data?.trigrams(after: first, second) else { return nil }
+            if smoothing == .modifiedKneserNey, let model {
+                return Context(ModifiedKneserNeyModel.Context(entries: hit.entries, discounts: model.trigramDiscounts))
             }
+            return prepare(hit)
         }()
-        let personalTrigramKey = n >= 2 ? context[n - 2] + " " + context[n - 1] : nil
 
 
         if backend == .cpp {
@@ -173,14 +210,12 @@ final class NgramScorer {
                 let known = lexicon?.contains(word) == true
                 let mass: Double
                 mass = unigramMass(id)
-                // Append directly into the reserved batch; avoid a six-element
-                // temporary array and repeated context-key concatenation per word.
-                rows.append(mass)
-                rows.append(Double(id.flatMap { biStats?.counts[$0] } ?? 0))
-                rows.append(Double(id.flatMap { triStats?.counts[$0] } ?? 0))
-                rows.append(Double(known ? user.uniCount(word) : 0))
-                rows.append(Double(n >= 1 ? user.biLookup(context[n - 1], word).count : 0))
-                rows.append(Double(personalTrigramKey.map { user.triLookup($0, word).count } ?? 0))
+                rows.append(contentsOf: [mass,
+                    Double(id.flatMap { biStats?.counts[$0] } ?? 0),
+                    Double(id.flatMap { triStats?.counts[$0] } ?? 0),
+                    Double(known ? user.uniCount(word) : 0),
+                    Double(n >= 1 ? user.biLookup(context[n - 1], word).count : 0),
+                    Double(n >= 2 ? user.triLookup(context[n - 2] + " " + context[n - 1], word).count : 0)])
             }
             do {
                 let buffer = rows.withUnsafeBytes { Data($0) }
@@ -315,3 +350,5 @@ final class NgramScorer {
 		return m.sorted { $0.value > $1.value }.map(\.key)
 	}
 }
+
+#endif

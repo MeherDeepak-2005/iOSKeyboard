@@ -9,9 +9,12 @@ import Foundation
 // MIGRATION-NOTE: Planned immutable PersonalizationView exports unigram/bigram/trigram counts, totals, adopted words, spelling confirmations and reset epoch; Swift remains the only mutable personal-data owner.
 final class UserModel {
 	private let storageURLOverride: URL?
-	private var tri: [String: [String: Int]] = [:], triTot: [String: Int] = [:]
-	private var bi:  [String: [String: Int]] = [:], biTot:  [String: Int] = [:]
-	private var unigrams: [String: Int] = [:]
+	private var tri: [String: [String: Int]] = [:] { didSet { nativeCountsCache = nil } }
+    private var triTot: [String: Int] = [:]
+	private var bi: [String: [String: Int]] = [:] { didSet { nativeCountsCache = nil } }
+    private var biTot: [String: Int] = [:]
+	private var unigrams: [String: Int] = [:] { didSet { nativeCountsCache = nil } }
+    private var nativeCountsCache: KBPersonalCounts?
 	private var unigramTotal = 0
 	/// Explicit spelling confirmations come only from an autocorrect undo. They are
 	/// persisted separately from ordinary use counts so repeated accidental typos do
@@ -33,6 +36,18 @@ final class UserModel {
 	init(storageURL: URL? = nil) {
 		storageURLOverride = storageURL
 	}
+
+    func nativeCountsSnapshot() -> KBPersonalCounts {
+        lock.lock(); defer { lock.unlock() }
+        if let nativeCountsCache { return nativeCountsCache }
+        let value = KBPersonalCounts(unigrams: unigrams.mapValues { NSNumber(value: $0) },
+            bigramWords: bi.mapValues { Array($0.keys) },
+            bigramCounts: bi.mapValues { $0.values.map { NSNumber(value: $0) } },
+            trigramWords: tri.mapValues { Array($0.keys) },
+            trigramCounts: tri.mapValues { $0.values.map { NSNumber(value: $0) } })
+        nativeCountsCache = value
+        return value
+    }
 
 	// MARK: Locked read API (safe from any thread)
 

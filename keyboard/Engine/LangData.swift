@@ -457,6 +457,19 @@ nonisolated final class LangData {
 	// (the greedy prune misaligns), WITHOUT having to traverse those middle letters. Built lazily on
 	// the first glide over the mmap word blob (IDs only ≈ wordCount·4 B heap), then cached; a
 	// non-gliding session never pays for it.
+    private let nativeMetadataLock = NSLock()
+    private var nativeMetadataReady = false
+    func prepareNativeTextMetadata() {
+        nativeMetadataLock.lock(); defer { nativeMetadataLock.unlock() }
+        guard !nativeMetadataReady, let native = nativeComparison else { return }
+        let ids = native.textMetadataIDs()
+        let words = ids.map { word($0.intValue) }
+        native.installTextMetadataIDs(ids, characterCounts: words.map { NSNumber(value: $0.count) },
+            firstLetters: words.map { NSNumber(value: $0.first?.asciiValue.map(Int.init) ?? -1) },
+            lastLetters: words.map { NSNumber(value: $0.last?.asciiValue.map(Int.init) ?? -1) })
+        nativeMetadataReady = true
+    }
+
 	private var anchorIndex: [UInt16: [Int32]]?
 	// MIGRATION: planned CPP_CORE | stage=search | target=PackedLexicon
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
@@ -503,6 +516,9 @@ nonisolated final class LangData {
 	// MIGRATION: planned CPP_CORE | stage=search | target=PackedLexicon
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func warmGlideAnchorIndex() {
+        if backend == .cpp, let native = nativeComparison {
+            prepareNativeTextMetadata(); native.warmGlideAnchors(); return
+        }
 		guard hasTrie, anchorIndex == nil else { return }
 		anchorIndex = buildAnchorIndex()
 	}
@@ -513,6 +529,10 @@ nonisolated final class LangData {
 	// MIGRATION: planned CPP_CORE | stage=search | target=PackedLexicon
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func glideAnchorWords(first: [Character], last: [Character], perBucket: Int) -> [String] {
+        if backend == .cpp, let native = nativeComparison {
+            prepareNativeTextMetadata()
+            return native.anchorWords(withFirst: Data(first.compactMap(\.asciiValue)), last: Data(last.compactMap(\.asciiValue)), perBucket: UInt(max(0, perBucket)))
+        }
 		guard hasTrie else { return [] }
 		if anchorIndex == nil { anchorIndex = buildAnchorIndex() }
 		guard let idx = anchorIndex else { return [] }
@@ -1008,6 +1028,9 @@ nonisolated final class LangData {
 	// MIGRATION: planned CPP_CORE | stage=search | target=PackedLexicon
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func trieCompletions(prefix: String, limit: Int) -> [Candidate] {
+        if backend == .cpp, let native = nativeComparison {
+            return native.completions(forPrefix: prefix, limit: UInt(max(0, limit))).map(Candidate.init(native:))
+        }
 		guard limit > 0, let start = trieNode(for: Array(prefix.utf8)) else { return [] }
 		// MIGRATION: planned CPP_CORE | stage=search | target=PackedLexicon
 		// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.

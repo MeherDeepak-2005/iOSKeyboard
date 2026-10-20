@@ -18,7 +18,7 @@ int main() {
     assert(base.logFrequency("hello").value() == std::log(std::exp(before) + 1));
     auto completions = base.completions("hel", 24);
     assert(completions.size() == 2 && completions[0].word == "hello");
-    std::vector<ContextSuccessor> successors{{"correction", 10}};
+    std::vector<ContextSuccessor> successors{{"correction", 10, "c", "n"}};
     auto result = generateCandidates(lexicon, "coeevitjkn", {}, successors, {}, {}, false);
     assert(!result.cancelled && !result.broad.empty());
     auto correction = std::find_if(result.broad.begin(), result.broad.end(), [](const auto& c) { return c.word == "correction"; });

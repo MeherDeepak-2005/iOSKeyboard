@@ -27,21 +27,14 @@ final class TouchSpatialProfile {
 		var m2X = 0.0
 		var m2Y = 0.0
 
+        var native: [NSNumber] { [Double(count), meanX, meanY, m2X, m2Y].map(NSNumber.init(value:)) }
+
 		// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
 		// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 		mutating func observe(_ tap: KeyTap) {
-			count += 1
-			let dx = tap.dx - meanX
-			let dy = tap.dy - meanY
-			meanX += dx / Double(count)
-			meanY += dy / Double(count)
-			m2X += dx * (tap.dx - meanX)
-			m2Y += dy * (tap.dy - meanY)
-			if count > 2_000 {
-				count /= 2
-				m2X *= 0.5
-				m2Y *= 0.5
-			}
+            let values = KBNumericPolicy.touch(native, x: tap.dx, y: tap.dy, observe: true)
+            count = values[0].intValue; meanX = values[1].doubleValue; meanY = values[2].doubleValue
+            m2X = values[3].doubleValue; m2Y = values[4].doubleValue
 		}
 	}
 
@@ -76,18 +69,8 @@ final class TouchSpatialProfile {
 		return zip(typed.utf8, taps).map { letter, tap in
 			guard let tap, let row = rowIndex(for: letter) else { return tap }
 			let bucket = stored.rows[row]
-			guard bucket.count >= Self.minimumSamples else { return tap }
-			let denominator = Double(max(1, bucket.count - 1))
-			let sigmaX = sqrt(max(bucket.m2X / denominator, 0.01))
-			let sigmaY = sqrt(max(bucket.m2Y / denominator, 0.01))
-			let centerX = min(max(bucket.meanX, -0.22), 0.22)
-			let centerY = min(max(bucket.meanY, -0.22), 0.22)
-			// Covariance scaling is deliberately capped: personalization refines an
-			// ambiguous edge tap and can never make a distant key look exact.
-			let scaleX = min(max(Self.referenceDeviation / sigmaX, 0.75), 1.25)
-			let scaleY = min(max(Self.referenceDeviation / sigmaY, 0.75), 1.25)
-			return KeyTap(dx: (tap.dx - centerX) * scaleX,
-				dy: (tap.dy - centerY) * scaleY)
+            let values = KBNumericPolicy.touch(bucket.native, x: tap.dx, y: tap.dy, observe: false)
+            return KeyTap(dx: values[0].doubleValue, dy: values[1].doubleValue)
 		}
 	}
 

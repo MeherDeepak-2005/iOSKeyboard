@@ -50,25 +50,36 @@ final class Lexicon {
 
     private lazy var nativeBlockedWords = safety?.nativeBlockedWords ?? []
 
-    /// Retain immutable native views under the lock, then run all traversal after
-    /// unlocking. Learning uses copy-on-write if a Glide/decode still holds a view.
-    func generateEnglishCandidates(typed: String, taps: [KeyTap?]?, successors: [String],
-        prior: TrieSearchPrior?, retainedStatic: [Candidate]?, gruTier: Bool,
-        shouldCancel: @escaping () -> Bool) throws -> KBGeneratedCandidates {
+    func nativeGenerationView() -> KBGenerationLexicon {
         lock.lock()
         if nativeGenerationSnapshot == nil {
             nativeGenerationSnapshot = KBGenerationSnapshot(boosts: boosts.mapValues { NSNumber(value: $0) },
                 blockedWords: nativeBlockedWords)
         }
+        langData?.prepareNativeTextMetadata()
         let view = KBGenerationLexicon(packed: staticTrie ? langData?.nativeCandidateLexicon : nil,
             base: baseTrie.native, supplementary: supplementaryTrie.native, personal: personalTrie.native,
             snapshot: nativeGenerationSnapshot!)
         lock.unlock()
+        return view
+    }
+
+    /// Retain immutable native views under the lock, then run all traversal after
+    /// unlocking. Learning uses copy-on-write if a Glide/decode still holds a view.
+    func generateEnglishCandidates(typed: String, taps: [KeyTap?]?, successors: [String],
+        prior: TrieSearchPrior?, retainedStatic: [Candidate]?, gruTier: Bool,
+        shouldCancel: @escaping () -> Bool) throws -> KBGeneratedCandidates {
+        let view = nativeGenerationView()
+        var characterOffsets = [0]
+        for ch in typed { characterOffsets.append(characterOffsets.last! + String(ch).utf8.count) }
         let buffers = NativeTapBuffers(taps: taps, expectedCount: typed.utf8.count)
         let funding = prior?.nativeFundingSnapshot()
         return try KBCandidateGenerator.generateWord(typed, lexicon: view,
             tapOffsets: buffers?.offsets, tapValidity: buffers?.validity,
-            contextSuccessors: successors, successorLengths: successors.map { NSNumber(value: $0.count) }, fundedWords: funding?.words, fundedBonuses: funding?.bonuses,
+            contextSuccessors: successors, successorLengths: successors.map { NSNumber(value: $0.count) },
+            successorFirst: successors.map { $0.first.map(String.init) ?? "" },
+            successorLast: successors.map { $0.last.map(String.init) ?? "" },
+            characterOffsets: characterOffsets.map { NSNumber(value: $0) }, fundedWords: funding?.words, fundedBonuses: funding?.bonuses,
             retainedStatic: retainedStatic?.map(\.native), gruTier: gruTier, shouldCancel: shouldCancel)
     }
 
@@ -193,13 +204,8 @@ final class Lexicon {
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func glideDynamicWords(limit: Int) -> [String] {
 		lock.lock(); defer { lock.unlock() }
-		var merged = supplementaryGlideWords
-		for (word, count) in personalGlideWords {
-			merged[word] = max(merged[word] ?? 0, count + 100)
-		}
-		return merged.sorted {
-			$0.value == $1.value ? $0.key < $1.key : $0.value > $1.value
-		}.prefix(limit).map(\.key)
+        return KBGlidePipeline.dynamicWords(Array(supplementaryGlideWords.keys), counts: supplementaryGlideWords.values.map { NSNumber(value: $0) },
+            personal: Array(personalGlideWords.keys), counts: personalGlideWords.values.map { NSNumber(value: $0) }, limit: UInt(max(0, limit)))
 	}
 
 	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
@@ -321,14 +327,8 @@ final class Lexicon {
 		lock.lock(); let ld0 = staticTrie ? langData : nil; lock.unlock()
 		guard let ld = ld0 else { return [:] }
 		let kids = ld.trieChildren(after: lw)
-		guard let top = kids.map(\.maxFreq).max(), top > 0 else { return [:] }
-		let denom = log(Double(top) + 1)
-		var out: [Character: Double] = [:]
-		out.reserveCapacity(kids.count)
-		for (label, f) in kids where f > 0 {
-			out[Character(UnicodeScalar(label))] = log(Double(f) + 1) / denom
-		}
-		return out
+        let values = KBNumericPolicy.characterPriors(kids.map { NSNumber(value: $0.maxFreq) })
+        return Dictionary(uniqueKeysWithValues: zip(kids.map { Character(UnicodeScalar($0.label)) }, values.map(\.doubleValue)).filter { $0.1 > 0 })
 	}
 
 	/// The frequency term a word carries in ranking (nil when unknown).

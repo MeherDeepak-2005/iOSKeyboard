@@ -34,6 +34,12 @@ NS_ASSUME_NONNULL_BEGIN
     fundedWords:(nullable NSArray<NSString *> *)words fundedBonuses:(nullable NSArray<NSNumber *> *)bonuses
     shouldCancel:(nullable BOOL (^)(void))cancel error:(NSError **)error
     NS_SWIFT_NAME(search(word:maxCost:tapOffsets:tapValidity:fundedWords:fundedBonuses:shouldCancel:));
+- (NSArray<NSNumber *> *)textMetadataIDs;
+- (void)installTextMetadataIDs:(NSArray<NSNumber *> *)ids characterCounts:(NSArray<NSNumber *> *)counts
+    firstLetters:(NSArray<NSNumber *> *)first lastLetters:(NSArray<NSNumber *> *)last;
+- (void)warmGlideAnchors;
+- (NSArray<NSString *> *)anchorWordsWithFirst:(NSData *)first last:(NSData *)last perBucket:(NSUInteger)cap;
+- (NSArray<KBChannelCandidate *> *)completionsForPrefix:(NSString *)prefix limit:(NSUInteger)limit;
 // Prepares immutable native seed metadata directly from the retained mapping.
 // Nil is the same unsupported/cap fallback as LangData.incrementalSeeds.
 - (nullable KBIncrementalSeedSet *)incrementalSeedsForTypedFirst:(uint8_t)first
@@ -103,6 +109,7 @@ NS_ASSUME_NONNULL_BEGIN
 // Mutable native trie. Caller serializes mutation and search (Lexicon's lock).
 @interface KBMutableTrie : NSObject
 - (void)insertWord:(NSString *)word frequency:(int64_t)frequency wordID:(int32_t)wordID;
+- (void)insertWord:(NSString *)word frequency:(int64_t)frequency wordID:(int32_t)wordID characterCount:(NSUInteger)count;
 - (BOOL)containsWord:(NSString *)word;
 - (BOOL)hasPrefix:(NSString *)prefix;
 - (nullable NSNumber *)wordIDForWord:(NSString *)word;
@@ -140,6 +147,8 @@ NS_ASSUME_NONNULL_BEGIN
     supplementary:(KBMutableTrie *)supplementary personal:(KBMutableTrie *)personal
     snapshot:(KBGenerationSnapshot *)snapshot;
 - (instancetype)init NS_UNAVAILABLE;
+- (BOOL)containsWord:(NSString *)word;
+- (BOOL)isBlockedWord:(NSString *)word;
 @end
 
 @interface KBCandidateGenerator : NSObject
@@ -151,8 +160,206 @@ NS_ASSUME_NONNULL_BEGIN
     lexicon:(KBGenerationLexicon *)lexicon
     tapOffsets:(nullable NSData *)offsets tapValidity:(nullable NSData *)validity
     contextSuccessors:(NSArray<NSString *> *)successors successorLengths:(NSArray<NSNumber *> *)lengths
+    successorFirst:(NSArray<NSString *> *)first successorLast:(NSArray<NSString *> *)last characterOffsets:(NSArray<NSNumber *> *)characterOffsets
     fundedWords:(nullable NSArray<NSString *> *)words fundedBonuses:(nullable NSArray<NSNumber *> *)bonuses
     retainedStatic:(nullable NSArray<KBChannelCandidate *> *)retained gruTier:(BOOL)gru
     shouldCancel:(nullable BOOL (^)(void))cancel error:(NSError **)error;
+@end
+NS_ASSUME_NONNULL_END
+
+NS_ASSUME_NONNULL_BEGIN
+@interface KBPersonalCounts : NSObject
+- (instancetype)initWithUnigrams:(NSDictionary<NSString *, NSNumber *> *)unigrams
+    bigramWords:(NSDictionary<NSString *, NSArray<NSString *> *> *)biWords
+    bigramCounts:(NSDictionary<NSString *, NSArray<NSNumber *> *> *)biCounts
+    trigramWords:(NSDictionary<NSString *, NSArray<NSString *> *> *)triWords
+    trigramCounts:(NSDictionary<NSString *, NSArray<NSNumber *> *> *)triCounts;
+@end
+@interface KBSuccessorCounts : NSObject
+@property(nonatomic, readonly) NSArray<NSString *> *words;
+@property(nonatomic, readonly) NSArray<NSNumber *> *counts;
+@end
+@interface KBNativeLanguageModel : NSObject
+- (instancetype)initWithPacked:(nullable KBPackedLexicon *)packed smoothing:(NSString *)smoothing;
+- (NSData *)scoresForWords:(NSArray<NSString *> *)words context:(NSArray<NSString *> *)context
+    personal:(KBPersonalCounts *)personal lexicon:(KBGenerationLexicon *)lexicon;
+- (NSData *)scoresForPhrases:(NSArray<NSString *> *)phrases context:(NSArray<NSString *> *)context personal:(KBPersonalCounts *)personal lexicon:(KBGenerationLexicon *)lexicon;
+- (double)sequenceForWords:(NSArray<NSString *> *)words context:(NSArray<NSString *> *)context
+    personal:(KBPersonalCounts *)personal lexicon:(KBGenerationLexicon *)lexicon;
+- (KBSuccessorCounts *)successorsForContext:(NSArray<NSString *> *)context personal:(KBPersonalCounts *)personal
+    trigram:(BOOL)trigram limit:(NSUInteger)limit;
++ (NSArray<NSString *> *)nextWordsWithTrigramWords:(NSArray<NSString *> *)triWords counts:(NSArray<NSNumber *> *)triCounts
+    bigramWords:(NSArray<NSString *> *)biWords counts:(NSArray<NSNumber *> *)biCounts limit:(NSUInteger)limit;
+@end
+NS_ASSUME_NONNULL_END
+
+NS_ASSUME_NONNULL_BEGIN
+@interface KBScoredRow : NSObject
+@property(nonatomic, readonly) NSString *word;
+@property(nonatomic, readonly) double cost, logFrequency, language, score;
+@property(nonatomic, readonly, nullable) NSNumber *neural;
++ (instancetype)rowWithWord:(NSString *)word cost:(double)cost frequency:(double)frequency
+    language:(double)language neural:(nullable NSNumber *)neural score:(double)score NS_SWIFT_NAME(make(word:cost:frequency:language:neural:score:));
+@end
+@interface KBCorrectionResult : NSObject
+@property(nonatomic, readonly, nullable) NSString *word;
+@property(nonatomic, readonly) double margin, threshold, cost;
+@property(nonatomic, readonly, nullable) NSNumber *gap;
+@property(nonatomic, readonly, nullable) NSString *kind, *candidate;
+@property(nonatomic, readonly) BOOL allowsCloseRescue;
+@end
+@interface KBRanking : NSObject
++ (NSArray<KBScoredRow *> *)prepareCandidates:(NSArray<KBChannelCandidate *> *)candidates
+    safety:(NSArray<NSNumber *> *)safety extra:(nullable KBChannelCandidate *)extra;
++ (NSArray<KBScoredRow *> *)shortlistRows:(NSArray<KBScoredRow *> *)rows extra:(nullable KBChannelCandidate *)extra
+    limit:(nullable NSNumber *)limit compressed:(BOOL)compressed;
++ (NSArray<KBScoredRow *> *)rankRows:(NSArray<KBScoredRow *> *)rows language:(NSData *)language
+    neural:(nullable NSData *)neural safety:(NSArray<NSNumber *> *)safety typed:(NSString *)typed
+    compressed:(BOOL)compressed limit:(nullable NSNumber *)limit;
++ (KBCorrectionResult *)correctRows:(NSArray<KBScoredRow *> *)rows lexicon:(KBGenerationLexicon *)lexicon
+    costs:(NSDictionary<NSString *, NSNumber *> *)costs typed:(NSString *)typed characterCount:(NSUInteger)length
+    letterFlags:(NSData *)letterFlags context:(NSArray<NSString *> *)context kept:(BOOL)kept
+    loose:(NSArray<NSString *> *)loose broad:(NSArray<NSString *> *)broad policy:(NSArray<NSNumber *> *)policy;
++ (BOOL)acceptsKind:(NSString *)kind margin:(double)margin gap:(nullable NSNumber *)gap cost:(double)cost
+    allowsCloseRescue:(BOOL)allows policy:(NSArray<NSNumber *> *)policy;
+@end
+NS_ASSUME_NONNULL_END
+
+NS_ASSUME_NONNULL_BEGIN
+@interface KBProcessedGlide : NSObject
+@property(nonatomic, readonly) NSData *points, *dwell;
+@property(nonatomic, readonly) NSArray<NSNumber *> *pivots;
+@end
+@interface KBNativeGlide : NSObject
++ (nullable KBProcessedGlide *)preprocess:(NSData *)points keys:(NSData *)keys centers:(NSData *)centers
+    xPitch:(double)xPitch yPitch:(double)yPitch spacing:(double)spacing times:(nullable NSData *)times;
++ (NSData *)toGrid:(NSData *)points keys:(NSData *)keys centers:(NSData *)centers xPitch:(double)xPitch yPitch:(double)yPitch;
++ (NSData *)resample:(NSData *)points spacing:(double)spacing;
++ (NSArray<NSNumber *> *)pivots:(NSData *)points threshold:(double)threshold;
++ (NSData *)lettersNearX:(double)x y:(double)y radius:(double)radius count:(NSUInteger)count;
++ (nullable NSNumber *)nearestLetterX:(double)x y:(double)y;
++ (nullable NSData *)idealPath:(NSString *)word count:(NSUInteger)count;
++ (nullable NSNumber *)shapeCost:(NSString *)word points:(NSData *)points band:(int)band direction:(double)direction;
++ (NSArray<KBChannelCandidate *> *)decode:(NSData *)points packed:(KBPackedLexicon *)packed width:(NSUInteger)width
+    band:(int)band frequency:(double)frequency direction:(double)direction seedRadius:(double)seedRadius
+    window:(NSUInteger)window shouldCancel:(nullable BOOL (^)(void))cancel;
++ (NSArray<KBChannelCandidate *> *)sortCandidates:(NSArray<KBChannelCandidate *> *)candidates limit:(NSUInteger)limit;
+@end
+@interface KBNativeGlideResampler : NSObject <NSCopying>
+- (instancetype)initWithSpacing:(double)spacing;
+- (NSData *)appendPoints:(NSData *)points;
+@property(nonatomic, readonly) NSData *samples;
+@end
+@interface KBNativeOnlineGlide : NSObject <NSCopying>
+- (nullable instancetype)initWithWord:(NSString *)word count:(NSUInteger)count;
+- (void)consumePoints:(NSData *)points;
+@property(nonatomic, readonly) NSData *ideal;
+@property(nonatomic, readonly) NSUInteger sampleCount;
+@property(nonatomic, readonly) double prefixCost;
+@end
+NS_ASSUME_NONNULL_END
+
+NS_ASSUME_NONNULL_BEGIN
+@interface KBMultiwordHypothesis : NSObject
+@property(nonatomic, readonly) NSUInteger offset;
+@property(nonatomic, readonly) NSArray<NSString *> *words;
+@property(nonatomic, readonly) double cost, logFrequency;
++ (instancetype)makeOffset:(NSUInteger)offset words:(NSArray<NSString *> *)words cost:(double)cost frequency:(double)frequency NS_SWIFT_NAME(make(offset:words:cost:frequency:));
+@end
+@interface KBMultiwordPruned : NSObject
+@property(nonatomic, readonly) NSArray<KBMultiwordHypothesis *> *frontier;
+@property(nonatomic, readonly) NSArray<KBChannelCandidate *> *finished;
+@end
+@interface KBNativeMultiword : NSObject
+- (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon word:(NSString *)word
+    tapOffsets:(nullable NSData *)offsets tapValidity:(nullable NSData *)validity;
+- (NSArray<KBMultiwordHypothesis *> *)expand:(NSArray<KBMultiwordHypothesis *> *)frontier shouldCancel:(nullable BOOL (^)(void))cancel;
+- (KBMultiwordPruned *)prune:(NSArray<KBMultiwordHypothesis *> *)rows neural:(NSData *)neural language:(NSData *)language;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBNativeGlideSession : NSObject
+- (BOOL)consume:(NSData *)points keys:(NSData *)keys centers:(NSData *)centers xPitch:(double)xPitch yPitch:(double)yPitch;
+- (void)augmentWithLexicon:(KBGenerationLexicon *)lexicon contextWords:(NSArray<NSString *> *)contextWords dynamicWords:(NSArray<NSString *> *)dynamicWords;
+@property(nonatomic, readonly) BOOL empty, needsAugmentation, invalid;
+@property(nonatomic, readonly) NSArray<KBChannelCandidate *> *rows;
+@end
+@interface KBGlidePipeline : NSObject
++ (NSArray<KBChannelCandidate *> *)augmentCandidates:(NSArray<KBChannelCandidate *> *)beam lexicon:(KBGenerationLexicon *)lexicon
+    points:(NSData *)points contextWords:(NSArray<NSString *> *)contextWords dynamicWords:(NSArray<NSString *> *)dynamicWords
+    gate:(double)gate shouldCancel:(nullable BOOL (^)(void))cancel NS_SWIFT_NAME(augment(beam:lexicon:points:contextWords:dynamicWords:gate:shouldCancel:));
++ (NSArray<KBScoredRow *> *)rankCandidates:(NSArray<KBChannelCandidate *> *)rows lexicon:(KBGenerationLexicon *)lexicon
+    language:(NSData *)language safety:(NSArray<NSNumber *> *)safety sigma:(double)sigma dwell:(NSData *)dwell NS_SWIFT_NAME(rank(rows:lexicon:language:safety:sigma:dwell:));
++ (NSArray<NSString *> *)dynamicWords:(NSArray<NSString *> *)supplementary counts:(NSArray<NSNumber *> *)supplementaryCounts
+    personal:(NSArray<NSString *> *)personal counts:(NSArray<NSNumber *> *)personalCounts limit:(NSUInteger)limit;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBNeuralTokenizer : NSObject
+- (nullable instancetype)initWithData:(NSData *)data;
+@property(nonatomic, readonly) NSArray<NSString *> *pieces;
+@property(nonatomic, readonly) NSArray<NSNumber *> *starts, *continuations;
+@property(nonatomic, readonly) int32_t pad, english;
+- (void)setCharacterLengths:(NSArray<NSNumber *> *)lengths;
+- (NSArray<NSNumber *> *)encodeCharacters:(NSArray<NSString *> *)characters;
+- (NSString *)wordFromIDs:(NSArray<NSNumber *> *)ids;
+@end
+@interface KBNeuralMath : NSObject
++ (nullable NSArray<NSNumber *> *)logProbabilities:(NSArray<NSNumber *> *)values;
++ (double)boundary:(NSArray<NSNumber *> *)values continuation:(NSArray<NSNumber *> *)continuation;
++ (NSArray<NSNumber *> *)top:(NSArray<NSNumber *> *)values count:(NSUInteger)count allowed:(NSArray<NSNumber *> *)allowed;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@class MLModel, MLMultiArray;
+@interface KBNeuralRuntime : NSObject
++ (nullable NSDictionary<NSString *, NSNumber *> *)generate:(KBNeuralTokenizer *)tokenizer model:(MLModel *)model
+    state:(MLMultiArray *)state previous:(int32_t)previous starts:(NSArray<NSNumber *> *)starts
+    width:(NSUInteger)width branch:(NSUInteger)branch depth:(NSUInteger)depth layers:(NSUInteger)layers hidden:(NSUInteger)hidden
+    lexicon:(KBGenerationLexicon *)lexicon cancel:(BOOL (^)(void))cancel;
++ (nullable NSDictionary<NSString *, NSNumber *> *)score:(KBNeuralTokenizer *)tokenizer model:(MLModel *)model
+    state:(MLMultiArray *)state previous:(int32_t)previous words:(NSArray<NSString *> *)words
+    tokens:(NSArray<NSArray<NSNumber *> *> *)tokens layers:(NSUInteger)layers hidden:(NSUInteger)hidden cancel:(BOOL (^)(void))cancel;
++ (NSArray<NSString *> *)sortWords:(NSArray<NSString *> *)words scores:(NSArray<NSNumber *> *)scores limit:(NSUInteger)limit;
++ (NSArray<NSNumber *> *)contextPlan:(NSArray<NSNumber *> *)tokens cached:(NSArray<NSNumber *> *)cached pad:(int32_t)pad;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBNumericPolicy : NSObject
++ (NSArray<NSNumber *> *)touch:(NSArray<NSNumber *> *)state x:(double)x y:(double)y observe:(BOOL)observe;
++ (NSArray<NSNumber *> *)glide:(NSArray<NSNumber *> *)state cost:(nullable NSNumber *)cost;
++ (NSArray<NSNumber *> *)characterPriors:(NSArray<NSNumber *> *)frequencies;
++ (NSArray<NSNumber *> *)contextualPriors:(NSArray<NSString *> *)letters baseLetters:(NSArray<NSString *> *)baseLetters values:(NSArray<NSNumber *> *)values;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBNeuralRuntime (BatchScoring)
++ (nullable NSArray<NSNumber *> *)scoreBatch:(MLModel *)model state:(MLMultiArray *)state previous:(int32_t)previous padID:(int32_t)padID
+    rows:(NSArray<NSArray<NSNumber *> *> *)rows layers:(NSUInteger)layers hidden:(NSUInteger)hidden
+    batchSize:(NSUInteger)batchSize time:(NSUInteger)time cancel:(BOOL (^)(void))cancel;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBNeuralMath (ContextWindow)
++ (NSArray<NSNumber *> *)trimmedContext:(NSArray<NSNumber *> *)tokens mode:(nullable NSNumber *)mode sequenceLength:(NSUInteger)sequenceLength maximumCandidateTokens:(NSUInteger)maximumCandidateTokens;
+@end
+@interface KBNeuralRuntime (TransformerScoring)
++ (nullable NSArray<NSNumber *> *)scoreTransformer:(MLModel *)model rows:(NSArray<NSArray<NSNumber *> *> *)rows
+    context:(NSArray<NSNumber *> *)context padID:(int32_t)padID sequenceLength:(NSUInteger)sequenceLength
+    batchSize:(NSUInteger)batchSize scoreSlots:(NSUInteger)scoreSlots cancel:(BOOL (^)(void))cancel;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBNeuralRuntime (ContextThreading)
++ (MLMultiArray *)zeroStateWithLayers:(NSUInteger)layers hidden:(NSUInteger)hidden;
++ (nullable MLMultiArray *)threadContext:(NSArray<NSNumber *> *)tokens tokenizer:(KBNeuralTokenizer *)tokenizer
+    model:(MLModel *)model state:(MLMultiArray *)state previous:(int32_t)previous layers:(NSUInteger)layers
+    hidden:(NSUInteger)hidden cancel:(BOOL (^)(void))cancel;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBNeuralMath (ContextWords)
++ (NSArray<NSString *> *)lastWords:(NSArray<NSString *> *)words limit:(NSUInteger)limit;
++ (NSArray<NSString *> *)knownWords:(NSArray<NSString *> *)words lexicon:(KBGenerationLexicon *)lexicon firstLetters:(NSArray<NSString *> *)firstLetters;
 @end
 NS_ASSUME_NONNULL_END

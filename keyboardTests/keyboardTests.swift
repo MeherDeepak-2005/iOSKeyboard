@@ -1720,7 +1720,8 @@ struct KeyboardTests {
 
 	@Test func beamFiltersLegalTokensBeforeTakingTopK() {
 		let values = (0..<12).map { -Float($0) }
-		#expect(GRULanguagePrior.topIndices(values, count: 8, allowed: { $0 >= 9 }) == [9, 10, 11])
+		let allowed = values.indices.map { NSNumber(value: $0 >= 9) }
+		#expect(KBNeuralMath.top(values.map(NSNumber.init(value:)), count: 8, allowed: allowed).map(\.int32Value) == [9, 10, 11])
 	}
 
 	@Test func contractionCorrectionsPreserveTypedForms() async {
@@ -1906,7 +1907,7 @@ private final class TestSearchPrior: NeuralSearchPrior {
     let words: [SearchPriorWord]
     var onSearchPriorReady: ((SearchPriorQuery) -> Void)?
     init(words: [SearchPriorWord], ready: Bool = true) { self.words = words; isReady = ready }
-    func warmSearchPrior(_ query: SearchPriorQuery, isKnownWord: @escaping (String) -> Bool) {}
+    func warmSearchPrior(_ query: SearchPriorQuery, lexicon: KBGenerationLexicon) {}
     func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]? { isReady ? words : nil }
     func prepareContext(_ words: [String], wordSessionID: UInt64) {}
     func discardSession(_ wordSessionID: UInt64) {}

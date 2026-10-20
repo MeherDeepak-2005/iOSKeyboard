@@ -9,6 +9,7 @@ import Foundation
 // MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
 // MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
 nonisolated final class MultiwordSearch {
+    private var nativeSearch: KBNativeMultiword?
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
 	// MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
 	struct Hypothesis {
@@ -16,32 +17,57 @@ nonisolated final class MultiwordSearch {
 		let words: [String]
 		let cost: Double
 		let logFrequency: Double
+        var native: KBMultiwordHypothesis { KBMultiwordHypothesis.make(offset: UInt(offset), words: words, cost: cost, frequency: logFrequency) }
+        init(offset: Int, words: [String], cost: Double, logFrequency: Double) {
+            self.offset = offset; self.words = words; self.cost = cost; self.logFrequency = logFrequency
+        }
+        init(native: KBMultiwordHypothesis) { offset = Int(native.offset); words = native.words; cost = native.cost; logFrequency = native.logFrequency }
 		var candidate: Candidate {
 			Candidate(word: words.joined(separator: " "), cost: cost, logFreq: logFrequency)
 		}
 	}
 	private let bytes: [UInt8]
 	private let taps: [KeyTap?]?
+#if DEBUG || KB_REFERENCE_DECODER_YES
 	private let candidates: (String, [KeyTap?]?) -> [Candidate]
 	private var cache: [Range<Int>: [Candidate]] = [:]
 	private static let boundaryNeighbors = Set("cvbnm".utf8)
+#endif
 	static let maximumWords = 3
 	static let maximumTypedBytes = 24
 	static let beamPerPosition = 2
 	let root = Hypothesis(offset: 0, words: [], cost: 0, logFrequency: .infinity)
 	var inputCount: Int { bytes.count }
 
+    init(typed: String, taps: [KeyTap?]?, lexicon: KBGenerationLexicon) {
+        bytes = Array(typed.utf8); self.taps = taps
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        candidates = { _, _ in [] }
+#endif
+        let buffers = NativeTapBuffers(taps: taps, expectedCount: typed.utf8.count)
+        nativeSearch = KBNativeMultiword(lexicon: lexicon, word: typed, tapOffsets: buffers?.offsets, tapValidity: buffers?.validity)
+    }
+    func prune(_ rows: [Hypothesis], neural: [Double], language: [Double]) -> (frontier: [Hypothesis], finished: [Candidate])? {
+        guard let nativeSearch else { return nil }
+        let value = nativeSearch.prune(rows.map(\.native), neural: neural.withUnsafeBytes { Data($0) }, language: language.withUnsafeBytes { Data($0) })
+        return (value.frontier.map(Hypothesis.init(native:)), value.finished.map(Candidate.init(native:)))
+    }
+
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
 	// MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
+#if DEBUG || KB_REFERENCE_DECODER_YES
 	init(typed: String, taps: [KeyTap?]?, candidates: @escaping (String, [KeyTap?]?) -> [Candidate]) {
 		bytes = Array(typed.utf8)
 		self.taps = taps?.count == bytes.count ? taps : nil
 		self.candidates = candidates
 	}
+#endif
 
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
 	// MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
-	func expand(_ frontier: [Hypothesis], shouldCancel: () -> Bool) -> [Hypothesis] {
+	func expand(_ frontier: [Hypothesis], shouldCancel: @escaping () -> Bool) -> [Hypothesis] {
+        if let nativeSearch { return nativeSearch.expand(frontier.map(\.native), shouldCancel: shouldCancel).map(Hypothesis.init(native:)) }
+#if DEBUG || KB_REFERENCE_DECODER_YES
 		guard bytes.count >= 4, bytes.count <= Self.maximumTypedBytes,
 			bytes.allSatisfy({ ($0 >= 97 && $0 <= 122) || $0 == KB.apostrophe }) else { return [] }
 		var result: [Hypothesis] = []
@@ -87,5 +113,8 @@ nonisolated final class MultiwordSearch {
 		}
 		return unique.values.sorted { $0.candidate.word == $1.candidate.word
 			? $0.offset < $1.offset : $0.candidate.word < $1.candidate.word }
+#else
+        return []
+#endif
 	}
 }

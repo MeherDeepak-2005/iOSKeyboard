@@ -45,23 +45,15 @@ nonisolated struct CorrectionPolicy: Codable, Equatable {
     static let severeGap = log(2.0)
     static let looseGap = 1.0
 
+    var nativeValues: [NSNumber] {
+        [oovMargin, realWordMargin, closeRescueMargin, closeRescueGap, minimumCloseGap, closeRescueMaxCost]
+            .map { NSNumber(value: $0) }
+    }
+
     func accepts(_ evidence: CorrectionGateEvidence) -> Bool {
-        switch evidence.kind {
-        case .realWord:
-            return evidence.typedMargin > realWordMargin
-        case .severe:
-            return evidence.typedMargin > Self.severeMargin
-                && (evidence.candidateGap.map { $0 >= Self.severeGap } ?? true)
-        case .loose:
-            return evidence.typedMargin > oovMargin
-                && (evidence.candidateGap.map { $0 >= Self.looseGap } ?? true)
-        case .close:
-            guard evidence.candidateGap.map({ $0 >= minimumCloseGap }) ?? true else { return false }
-            if evidence.typedMargin > oovMargin { return true }
-            return evidence.allowsCloseRescue && evidence.spatialCost <= closeRescueMaxCost
-                && evidence.typedMargin > closeRescueMargin
-                && (evidence.candidateGap.map { $0 >= closeRescueGap } ?? true)
-        }
+        KBRanking.acceptsKind(evidence.kind.rawValue, margin: evidence.typedMargin,
+            gap: evidence.candidateGap.map(NSNumber.init(value:)), cost: evidence.spatialCost,
+            allowsCloseRescue: evidence.allowsCloseRescue, policy: nativeValues)
     }
 }
 
@@ -244,6 +236,19 @@ final class KeyboardEngine {
 		let logFrequency: Double
 		let logLanguageProbability: Double
 		let neuralLogProbability: Double?
+        var native: KBScoredRow {
+            KBScoredRow.make(word: word, cost: spatialCost, frequency: logFrequency,
+                language: logLanguageProbability, neural: neuralLogProbability.map { NSNumber(value: $0) }, score: score)
+        }
+        init(native: KBScoredRow) {
+            word = native.word; spatialCost = native.cost; logFrequency = native.logFrequency
+            logLanguageProbability = native.language; neuralLogProbability = native.neural?.doubleValue; score = native.score
+        }
+        init(word: String, score: Double, spatialCost: Double, logFrequency: Double,
+             logLanguageProbability: Double, neuralLogProbability: Double?) {
+            self.word = word; self.score = score; self.spatialCost = spatialCost; self.logFrequency = logFrequency
+            self.logLanguageProbability = logLanguageProbability; self.neuralLogProbability = neuralLogProbability
+        }
 	}
 
 	/// Session-only autocorrect rejections. Every access is serialized on `queue`;
@@ -305,7 +310,7 @@ final class KeyboardEngine {
         self.candidateBackend = candidateBackend
         self.correctionPolicy = correctionPolicy
         self.correctionObserver = correctionObserver
-		let ng = NgramScorer(user: personal, smoothing: smoothing)
+		let ng = NgramScorer(user: personal, backend: candidateBackend, smoothing: smoothing)
 		ngram = ng
 		self.rescorer = rescorer
 		self.searchPrior = searchPrior
@@ -473,6 +478,7 @@ final class KeyboardEngine {
 
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+#if DEBUG || KB_REFERENCE_DECODER_YES
 	private func rawScore(_ candidate: RankedCandidate) -> Double {
 		let prior = candidate.neuralLogProbability.map {
 			neuralPriorWeight * $0 + (1 - neuralPriorWeight) * candidate.logLanguageProbability
@@ -492,6 +498,7 @@ final class KeyboardEngine {
 		guard lexicon.contains(contraction), !lexicon.isProfane(contraction) else { return nil }
 		return contraction
 	}
+#endif
 
 	/// Context-aware next-character priors for key-target resizing (Plan 1). The
 	/// context-free trie prior (`base`) is lifted wherever the in-context ranking already
@@ -503,21 +510,15 @@ final class KeyboardEngine {
 	private func contextualCharPriors(evidence: [DecodeCandidateEvidence], prefix lw: String,
 									  base: [Character: Double]) -> [Character: Double] {
 		guard !lw.isEmpty else { return base }
-		var contextual: [Character: Double] = [:]
-		var weight = 1.0
-		for candidate in evidence
-			where candidate.word.count > lw.count && candidate.word.hasPrefix(lw) {
-			let next = candidate.word[candidate.word.index(candidate.word.startIndex,
-				offsetBy: lw.count)]
-			contextual[next, default: 0] += weight
-			weight *= 0.85
-		}
-		guard let top = contextual.values.max(), top > 0 else { return base }
-		var out = base
-		for (character, value) in contextual {
-			out[character] = Swift.max(out[character] ?? 0, value / top)
-		}
-		return out
+        let letters = evidence.compactMap { candidate -> String? in
+            guard candidate.word.count > lw.count, candidate.word.hasPrefix(lw) else { return nil }
+            return String(candidate.word[candidate.word.index(candidate.word.startIndex, offsetBy: lw.count)])
+        }
+        var keys = Array(base.keys)
+        for letter in letters { let c = Character(letter); if !keys.contains(c) { keys.append(c) } }
+        let values = KBNumericPolicy.contextualPriors(letters, baseLetters: keys.map(String.init),
+            values: keys.map { NSNumber(value: base[$0] ?? 0) })
+        return Dictionary(uniqueKeysWithValues: zip(keys, values.map(\.doubleValue)))
 	}
 
 	/// Decide from the same already-scored table used by the suggestion strip. The
@@ -525,7 +526,32 @@ final class KeyboardEngine {
 	/// candidate generation pass and one prior batch.
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
 	// MIGRATION-SPLIT: CPP_CORE applies the existing correction/channel/runner-up gates using a supplied keep-state view; SWIFT_IOS records the decision diagnostics.
-	private func correction(from scored: [RankedCandidate], correctionCosts: [String: Double],
+    private func correction(from scored: [RankedCandidate], correctionCosts: [String: Double],
+        typed lw: String, context: [String], split: (candidate: Candidate, a: String, b: String)?,
+        looseWords: Set<String> = [], broadRecoveryWords: Set<String> = []) -> CorrectionDecision {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if candidateBackend == .swiftReference {
+            return correctionReference(from: scored, correctionCosts: correctionCosts, typed: lw,
+                context: context, split: split, looseWords: looseWords, broadRecoveryWords: broadRecoveryWords)
+        }
+#endif
+        let flags = Data(lw.flatMap { ch in Array(repeating: UInt8(ch.isLetter ? 1 : 0), count: String(ch).utf8.count) })
+        let value = KBRanking.correct(scored.map(\.native), lexicon: lexicon.nativeGenerationView(),
+            costs: correctionCosts.mapValues { NSNumber(value: $0) }, typed: lw, characterCount: UInt(lw.count),
+            letterFlags: flags, context: context, kept: isKept(lw), loose: Array(looseWords),
+            broad: Array(broadRecoveryWords), policy: correctionPolicy.nativeValues)
+        if let kind = value.kind.flatMap(CorrectionGateEvidence.Kind.init(rawValue:)), let candidate = value.candidate {
+            correctionObserver?(CorrectionGateEvidence(typed: lw, candidate: candidate, kind: kind,
+                typedMargin: value.margin, candidateGap: value.gap?.doubleValue,
+                spatialCost: value.cost, allowsCloseRescue: value.allowsCloseRescue))
+            KBDiagnostics.logDecision(typed: lw, best: candidate, margin: value.margin,
+                threshold: value.threshold, corrected: value.word != nil)
+        }
+        return CorrectionDecision(word: value.word, margin: value.margin)
+    }
+#if DEBUG || KB_REFERENCE_DECODER_YES
+
+	private func correctionReference(from scored: [RankedCandidate], correctionCosts: [String: Double],
 							typed lw: String, context: [String],
 							split: (candidate: Candidate, a: String, b: String)?,
 							looseWords: Set<String> = [],
@@ -639,6 +665,8 @@ final class KeyboardEngine {
 		return CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
 	}
 
+#endif
+
 	/// Plain (unit-cost) edit distance ≤ 2 — "correction"/"corrections" are one form.
 	/// Deliberately NOT the keyboard-weighted channel cost: form-similarity is a
 	/// lexical question, not a typing-slip question.
@@ -666,6 +694,7 @@ final class KeyboardEngine {
 	/// Best "missing space" split of an OOV string into two real words, or nil.
 	/// Channel cost is one skipped space (just under one insertion). Single-letter
 	/// halves are only "a"/"i" — anything else is a typo fragment, not a word.
+#if DEBUG || KB_REFERENCE_DECODER_YES
 	private static let splitCost = 1.1
 	/// A user aiming for the space bar can land on its nearest letter row. Consume one
 	/// adjacent `c/v/b/n/m` as the boundary instead of demanding two perfect substrings.
@@ -674,7 +703,6 @@ final class KeyboardEngine {
 	/// Channel cost of a missing apostrophe in the SUGGESTION bar's contraction
 	/// candidate ("its" → "it's"). Well under one edit: the omission is a keyboard
 	/// layout gap, not a slip — ranking, not this cost, decides if it surfaces.
-	private static let apostropheCost = 0.5
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func splitCandidate(of lw: String) -> (candidate: Candidate, a: String, b: String)? {
@@ -706,6 +734,8 @@ final class KeyboardEngine {
 		guard let best else { return nil }
 		return (best.0, best.1, best.2)
 	}
+#endif
+	private static let apostropheCost = 0.5
 
 	/// Scores each beam expansion as a full continuation from committed context.
 	/// Streaming scoring branches the shared recurrent state, so a second/third word
@@ -716,9 +746,19 @@ final class KeyboardEngine {
 		generation: Int, completion: @escaping ([Candidate]) -> Void) {
 		guard request.requestedModelTier == .neuralGRU, !lexicon.contains(typed),
 			let prior = scoringPrior, prior.modelTier == .neuralGRU else { completion([]); return }
-		let search = MultiwordSearch(typed: typed, taps: taps) { [lexicon] word, taps in
-			lexicon.corrections(for: word, maxCost: 1.8, taps: taps).filter { !lexicon.isProfane($0.word) }
-		}
+        let search: MultiwordSearch
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if candidateBackend == .cpp {
+            search = MultiwordSearch(typed: typed, taps: taps, lexicon: lexicon.nativeGenerationView())
+        }
+        else {
+            search = MultiwordSearch(typed: typed, taps: taps) { [lexicon] word, taps in
+                lexicon.corrections(for: word, maxCost: 1.8, taps: taps).filter { !lexicon.isProfane($0.word) }
+            }
+        }
+#else
+        search = MultiwordSearch(typed: typed, taps: taps, lexicon: lexicon.nativeGenerationView())
+#endif
 		prior.prepareContext(request.context, wordSessionID: request.wordSessionID)
 		preparedNeuralSession = (request.wordSessionID, request.context)
 		var finished: [Candidate] = []
@@ -731,6 +771,14 @@ final class KeyboardEngine {
 				self.queue.async {
 					guard self.isLatest(generation) else { return }
 					guard case .success(let probabilities) = result else { completion(finished); return }
+                    if let pruned = search.prune(expanded, neural: expanded.map { probabilities[$0.candidate.word] ?? .nan },
+                        language: self.ngram.candidateLogProbs(expanded.map { $0.candidate.word }, context: request.context)) {
+                        finished.append(contentsOf: pruned.finished)
+                        if depth < MultiwordSearch.maximumWords && !pruned.frontier.isEmpty { advance(pruned.frontier, depth: depth + 1) }
+                        else { completion(finished) }
+                        return
+                    }
+
 					var ranked: [(MultiwordSearch.Hypothesis, Double)] = []
 					for state in expanded {
 						guard let neural = probabilities[state.candidate.word], neural.isFinite else { continue }
@@ -847,6 +895,7 @@ final class KeyboardEngine {
 		let context: [String]
 		var rawPointCount = 0
 		var layoutPitch: (CGFloat, CGFloat)?
+		let native = KBNativeGlideSession()
 		var resampler = IncrementalGlideResampler()
 		var candidates: [String: OnlineGlideCandidate] = [:]
 		var endpointSignature = ""
@@ -995,6 +1044,30 @@ final class KeyboardEngine {
 	// MIGRATION-SPLIT: SWIFT_IOS converts UIKit layout/points to numeric buffers; CPP_CORE resamples and consumes the retained trajectory.
 	private func consumeStreamingPath(_ path: [CGPoint], layout: GlideLayout,
 		languageData: LangData, session: inout StreamingGlideSession) -> GlideUpdate? {
+        if candidateBackend == .cpp {
+            let native = session.native
+            guard native.consume(GlideBuffers.points(path), keys: GlideBuffers.keys(layout), centers: GlideBuffers.points(layout.centers.map(\.point)),
+                xPitch: Double(layout.xPitch), yPitch: Double(layout.yPitch)) else { session.invalid = true; return nil }
+            if native.needsAugmentation {
+                let seed = native.empty ? ngram.nextWords(context: session.context, limit: 48) : []
+                let proposed = native.empty ? seed + neuralNextWords(context: session.context, seed: seed) : []
+                native.augment(with: lexicon.nativeGenerationView(), contextWords: proposed, dynamicWords: lexicon.glideDynamicWords(limit: 128))
+            }
+            var order: [String: KBChannelCandidate] = [:]
+            for row in native.rows { order[row.word] = row }
+            let rows = Array(order.values)
+            let language = ngram.logProbs(rows.map(\.word), context: session.context)
+            let scored = KBGlidePipeline.rank(rows: rows, lexicon: lexicon.nativeGenerationView(), language: language.withUnsafeBytes { Data($0) },
+                safety: rows.map { NSNumber(value: lexicon.safetyPenalty($0.word)) }, sigma: 0.10, dwell: Data())
+            guard let winner = scored.first else { return nil }
+            let prediction = GlidePrediction(word: winner.word, alternatives: scored.dropFirst().prefix(3).map(\.word),
+                shapeCostByWord: Dictionary(scored.prefix(12).map { ($0.word, $0.cost) }, uniquingKeysWith: min),
+                margin: scored.count > 1 ? scored[0].score - scored[1].score : .greatestFiniteMagnitude)
+            session.revision &+= 1; session.latestPrediction = prediction
+            return GlideUpdate(sessionID: session.id, revision: session.revision, prediction: prediction)
+        }
+#if DEBUG || KB_REFERENCE_DECODER_YES
+
 		guard !session.invalid, path.count >= session.rawPointCount,
 			layout.xPitch > 0, layout.yPitch > 0 else {
 			session.invalid = true
@@ -1007,7 +1080,7 @@ final class KeyboardEngine {
 			return nil
 		}
 		session.layoutPitch = pitch
-		let suffix = path[session.rawPointCount...].map { GlidePreprocess.toGrid($0, layout: layout) }
+		let suffix = GlidePreprocess.gridPoints(Array(path[session.rawPointCount...]), layout: layout)
 		session.rawPointCount = path.count
 		let newSamples = session.resampler.append(suffix[...])
 		if !newSamples.isEmpty {
@@ -1025,6 +1098,9 @@ final class KeyboardEngine {
 		session.latestPrediction = prediction
 		return GlideUpdate(sessionID: session.id, revision: session.revision,
 			prediction: prediction)
+#else
+        return nil
+#endif
 	}
 
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
@@ -1193,7 +1269,19 @@ final class KeyboardEngine {
 
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
 	// MIGRATION-SPLIT: CPP_CORE combines shape, frequency and language scores; OBJCXX_BRIDGE services neural batches; SWIFT_IOS coordinates asynchronous completion.
-	private func scoreGlideCandidates(_ candidates: [(word: String, cost: Double)],
+    private func scoreGlideCandidates(_ candidates: [(word: String, cost: Double)], glide: ProcessedGlide, context: [String]) -> [(word: String, s: Double)] {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if candidateBackend == .swiftReference { return scoreGlideCandidatesReference(candidates, glide: glide, context: context) }
+#endif
+        let language = ngram.logProbs(candidates.map(\.word), context: context)
+        return KBGlidePipeline.rank(rows: candidates.map { KBChannelCandidate.make(word: $0.word, cost: $0.cost, logFrequency: 0) },
+            lexicon: lexicon.nativeGenerationView(), language: language.withUnsafeBytes { Data($0) },
+            safety: candidates.map { NSNumber(value: lexicon.safetyPenalty($0.word)) }, sigma: glideProfile.sigma,
+            dwell: Data(glide.dwellKeys.compactMap(\.asciiValue))).map { ($0.word, $0.score) }
+    }
+#if DEBUG || KB_REFERENCE_DECODER_YES
+
+	private func scoreGlideCandidatesReference(_ candidates: [(word: String, cost: Double)],
 									  glide: ProcessedGlide, context: [String]) -> [(word: String, s: Double)] {
 		let sigma = glideProfile.sigma
 		let dwell = Set(glide.dwellKeys)
@@ -1212,6 +1300,8 @@ final class KeyboardEngine {
 		.sorted { $0.s > $1.s }
 	}
 
+#endif
+
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private struct GlideDecodeResult {
@@ -1224,11 +1314,28 @@ final class KeyboardEngine {
 	/// from promising a word that a different release-time decoder would immediately replace.
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
 	// MIGRATION-SPLIT: CPP_CORE performs beam/shape/admission search; SWIFT_IOS supplies cancellation identity and records diagnostics.
-	private func decodeGlide(_ glide: ProcessedGlide, lang: LangData, context: [String],
+    private func decodeGlide(_ glide: ProcessedGlide, lang: LangData, context: [String], shouldCancel: (() -> Bool)? = nil) -> GlideDecodeResult? {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if candidateBackend == .swiftReference { return decodeGlideReference(glide, lang: lang, context: context, shouldCancel: shouldCancel) }
+#endif
+        guard shouldCancel?() != true else { return nil }
+        let beam = GlideDecoder.decode(glide, lang: lang, limit: glideCandidates, shouldCancel: shouldCancel)
+        let seed = context.isEmpty ? [] : ngram.nextWords(context: context, limit: glideContextAugment)
+        let proposed = context.isEmpty ? [] : seed + neuralNextWords(context: context, seed: seed)
+        let candidates = KBGlidePipeline.augment(beam: beam.map { KBChannelCandidate.make(word: $0.word, cost: $0.cost, logFrequency: 0) },
+            lexicon: lexicon.nativeGenerationView(), points: GlideBuffers.points(glide.points), contextWords: proposed,
+            dynamicWords: lexicon.glideDynamicWords(limit: 128), gate: glideProfile.gate, shouldCancel: shouldCancel).map { (word: $0.word, cost: $0.cost) }
+        guard shouldCancel?() != true, !candidates.isEmpty else { return nil }
+        let scored = scoreGlideCandidates(candidates, glide: glide, context: context)
+        return scored.isEmpty ? nil : GlideDecodeResult(candidates: candidates, scored: scored)
+    }
+#if DEBUG || KB_REFERENCE_DECODER_YES
+
+	private func decodeGlideReference(_ glide: ProcessedGlide, lang: LangData, context: [String],
 								 shouldCancel: (() -> Bool)? = nil) -> GlideDecodeResult? {
 		guard shouldCancel?() != true else { return nil }
 		let gate = glideProfile.gate
-		var candidates = GlideDecoder.decode(
+		var candidates = SwiftGlideDecoder.decode(
 			glide, lang: lang, limit: glideCandidates, shouldCancel: shouldCancel
 		).filter { !lexicon.isProfane($0.word) }
 		guard shouldCancel?() != true else { return nil }
@@ -1287,6 +1394,8 @@ final class KeyboardEngine {
 	/// rerank with the language prior + frequency and gate (P4). Delivers the winner and
 	/// up to 3 alternatives for the suggestion bar (swap targets) on the MAIN queue;
 	/// (nil, []) when the swipe matched nothing well enough to commit.
+#endif
+
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
 	// MIGRATION-SPLIT: SWIFT_IOS owns language routing, queue/identity and callbacks; CPP_CORE owns English Glide search/scoring; OBJCXX_BRIDGE services neural work.
 	func glide(path: [CGPoint], times: [TimeInterval] = [], layout: GlideLayout, context: [String],
@@ -1492,6 +1601,7 @@ final class KeyboardEngine {
 	/// O(n·m) where n = typed length, m = target length — fast enough to call per word.
 	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+#if DEBUG || KB_REFERENCE_DECODER_YES
 	private func spatialCost(typed t: String, target g: String, taps: [KeyTap?]? = nil) -> Double {
 		let tb = Array(t.utf8), gb = Array(g.utf8)
 		let n = tb.count, m = gb.count
@@ -1552,6 +1662,7 @@ final class KeyboardEngine {
 		}
 		return out
 	}
+#endif
 
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
@@ -1700,12 +1811,12 @@ final class KeyboardEngine {
     }
 
     /// C++ owns English candidate generation. The legacy implementation remains
-    /// independently selectable for parity, and for non-ASCII text while Unicode
-    /// segmentation/normalization is still supplied by Swift.
+    /// independently selectable in validation builds. Unicode normalization and
+    /// grapheme segmentation are supplied by Swift at the text boundary.
     private func generateEnglishPool(request: DecodeRequest, typed lw: String, context: [String],
         taps: [KeyTap?]?, normalCost: Double, recoveryPrior: TrieSearchPrior?,
         retained: IncrementalDecodeSession?, generation gen: Int) -> EnglishCandidatePool? {
-        if candidateBackend == .cpp && lw.utf8.allSatisfy({ $0 < 128 }) {
+        if candidateBackend == .cpp {
             do {
                 let successors = context.isEmpty || lw.count < 4 ? [] : ngram.nextWords(context: context, limit: 32)
                 let native = try lexicon.generateEnglishCandidates(typed: lw, taps: taps,
@@ -1728,11 +1839,16 @@ final class KeyboardEngine {
                 return nil
             }
         }
+#if DEBUG || KB_REFERENCE_DECODER_YES
         return generateEnglishPoolReference(request: request, typed: lw, context: context,
             taps: taps, normalCost: normalCost, recoveryPrior: recoveryPrior,
             retained: retained, generation: gen)
+#else
+        return nil
+#endif
     }
 
+#if DEBUG || KB_REFERENCE_DECODER_YES
     private func generateEnglishPoolReference(request: DecodeRequest, typed lw: String, context: [String],
         taps: [KeyTap?]?, normalCost: Double, recoveryPrior: TrieSearchPrior?,
         retained: IncrementalDecodeSession?, generation gen: Int) -> EnglishCandidatePool? {
@@ -1812,6 +1928,8 @@ final class KeyboardEngine {
         return EnglishCandidatePool(close: corrections, broad: admittedBroad, injected: newFromContext,
             completions: completions, displayCorrections: correctionSuggestions, split: split)
     }
+#endif
+
 
 
 	func decode(_ request: DecodeRequest, completion: @escaping (DecodeSnapshot) -> Void) {
@@ -2128,7 +2246,38 @@ final class KeyboardEngine {
 	/// and the cap: it must always come back scored.
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
 	// MIGRATION-SPLIT: CPP_CORE deduplicates, filters, calculates probabilities/scores and ranks; SWIFT_IOS retains optional diagnostic logging outside the math kernel.
-	private func rankNgram(_ cands: [Candidate], including extra: Candidate? = nil,
+    private func rankNgram(_ cands: [Candidate], including extra: Candidate? = nil,
+        context: [String], log label: String? = nil, frequencyMode: FrequencyMode = .raw,
+        limit: Int? = 32) -> [RankedCandidate] {
+#if DEBUG || KB_REFERENCE_DECODER_YES
+        if candidateBackend == .swiftReference {
+            return rankNgramReference(cands, including: extra, context: context, log: label, frequencyMode: frequencyMode, limit: limit)
+        }
+#endif
+        let prepared = KBRanking.prepare(cands.map(\.native),
+            safety: cands.map { NSNumber(value: lexicon.safetyPenalty($0.word)) }, extra: extra?.native)
+        // Boundary-only iteration permutation preserves the old Swift dictionary
+        // tie semantics. Deduplication and every ranking decision are native.
+        var order: [String: KBScoredRow] = [:]
+        for row in prepared { order[row.word] = row }
+        let list = KBRanking.shortlistRows(Array(order.values), extra: extra?.native,
+            limit: limit.map { NSNumber(value: $0) }, compressed: frequencyMode == .compressed)
+        let priors = ngram.candidateLogProbs(list.map(\.word), context: context)
+        let data = priors.withUnsafeBytes { Data($0) }
+        let scored = KBRanking.rankRows(list, language: data, neural: nil,
+            safety: list.map { NSNumber(value: lexicon.safetyPenalty($0.word)) }, typed: extra?.word ?? "",
+            compressed: frequencyMode == .compressed, limit: nil).map(RankedCandidate.init(native:))
+        if let label, KBDiagnostics.verbose {
+            KBDiagnostics.logRanking(label: label, context: context, rows: scored.map {
+                .init(word: $0.word, cost: $0.spatialCost, logFreq: $0.logFrequency,
+                    freqTerm: frequencyTerm($0.logFrequency, mode: frequencyMode), ngram: $0.logLanguageProbability, score: $0.score)
+            }, ms: 0)
+        }
+        return scored
+    }
+#if DEBUG || KB_REFERENCE_DECODER_YES
+
+	private func rankNgramReference(_ cands: [Candidate], including extra: Candidate? = nil,
 						  context: [String], log label: String? = nil,
 						  frequencyMode: FrequencyMode = .raw, limit: Int? = 32) -> [RankedCandidate] {
 		var best: [String: Candidate] = [:]
@@ -2191,6 +2340,8 @@ final class KeyboardEngine {
 		return scored
 	}
 
+#endif
+
 	/// Produces one authoritative ranking for the tier frozen into `request`. Neural
 	/// scoring is asynchronous and never blocks either host insertion or the serial
 	/// decoder queue. A failed neural session publishes no replacement snapshot; it
@@ -2247,33 +2398,17 @@ final class KeyboardEngine {
 					completion(nil)
 					return
 				}
-				var rescored: [RankedCandidate] = []
-				rescored.reserveCapacity(ngramRows.count)
-				for row in ngramRows {
-					guard let neural = probabilities[row.word], neural.isFinite else {
-						// NEURAL_DEBUG_TELEMETRY_REMOVE
-						#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
-						KBDiagnostics.recordNeuralState(tier: request.requestedModelTier,
-							ready: rescorer.isReady, state: "incomplete-score-result",
-							detail: "Core ML omitted a score for \(row.word)")
-						#endif
-						completion(nil)
-						return
-					}
-					let prior = self.neuralPriorWeight * neural
-							+ (1 - self.neuralPriorWeight) * row.logLanguageProbability
-					let isTypedRow = row.word == request.currentWord.lowercased()
-					let score = -row.spatialCost
-						- (isTypedRow ? 0 : self.lexicon.safetyPenalty(row.word))
-						+ self.lmWeight * prior
-						+ self.freqWeight * self.frequencyTerm(row.logFrequency,
-							mode: frequencyMode)
-					rescored.append(RankedCandidate(word: row.word, score: score,
-						spatialCost: row.spatialCost, logFrequency: row.logFrequency,
-						logLanguageProbability: row.logLanguageProbability,
-						neuralLogProbability: neural))
-				}
-				rescored.sort { $0.score > $1.score }
+                let neuralValues = ngramRows.compactMap { probabilities[$0.word] }
+                guard neuralValues.count == ngramRows.count, neuralValues.allSatisfy(\.isFinite) else {
+                    completion(nil); return
+                }
+                let languages = ngramRows.map(\.logLanguageProbability).withUnsafeBytes { Data($0) }
+                let neuralData = neuralValues.withUnsafeBytes { Data($0) }
+                let rescored = KBRanking.rankRows(ngramRows.map(\.native), language: languages, neural: neuralData,
+                    safety: ngramRows.map { NSNumber(value: self.lexicon.safetyPenalty($0.word)) },
+                    typed: request.currentWord.lowercased(), compressed: frequencyMode == .compressed,
+                    limit: NSNumber(value: self.scoreCap)).map(RankedCandidate.init(native:))
+
 				// NEURAL_DEBUG_TELEMETRY_REMOVE
 				#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
 				let ngramRank = Dictionary(uniqueKeysWithValues:
@@ -2295,14 +2430,7 @@ final class KeyboardEngine {
 					typedWord: request.currentWord, context: context,
 					wordSessionID: request.wordSessionID, rows: telemetryRows)
 				#endif
-				// Apply the publication cap only after the combined objective is known.
-				var published = Array(rescored.prefix(self.scoreCap))
-				if let extra, !published.contains(where: { $0.word == extra.word }),
-					let typed = rescored.first(where: { $0.word == extra.word }) {
-					if published.count == self.scoreCap { published.removeLast() }
-					published.append(typed)
-				}
-				completion((published, request.requestedModelTier))
+                completion((rescored, request.requestedModelTier))
 			}
 		}
 	}
@@ -2343,7 +2471,7 @@ final class KeyboardEngine {
 				excluding: Set(pool.map { $0.lowercased() }))
 			let query = SearchPriorQuery(context: context, prefix: prefix, pool: seeded,
 				vocabularyRevision: lexicon.vocabularyRevision)
-			searchPrior.warmSearchPrior(query, isKnownWord: { [lexicon] in lexicon.contains($0) && !lexicon.isProfane($0) })
+			searchPrior.warmSearchPrior(query, lexicon: lexicon.nativeGenerationView())
 			if let scored = searchPrior.searchPriorWords(query) {
 				// The neural set GENERATES next-words (subword beam), not just reranks the pool.
 				// Keep only words the trie can emit — a prefix bonus on an OOV word funds a path to
@@ -2420,7 +2548,7 @@ final class KeyboardEngine {
 		guard KBSettings.neuralEnabled else { return [] }
 		let query = SearchPriorQuery(context: context, prefix: nil, pool: pool,
 			vocabularyRevision: lexicon.vocabularyRevision)
-		searchPrior.warmSearchPrior(query, isKnownWord: { [lexicon] in lexicon.contains($0) && !lexicon.isProfane($0) })
+		searchPrior.warmSearchPrior(query, lexicon: lexicon.nativeGenerationView())
 		guard let scored = searchPrior.searchPriorWords(query) else { return [] }
 		return scored.prefix(limit).map(\.word).filter { lexicon.contains($0) }
 	}
@@ -2539,11 +2667,8 @@ final class GlideProfile {
 		let s: State = {
 			lock.lock(); defer { lock.unlock() }
 			if state.epoch != epoch { state = State(epoch: epoch) }
-			let old = state.mean
-			state.mean = (1 - Self.alpha) * state.mean + Self.alpha * cost
-			// EWMA variance (Welford-style increment) — the spread the gate leaves headroom over.
-			state.varc = (1 - Self.alpha) * state.varc + Self.alpha * (cost - old) * (cost - state.mean)
-			state.n += 1
+            let values = KBNumericPolicy.glide([Double(state.n), state.mean, state.varc].map(NSNumber.init(value:)), cost: NSNumber(value: cost))
+            state.n = values[0].intValue; state.mean = values[1].doubleValue; state.varc = values[2].doubleValue
 			return state
 		}()
 		persist(s)
@@ -2567,9 +2692,7 @@ final class GlideProfile {
 	// MIGRATION-SPLIT: CPP_CORE calculates bounded adaptation values; SWIFT_IOS supplies the locked, epoch-tagged profile snapshot.
 	var sigma: Double {
 		let s = snapshot()
-		let adapted = Self.sigmaK * s.mean
-		let v = Self.baseSigma + (adapted - Self.baseSigma) * blend(s.n)
-		return min(0.30, max(0.06, v))
+        return KBNumericPolicy.glide([Double(s.n), s.mean, s.varc].map(NSNumber.init(value:)), cost: nil)[0].doubleValue
 	}
 	/// Per-user commit gate = mean correct cost + ~2.7·std, i.e. leave the same headroom over
 	/// the user's own correct-cost spread that the offline p95/scribble midpoint left over the
@@ -2578,9 +2701,7 @@ final class GlideProfile {
 	// MIGRATION-SPLIT: CPP_CORE calculates bounded adaptation values; SWIFT_IOS supplies the locked, epoch-tagged profile snapshot.
 	var gate: Double {
 		let s = snapshot()
-		let adapted = s.mean + Self.gateK * max(0, s.varc).squareRoot()
-		let v = Self.baseGate + (adapted - Self.baseGate) * blend(s.n)
-		return min(0.60, max(0.30, v))
+        return KBNumericPolicy.glide([Double(s.n), s.mean, s.varc].map(NSNumber.init(value:)), cost: nil)[1].doubleValue
 	}
 
 	/// For diagnostics / a future health-screen readout.

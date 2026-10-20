@@ -27,6 +27,39 @@ nonisolated enum NeuralRuntimeState: String, Codable, Equatable, Sendable {
 // MIGRATION: planned CPP_CORE | stage=neural | target=Tokenizer
 // MIGRATION-NOTE: Preserve existing token IDs, byte fallback, English tag and word-boundary convention.
 private nonisolated final class KeyboardSentencePieceTokenizer: @unchecked Sendable {
+    let native: KBNeuralTokenizer
+    let padID: Int32
+    let englishModeID: Int32?
+    let idToPiece: [String]
+    let startContent: [Bool]
+    let continuationContent: [Bool]
+    let startFirstLetter: [Character?]
+    init?(url: URL) {
+        guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]),
+              let native = KBNeuralTokenizer(data: data) else { return nil }
+        self.native = native
+        idToPiece = native.pieces
+        native.setCharacterLengths(idToPiece.map { NSNumber(value: $0.count) })
+        padID = native.pad
+        englishModeID = native.english >= 0 ? native.english : nil
+        startContent = native.starts.map(\.boolValue)
+        continuationContent = native.continuations.map(\.boolValue)
+        startFirstLetter = zip(idToPiece, startContent).map { piece, start in
+            start ? piece.dropFirst().first.flatMap { $0.lowercased().first } : nil
+        }
+    }
+    func encode(_ text: String) -> [Int32] {
+        let words = text.precomposedStringWithCompatibilityMapping.split(whereSeparator: { $0.isWhitespace })
+        guard !words.isEmpty else { return [] }
+        let characters = Array("\u{2581}" + words.joined(separator: "\u{2581}")).map(String.init)
+        return native.encodeCharacters(characters).map(\.int32Value)
+    }
+    func word(fromPieceIDs ids: [Int32]) -> String {
+        native.word(fromIDs: ids.map(NSNumber.init(value:))).lowercased()
+    }
+}
+#if DEBUG || KB_REFERENCE_DECODER_YES
+private nonisolated final class SwiftSentencePieceTokenizer: @unchecked Sendable {
 	private var pieces: [String: (id: Int32, score: Float)] = [:]
 	private let unknownID: Int32
 	let padID: Int32
@@ -164,6 +197,8 @@ private nonisolated final class KeyboardSentencePieceTokenizer: @unchecked Senda
 	}
 }
 
+#endif
+
 /// Internal-only Core ML scorer. The model tier is sampled between words; this class
 /// never inserts text and never blocks the host-input path.
 // MIGRATION: planned SPLIT | stage=neural | target=NeuralFacade
@@ -175,7 +210,6 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 		case missingSession
 		case staleSession
 		case candidateTooLong(String)
-		case allocation
 		case invalidOutput
 		case incompatible(String)
 
@@ -184,7 +218,6 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 			case .missingSession: return "Neural context session is missing"
 			case .staleSession: return "Neural context session was cancelled"
 			case .candidateTooLong(let word): return "Candidate is too long for Core ML: \(word)"
-			case .allocation: return "Unable to allocate fixed Core ML inputs"
 			case .invalidOutput: return "Core ML returned an invalid candidate score tensor"
 			case .incompatible(let detail): return detail
 			}
@@ -200,28 +233,6 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 
 	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
 	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private final class Buffers {
-		let tokens: MLMultiArray
-		let scorePositions: MLMultiArray
-		let targetIDs: MLMultiArray
-		let scoreMask: MLMultiArray
-		let nextPositions: MLMultiArray
-
-		// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
-		// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-		init?() {
-			guard let tokens = try? MLMultiArray(shape: [16, 32], dataType: .int32),
-				let positions = try? MLMultiArray(shape: [16, 8], dataType: .int32),
-				let targets = try? MLMultiArray(shape: [16, 8], dataType: .int32),
-				let mask = try? MLMultiArray(shape: [16, 8], dataType: .float32),
-				let next = try? MLMultiArray(shape: [16, 1], dataType: .int32) else { return nil }
-			self.tokens = tokens
-			scorePositions = positions
-			targetIDs = targets
-			scoreMask = mask
-			nextPositions = next
-		}
-	}
 
 	/// Tokenization is deterministic and repeated across adjacent keystrokes. A small
 	/// bounded cache removes SentencePiece dynamic-programming work without retaining
@@ -290,7 +301,6 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 	private var compiledTemporaryURL: URL?
 	private var sessions: [UInt64: Session] = [:]
 	private var nextSessionGeneration: UInt64 = 0
-	private var buffers: Buffers?
 	private let candidateTokens = CandidateTokenCache(capacity: 4_096)
 	private var pressureSource: DispatchSourceMemoryPressure?
 
@@ -367,7 +377,7 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 	func prepareContext(_ words: [String], wordSessionID: UInt64) {
 		guard let tokenizer else { return }
 		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
-		tokens += tokenizer.encode(words.suffix(neuralContextWordCap).joined(separator: " ").lowercased())
+		tokens += tokenizer.encode(KBNeuralMath.lastWords(words, limit: UInt(neuralContextWordCap)).joined(separator: " ").lowercased())
 		if tokens.isEmpty { tokens = [tokenizer.padID] }
 		lock.lock()
 		nextSessionGeneration &+= 1
@@ -499,130 +509,40 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 		let tokenized = try candidates.map { word -> [Int32] in
 			let key = word.lowercased()
 			let ids: [Int32]
-			if let cached = candidateTokens.value(for: key) {
-				ids = cached
-			} else {
-				ids = tokenizer.encode(" " + key)
-				if !ids.isEmpty { candidateTokens.insert(ids, for: key) }
-			}
-			guard !ids.isEmpty, ids.count < Self.sequenceLength else {
-				throw RuntimeError.candidateTooLong(word)
-			}
+			if let cached = candidateTokens.value(for: key) { ids = cached }
+			else { ids = tokenizer.encode(" " + key); if !ids.isEmpty { candidateTokens.insert(ids, for: key) } }
+			guard !ids.isEmpty, ids.count < Self.sequenceLength else { throw RuntimeError.candidateTooLong(word) }
 			return ids
 		}
-		let maximumCandidate = tokenized.map(\.count).max() ?? 1
-		let context = trimmedContext(session.contextTokens,
-			maximumCandidateTokens: maximumCandidate)
+		guard ensureCurrent(session, wordSessionID: wordSessionID) else { throw RuntimeError.staleSession }
+		let context = KBNeuralMath.trimmedContext(session.contextTokens.map(NSNumber.init(value:)),
+			mode: tokenizer.englishModeID.map(NSNumber.init(value:)), sequenceLength: UInt(Self.sequenceLength),
+			maximumCandidateTokens: UInt(tokenized.map(\.count).max() ?? 1))
 		guard !context.isEmpty else { throw RuntimeError.invalidOutput }
-		if buffers == nil { buffers = Buffers() }
-		guard let buffers else { throw RuntimeError.allocation }
-		var values = [Double](repeating: 0, count: candidates.count)
-		for chunkStart in stride(from: 0, to: candidates.count, by: Self.batchSize) {
-			try ensureCurrent(session, wordSessionID: wordSessionID)
-			let chunkEnd = min(chunkStart + Self.batchSize, candidates.count)
-			let count = chunkEnd - chunkStart
-			let rows = Array(tokenized[chunkStart..<chunkEnd])
-			fillTokens(buffers.tokens, rows: rows, context: context, padID: tokenizer.padID)
-			let chunkMaximum = rows.map(\.count).max() ?? 1
-			for slotStart in stride(from: 0, to: chunkMaximum, by: Self.scoreSlots) {
-				try ensureCurrent(session, wordSessionID: wordSessionID)
-				fillScoringInputs(buffers, rows: rows, contextCount: context.count,
-					slotStart: slotStart)
-				let provider = try MLDictionaryFeatureProvider(dictionary: [
-					"tokens": buffers.tokens,
-					"score_positions": buffers.scorePositions,
-					"target_ids": buffers.targetIDs,
-					"score_mask": buffers.scoreMask,
-					"next_positions": buffers.nextPositions,
-				])
-				let output = try model.prediction(from: provider)
-				guard let array = output.featureValue(for: "candidate_log_probs")?.multiArrayValue,
-					let scores = readScores(array, count: count) else {
-					throw RuntimeError.invalidOutput
-				}
-				for index in 0..<count { values[chunkStart + index] += scores[index] }
-			}
+		let rows = tokenized.map { $0.map(NSNumber.init(value:)) }
+		let shouldStop = { [weak self] in
+			guard let self else { return true }
+			self.lock.lock(); defer { self.lock.unlock() }
+			return self.sessions[wordSessionID]?.generation != session.generation || self.model !== model
 		}
-		return Dictionary(uniqueKeysWithValues: zip(candidates, values))
-	}
-
-	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-	private func trimmedContext(_ tokens: [Int32], maximumCandidateTokens: Int) -> [Int32] {
-		let capacity = max(1, Self.sequenceLength - maximumCandidateTokens)
-		guard tokens.count > capacity else { return tokens }
-		if let mode = tokenizer?.englishModeID, capacity > 1 {
-			return [mode] + tokens.filter { $0 != mode }.suffix(capacity - 1)
+		let result = withoutActuallyEscaping(shouldStop) { cancel in
+			KBNeuralRuntime.scoreTransformer(model, rows: rows, context: context, padID: tokenizer.padID,
+				sequenceLength: UInt(Self.sequenceLength), batchSize: UInt(Self.batchSize),
+				scoreSlots: UInt(Self.scoreSlots), cancel: cancel)
 		}
-		return Array(tokens.suffix(capacity))
+		guard let result else { throw shouldStop() ? RuntimeError.staleSession : RuntimeError.invalidOutput }
+		return Dictionary(uniqueKeysWithValues: zip(candidates, result.map(\.doubleValue)))
 	}
 
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=NeuralLifecycle
 	// MIGRATION-NOTE: Keep bundle selection, runtime-state diagnostics, platform notifications and lifecycle coordination in Swift.
-	private func ensureCurrent(_ session: Session, wordSessionID: UInt64) throws {
-		lock.lock(); let current = sessions[wordSessionID]; lock.unlock()
-		guard current?.generation == session.generation else { throw RuntimeError.staleSession }
+	private func ensureCurrent(_ session: Session, wordSessionID: UInt64) -> Bool {
+		lock.lock(); defer { lock.unlock() }
+		return sessions[wordSessionID]?.generation == session.generation
 	}
 
 	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
 	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private func fillTokens(_ array: MLMultiArray, rows: [[Int32]], context: [Int32],
-		padID: Int32) {
-		let pointer = array.dataPointer.bindMemory(to: Int32.self,
-			capacity: Self.batchSize * Self.sequenceLength)
-		for batch in 0..<Self.batchSize {
-			let row = batch < rows.count ? context + rows[batch] : context
-			for index in 0..<Self.sequenceLength {
-				pointer[batch * Self.sequenceLength + index] = index < row.count ? row[index] : padID
-			}
-		}
-	}
-
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private func fillScoringInputs(_ buffers: Buffers, rows: [[Int32]],
-		contextCount: Int, slotStart: Int) {
-		let positions = buffers.scorePositions.dataPointer.bindMemory(to: Int32.self,
-			capacity: Self.batchSize * Self.scoreSlots)
-		let targets = buffers.targetIDs.dataPointer.bindMemory(to: Int32.self,
-			capacity: Self.batchSize * Self.scoreSlots)
-		let masks = buffers.scoreMask.dataPointer.bindMemory(to: Float.self,
-			capacity: Self.batchSize * Self.scoreSlots)
-		let next = buffers.nextPositions.dataPointer.bindMemory(to: Int32.self,
-			capacity: Self.batchSize)
-		for batch in 0..<Self.batchSize {
-			let row = batch < rows.count ? rows[batch] : []
-			next[batch] = Int32(max(0, contextCount + row.count - 1))
-			for slot in 0..<Self.scoreSlots {
-				let tokenIndex = slotStart + slot
-				let offset = batch * Self.scoreSlots + slot
-				positions[offset] = tokenIndex < row.count
-					? Int32(contextCount - 1 + tokenIndex) : 0
-				targets[offset] = tokenIndex < row.count ? row[tokenIndex] : 0
-				masks[offset] = tokenIndex < row.count ? 1 : 0
-			}
-		}
-	}
-
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private func readScores(_ array: MLMultiArray, count: Int) -> [Double]? {
-		let shape = array.shape.map(\.intValue)
-		guard shape == [Self.batchSize] || shape == [Self.batchSize, 1] else { return nil }
-		let rowStride = array.strides[0].intValue
-		var result = [Double](repeating: 0, count: count)
-		func copy<T: BinaryFloatingPoint>(_ values: UnsafeBufferPointer<T>) {
-			for index in 0..<count { result[index] = Double(values[index * rowStride]) }
-		}
-		switch array.dataType {
-		case .float16: array.withUnsafeBufferPointer(ofType: Float16.self) { copy($0) }
-		case .float32: array.withUnsafeBufferPointer(ofType: Float.self) { copy($0) }
-		case .double: array.withUnsafeBufferPointer(ofType: Double.self) { copy($0) }
-		default: return nil
-		}
-		return result
-	}
-
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=NeuralLifecycle
 	// MIGRATION-NOTE: Keep bundle selection, runtime-state diagnostics, platform notifications and lifecycle coordination in Swift.
 	private func installMemoryPressureHandler() {
@@ -640,7 +560,7 @@ final class CoreMLNeuralLanguagePrior: NeuralLanguagePrior, @unchecked Sendable 
 		lock.lock()
 		runtimeState = state
 		stateDetail = detail
-		if !retainModel { model = nil; buffers = nil; sessions.removeAll() }
+		if !retainModel { model = nil; sessions.removeAll() }
 		if !keepLoading { loading = false }
 		if startsRetryCooldown { lastFailureAt = Date() }
 		lock.unlock()
@@ -722,7 +642,7 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 	private struct WarmJob {
 		let query: SearchPriorQuery
 		let epoch: UInt64
-		let isKnownWord: (String) -> Bool
+        let lexicon: KBGenerationLexicon
 	}
 	// At most one active job and the latest context/prefix jobs, never one closure per key tap.
 	private var pendingWarmJobs: [WarmJob] = []
@@ -858,7 +778,7 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 	func prepareContext(_ words: [String], wordSessionID: UInt64) {
 		guard let tokenizer else { return }
 		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
-		tokens += tokenizer.encode(words.suffix(neuralContextWordCap).joined(separator: " ").lowercased())
+		tokens += tokenizer.encode(KBNeuralMath.lastWords(words, limit: UInt(neuralContextWordCap)).joined(separator: " ").lowercased())
 		lock.lock(); sessions[wordSessionID] = Session(contextTokens: tokens); lock.unlock()
 	}
 
@@ -892,299 +812,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		lock.unlock()
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns exact query keys, cache lookup and LRU; SWIFT_IOS supplies vocabulary/model epochs and records hit/miss diagnostics.
-	func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]? {
-		lock.lock(); defer { lock.unlock() }
-		let key = searchPriorCache[query] != nil ? query : query.withoutPrefix
-		guard let words = searchPriorCache[key] else { KBDiagnostics.recordSearchPrior(state: "miss"); return nil }
-		KBDiagnostics.recordSearchPrior(state: "hit")
-		searchPriorOrder.removeAll { $0 == key }
-		searchPriorOrder.append(key) // true LRU: hits refresh recency
-		return words
-	}
-
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS coalesces/schedules and publishes current readiness; CPP_CORE owns query/seed and search-cache policy; OBJCXX_BRIDGE executes model batches.
-	func warmSearchPrior(_ query: SearchPriorQuery, isKnownWord: @escaping (String) -> Bool) {
-		guard tokenizer != nil, !query.context.isEmpty else { return }
-		let queries = query.prefix == nil ? [query] : [query.withoutPrefix, query]
-		lock.lock()
-		latestWarmQueries = Set(queries)
-		pendingWarmJobs = queries.filter { searchPriorCache[$0] == nil && activeWarmQuery != $0 }
-			.map { WarmJob(query: $0, epoch: modelEpoch, isKnownWord: isKnownWord) }
-		guard model != nil else { lock.unlock(); prepareForSelection(); return }
-		let schedule = !drainingWarmJobs && !pendingWarmJobs.isEmpty
-		if schedule { drainingWarmJobs = true }
-		lock.unlock()
-		if schedule { queue.async { [weak self] in self?.drainWarmJobs() } }
-	}
-
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=NeuralLifecycle
-	// MIGRATION-NOTE: Keep bundle selection, runtime-state diagnostics, platform notifications and lifecycle coordination in Swift.
-	private func isCurrent(_ job: WarmJob) -> Bool {
-		lock.lock(); defer { lock.unlock() }
-		return modelEpoch == job.epoch && latestWarmQueries.contains(job.query) && model != nil
-	}
-
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS owns job scheduling, epoch/cancellation checks and notifications; CPP_CORE generates/ranks and manages cache policy; OBJCXX_BRIDGE executes predictions.
-	private func drainWarmJobs() {
-		while true {
-			lock.lock()
-			guard !pendingWarmJobs.isEmpty, let model, let tokenizer else {
-				drainingWarmJobs = false; activeWarmQuery = nil; lock.unlock(); return
-			}
-			let job = pendingWarmJobs.removeFirst()
-			activeWarmQuery = job.query
-			lock.unlock()
-			let started = ProcessInfo.processInfo.systemUptime
-			let cancelled = { !self.isCurrent(job) }
-			let generated = generateNextWords(context: job.query.context, model: model,
-				tokenizer: tokenizer, firstLetters: job.query.prefix?.firstLetters, limit: 24,
-				isKnownWord: job.isKnownWord, shouldCancel: cancelled)
-			// Keep all seed words, including adopted words appended after the original pool.
-			var combined = generated.map(\.word)
-			var seen = Set(combined)
-			for word in job.query.pool where job.isKnownWord(word)
-				&& Self.matchesPrefix(word, firstLetters: job.query.prefix?.firstLetters)
-				&& seen.insert(word).inserted { combined.append(word) }
-			let ranked = cancelled() ? [] : rankPool(combined, context: job.query.context,
-				model: model, tokenizer: tokenizer, shouldCancel: cancelled)
-			lock.lock()
-			let current = modelEpoch == job.epoch && latestWarmQueries.contains(job.query)
-			let callback = current && !ranked.isEmpty ? readyHandler : nil
-			if current && !ranked.isEmpty {
-				searchPriorCache[job.query] = ranked
-				searchPriorOrder.removeAll { $0 == job.query }
-				searchPriorOrder.append(job.query)
-				while searchPriorOrder.count > Self.searchPriorCacheCapacity {
-					searchPriorCache.removeValue(forKey: searchPriorOrder.removeFirst())
-				}
-			}
-			activeWarmQuery = nil
-			lock.unlock()
-			KBDiagnostics.recordSearchPrior(milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1000,
-				state: current ? "completed" : "cancelled")
-			callback?(job.query)
-		}
-	}
-
-	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-	private static func matchesPrefix(_ word: String, firstLetters: Set<Character>?) -> Bool {
-		guard let firstLetters else { return true }
-		guard let first = word.lowercased().first else { return false }
-		return firstLetters.contains(first)
-	}
-
-	/// GRU log P(word | context) for each supplied word, best first, WITH the log-prob attached.
-	/// Reuses the streaming score path so the words are ranked by the neural LM on one consistent
-	/// scale. Best-effort: a Core ML failure yields [] and the caller keeps the n-gram pool. The
-	/// supplied set is the GRU's GENERATED next-words unioned with the n-gram pool, so ranking spans
-	/// both sources — the GRU no longer merely re-orders what the n-gram already proposed.
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
-	private func rankPool(_ pool: [String], context: [String], model: MLModel,
-		tokenizer: KeyboardSentencePieceTokenizer, shouldCancel: () -> Bool = { false }) -> [SearchPriorWord] {
-		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
-		tokens += tokenizer.encode(context.suffix(neuralContextWordCap).joined(separator: " ").lowercased())
-		let session = Session(contextTokens: tokens)
-		guard let scored = try? streamScore(pool, session: session, model: model,
-			tokenizer: tokenizer, shouldCancel: shouldCancel) else { return [] }
-		return pool
-			.compactMap { word in
-				scored[word.lowercased()].map { SearchPriorWord(word: word, logProbability: $0) }
-			}
-			.sorted { $0.logProbability > $1.logProbability }
-	}
-
-	// MARK: Next-word GENERATION (subword beam) — the recall fix vs pool reranking
-	//
-	// rankPool only RE-ORDERS the n-gram's candidate pool, so it inherits the n-gram's
-	// next-word recall ceiling. This decodes the GRU's OWN next-word distribution as a
-	// bounded subword beam, GENERATING context-plausible words the n-gram never proposed
-	// (e.g. "on my WAY", "what are you DOING" when those continuations aren't in the sparse
-	// bi/trigram tables). Each word is scored by log P(word) + log P(it ends here), so a
-	// fragment the model wants to keep extending ("apo" → "apolog…") sinks below real words.
-	// Alphabetic candidates only; the engine intersects them with the lexicon (a generated
-	// word helps only if the trie can emit it). Validated against the PyTorch checkpoint in
-	// tools/lm/generate_next_words.py, whose beam this mirrors step for step.
-
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
-	private struct BeamHypothesis {
-		var pieces: [Int32]
-		var logProbability: Double
-		var state: MLMultiArray
-		var previous: Int32
-	}
-
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns legal-token filtering, beam hypotheses and complete-word scoring; OBJCXX_BRIDGE predicts recurrent steps; SWIFT_IOS supplies cancellation/epoch validity.
-	private func generateNextWords(context: [String], model: MLModel,
-		tokenizer: KeyboardSentencePieceTokenizer, firstLetters: Set<Character>?, limit: Int,
-		beamWidth: Int = 12, branch: Int = 8, maxPieces: Int = 6,
-		isKnownWord: (String) -> Bool = { _ in true }, shouldCancel: () -> Bool = { false })
-		-> [(word: String, logProbability: Double)] {
-		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
-		tokens += tokenizer.encode(context.suffix(neuralContextWordCap).joined(separator: " ").lowercased())
-		if tokens.isEmpty { tokens = [tokenizer.padID] }
-		guard let contextState = try? runContext(tokens, model: model) else { return [] }
-		var frontier = [BeamHypothesis(pieces: [], logProbability: 0,
-			state: contextState, previous: tokens.last ?? tokenizer.padID)]
-		var completed: [String: Double] = [:]
-		for depth in 0...maxPieces {
-			guard !shouldCancel() else { return [] }
-			var extended: [BeamHypothesis] = []
-			for hypothesis in frontier {
-				guard !shouldCancel() else { return [] }
-				guard let (logits, nextState) = try? step(hypothesis.previous,
-						state: hypothesis.state, model: model),
-					let logProbabilities = Self.logProbabilities(logits) else { continue }
-				// Record the word ending HERE, weighted by the probability it ends here.
-				if !hypothesis.pieces.isEmpty {
-					let word = tokenizer.word(fromPieceIDs: hypothesis.pieces)
-					if !word.isEmpty, isKnownWord(word) {
-						let boundary = Self.boundaryLogProbability(logProbabilities,
-							tokenizer: tokenizer)
-						completed[word] = max(completed[word] ?? -.infinity,
-							hypothesis.logProbability + boundary)
-					}
-				}
-				guard depth < maxPieces else { continue }
-				let legal: (Int) -> Bool = { index in
-					if hypothesis.pieces.isEmpty {
-						return tokenizer.startContent[index] && Self.startLetterAllowed(index,
-							firstLetters: firstLetters, tokenizer: tokenizer)
-					}
-					return tokenizer.continuationContent[index]
-				}
-				for token in Self.topIndices(logProbabilities, count: branch, allowed: legal) {
-					let index = Int(token)
-					guard index < tokenizer.continuationContent.count else { continue }
-					let step = hypothesis.logProbability + Double(logProbabilities[index])
-					if hypothesis.pieces.isEmpty {
-						// Prefix-AWARE: seed only word-starts whose first letter is spatially
-						// reachable from the first tap (nil ⇒ no constraint, today's behavior).
-						if tokenizer.startContent[index],
-							Self.startLetterAllowed(index, firstLetters: firstLetters,
-								tokenizer: tokenizer) {
-							extended.append(BeamHypothesis(pieces: [token],
-								logProbability: step, state: nextState, previous: token))
-						}
-					} else if tokenizer.continuationContent[index] {
-						extended.append(BeamHypothesis(pieces: hypothesis.pieces + [token],
-							logProbability: step, state: nextState, previous: token))
-					}
-				}
-			}
-			if extended.isEmpty { break }
-			extended.sort { $0.logProbability > $1.logProbability }
-			frontier = Array(extended.prefix(beamWidth))
-		}
-		// Keep the beam's own log-probabilities (previously discarded): the caller re-scores the
-		// union on a consistent scale, but returning them honours the generation ordering and lets
-		// a pure-beam caller fund the trie directly.
-		return completed.sorted { $0.value > $1.value }.prefix(limit)
-			.map { (word: $0.key, logProbability: $0.value) }
-	}
-
-	/// Whether a word-initial piece may seed the beam under a prefix constraint — its first letter
-	/// must be in the spatially-plausible set. nil set ⇒ unconstrained (context-only generation).
-	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-	private static func startLetterAllowed(_ index: Int, firstLetters: Set<Character>?,
-		tokenizer: KeyboardSentencePieceTokenizer) -> Bool {
-		guard let firstLetters else { return true }
-		guard index < tokenizer.startFirstLetter.count,
-			let letter = tokenizer.startFirstLetter[index] else { return false }
-		return firstLetters.contains(letter)
-	}
-
-	/// Dense log-softmax read straight off the logits buffer (no per-element NSNumber
-	/// boxing on the beam's hot loop).
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: OBJCXX_BRIDGE extracts checked stride-aware logits; CPP_CORE calculates finite log-softmax values.
-	private static func logProbabilities(_ array: MLMultiArray) -> [Float]? {
-		let count = array.count
-		guard count > 0 else { return nil }
-		var values = [Float](repeating: 0, count: count)
-		func load<T: BinaryFloatingPoint>(_ buffer: UnsafeBufferPointer<T>) {
-			for index in 0..<count { values[index] = Float(buffer[index]) }
-		}
-		if !Self.isContiguous(array) {
-			for index in 0..<count { values[index] = array[index].floatValue }
-		} else { switch array.dataType {
-		case .float16: array.withUnsafeBufferPointer(ofType: Float16.self) { load($0) }
-		case .float32: array.withUnsafeBufferPointer(ofType: Float.self) { load($0) }
-		case .double: array.withUnsafeBufferPointer(ofType: Double.self) { load($0) }
-		default: return nil
-		}
-		}
-		guard values.allSatisfy(\.isFinite) else { return nil }
-		var maximum = -Float.greatestFiniteMagnitude
-		for value in values where value > maximum { maximum = value }
-		var sum: Float = 0
-		for value in values { sum += expf(value - maximum) }
-		let logSum = maximum + logf(sum)
-		for index in 0..<count { values[index] -= logSum }
-		return values
-	}
-
-	/// log P(next token is a boundary) = logsumexp over every non-continuation piece (a new
-	/// word start, punctuation, byte, or EOS) — the probability the current word ends here.
-	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-	private static func boundaryLogProbability(_ logProbabilities: [Float],
-		tokenizer: KeyboardSentencePieceTokenizer) -> Double {
-		let continuation = tokenizer.continuationContent
-		let count = min(logProbabilities.count, continuation.count)
-		var maximum = -Float.greatestFiniteMagnitude
-		for index in 0..<count where !continuation[index] && logProbabilities[index] > maximum {
-			maximum = logProbabilities[index]
-		}
-		guard maximum > -Float.greatestFiniteMagnitude else { return -30 }
-		var sum: Float = 0
-		for index in 0..<count where !continuation[index] {
-			sum += expf(logProbabilities[index] - maximum)
-		}
-		return Double(maximum + logf(sum))
-	}
-
-	/// Indices of the `count` largest values — a bounded top-k over the ~6k vocab (a full
-	/// sort would dominate the beam step).
-	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-	static func topIndices(_ values: [Float], count: Int, allowed: (Int) -> Bool = { _ in true }) -> [Int32] {
-		let k = min(count, values.count)
-		guard k > 0 else { return [] }
-		var top: [(value: Float, index: Int32)] = []
-		top.reserveCapacity(k)
-		var threshold = -Float.greatestFiniteMagnitude
-		for index in 0..<values.count where allowed(index) {
-			let value = values[index]
-			if top.count < k {
-				top.append((value, Int32(index)))
-				if top.count == k {
-					top.sort { $0.value > $1.value }
-					threshold = top[k - 1].value
-				}
-			} else if value > threshold {
-				top[k - 1] = (value, Int32(index))
-				var position = k - 1
-				while position > 0, top[position].value > top[position - 1].value {
-					top.swapAt(position, position - 1)
-					position -= 1
-				}
-				threshold = top[k - 1].value
-			}
-		}
-		return top.sorted { $0.value == $1.value ? $0.index < $1.index : $0.value > $1.value }.map(\.index)
-	}
-
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS retains protocol/session/cancellation and completion semantics; CPP_CORE owns candidate/token/score orchestration; OBJCXX_BRIDGE executes model work.
 	func score(candidates: [String], wordSessionID: UInt64,
 		completion: @escaping (Result<[String: Double], Error>) -> Void) {
 		guard !candidates.isEmpty else { completion(.success([:])); return }
@@ -1214,231 +841,229 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		}
 	}
 
-	/// Complete-word probabilities. Optional batch exports must implement the same
-	/// boundary convention; legacy exports fall back to streaming rather than changing scores.
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 	private func streamScore(_ candidates: [String], session: Session, model: MLModel,
 		tokenizer: KeyboardSentencePieceTokenizer, shouldCancel: () -> Bool = { false }) throws -> [String: Double] {
-		lock.lock(); let batched = scoreModel; lock.unlock()
-		if let batched {
-			return try batchScore(candidates, session: session, stepModel: model,
-				scoreModel: batched, tokenizer: tokenizer, shouldCancel: shouldCancel)
-		}
-		return try streamScoreSingleStep(candidates, session: session, model: model, tokenizer: tokenizer, shouldCancel: shouldCancel)
-	}
-
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
-	private func streamScoreSingleStep(_ candidates: [String], session: Session, model: MLModel,
-		tokenizer: KeyboardSentencePieceTokenizer, shouldCancel: () -> Bool = { false }) throws -> [String: Double] {
-		let contextState = try runContext(session.contextTokens, model: model)
-		let previousToken = session.contextTokens.last ?? tokenizer.padID
-		let (firstLogits, firstState) = try step(previousToken, state: contextState, model: model)
-		guard let firstLogProbs = Self.logProbabilities(firstLogits) else { throw GRUError.badOutput }
-		var out: [String: Double] = [:]
-		for key in Set(candidates.map { $0.lowercased() }).sorted() {
-			guard !shouldCancel() else { throw GRUError.cancelled }
-			let tokens = tokenizer.encode(key)
-			guard let first = tokens.first, Int(first) < firstLogProbs.count else { continue }
-			var probability = Double(firstLogProbs[Int(first)])
-			var state = firstState
-			var previous = first
-			for token in tokens.dropFirst() {
-				guard !shouldCancel() else { throw GRUError.cancelled }
-				let (logits, nextState) = try step(previous, state: state, model: model)
-				probability += Self.logSoftmax(logits, at: Int(token))
-				state = nextState; previous = token
-			}
-			let (ending, _) = try step(previous, state: state, model: model)
-			guard let endingProbabilities = Self.logProbabilities(ending) else { throw GRUError.badOutput }
-			probability += Self.boundaryLogProbability(endingProbabilities, tokenizer: tokenizer)
-			guard probability.isFinite else { throw GRUError.badOutput }
-			out[key] = probability
-		}
-		return out
-	}
-
-	/// Chunked complete-word scoring. T reserves one position for the ending event.
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
-	private func batchScore(_ candidates: [String], session: Session, stepModel: MLModel,
-		scoreModel: MLModel, tokenizer: KeyboardSentencePieceTokenizer, shouldCancel: () -> Bool = { false }) throws -> [String: Double] {
-		let B = Self.scoreBatch, T = Self.scoreTime
-		let contextState = try runContext(session.contextTokens, model: stepModel)
-		let previousToken = session.contextTokens.last ?? tokenizer.padID
+		guard !shouldCancel() else { throw GRUError.cancelled }
+		let state = try runContext(session.contextTokens, model: model)
+		let previous = session.contextTokens.last ?? tokenizer.padID
 		let keys = Array(Set(candidates.map { $0.lowercased() })).sorted()
-		var out: [String: Double] = [:]
-		var overflow: [String] = []
-		for start in stride(from: 0, to: keys.count, by: B) {
-			lock.lock(); let current = self.model === stepModel; lock.unlock()
-			guard current && !shouldCancel() else { throw GRUError.cancelled }
-			var rows: [(key: String, tokens: [Int32])] = []
-			for key in keys[start..<min(start + B, keys.count)] {
-				let pieces = tokenizer.encode(key)
-				guard !pieces.isEmpty else { continue }
-				if pieces.count < T { rows.append((key, pieces)) } else { overflow.append(key) }
-			}
-			guard !rows.isEmpty else { continue }
-			let tokens = try MLMultiArray(shape: [NSNumber(value: B), NSNumber(value: T)], dataType: .int32)
-			let targets = try MLMultiArray(shape: tokens.shape, dataType: .int32)
-			let mask = try MLMultiArray(shape: tokens.shape, dataType: .float32)
-			let boundaries = try MLMultiArray(shape: [NSNumber(value: B)], dataType: .int32)
-			let stateIn = try MLMultiArray(shape: [NSNumber(value: layers), NSNumber(value: B), NSNumber(value: hidden)], dataType: .float32)
-			guard let contextValues = Self.readVector(contextState, count: layers * hidden) else { throw GRUError.badOutput }
-			let tokenPointer = tokens.dataPointer.bindMemory(to: Int32.self, capacity: B * T)
-			let targetPointer = targets.dataPointer.bindMemory(to: Int32.self, capacity: B * T)
-			let maskPointer = mask.dataPointer.bindMemory(to: Float.self, capacity: B * T)
-			for index in 0..<(B * T) { tokenPointer[index] = tokenizer.padID; targetPointer[index] = 0; maskPointer[index] = 0 }
-			for batch in 0..<B { boundaries[batch] = 0 }
-			for (batch, row) in rows.enumerated() {
-				for index in row.tokens.indices {
-					tokenPointer[batch * T + index] = index == 0 ? previousToken : row.tokens[index - 1]
-					targetPointer[batch * T + index] = row.tokens[index]
-					maskPointer[batch * T + index] = 1
+		let pairs = keys.compactMap { key -> (String, [Int32])? in
+			let ids = tokenizer.encode(key)
+			return ids.isEmpty ? nil : (key, ids)
+		}
+		lock.lock(); let batched = scoreModel; lock.unlock()
+		var result: [String: Double] = [:]
+		var remaining = pairs
+		if let batched {
+			let eligible = pairs.filter { $0.1.count < Self.scoreTime }
+			remaining = pairs.filter { $0.1.count >= Self.scoreTime }
+			if !eligible.isEmpty {
+				let values: [NSNumber]? = withoutActuallyEscaping(shouldCancel) { cancel in
+					KBNeuralRuntime.scoreBatch(batched, state: state, previous: previous,
+						padID: tokenizer.padID, rows: eligible.map { $0.1.map(NSNumber.init(value:)) },
+						layers: UInt(layers), hidden: UInt(hidden), batchSize: UInt(Self.scoreBatch),
+						time: UInt(Self.scoreTime), cancel: cancel)
 				}
-				tokenPointer[batch * T + row.tokens.count] = row.tokens.last!
-				boundaries[batch] = NSNumber(value: row.tokens.count)
+				guard let values, values.count == eligible.count else { throw GRUError.badOutput }
+				for (index, item) in eligible.enumerated() { result[item.0] = values[index].doubleValue }
 			}
-			let statePointer = stateIn.dataPointer.bindMemory(to: Float.self, capacity: layers * B * hidden)
-			for layer in 0..<layers { for batch in 0..<B { for unit in 0..<hidden {
-				statePointer[(layer * B + batch) * hidden + unit] = Float(contextValues[layer * hidden + unit])
-			} } }
-			let provider = try MLDictionaryFeatureProvider(dictionary: ["tokens": tokens, "state_in": stateIn,
-				"targets": targets, "mask": mask, "boundary_positions": boundaries])
-			let output = try scoreModel.prediction(from: provider)
-			guard let probabilities = output.featureValue(for: "log_probs")?.multiArrayValue,
-				let values = Self.readVector(probabilities, count: rows.count), values.allSatisfy(\.isFinite)
-			else { throw GRUError.badOutput }
-			for (batch, row) in rows.enumerated() { out[row.key] = values[batch] }
 		}
-		if !overflow.isEmpty {
-			out.merge(try streamScoreSingleStep(overflow, session: session, model: stepModel, tokenizer: tokenizer, shouldCancel: shouldCancel)) { $1 }
+		if !remaining.isEmpty {
+			let scored: [String: NSNumber]? = withoutActuallyEscaping(shouldCancel) { cancel in
+				KBNeuralRuntime.score(tokenizer.native, model: model, state: state, previous: previous,
+					words: remaining.map(\.0), tokens: remaining.map { $0.1.map(NSNumber.init(value:)) },
+					layers: UInt(layers), hidden: UInt(hidden), cancel: cancel)
+			}
+			guard let scored else { throw GRUError.badOutput }
+			for (key, value) in scored { result[key] = value.doubleValue }
 		}
-		return out
-	}
-
-	/// Read the first `count` scalars of a 1-D Core ML array, fp16/fp32/double tolerant.
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private static func isContiguous(_ array: MLMultiArray) -> Bool {
-		var expected = 1
-		for (dimension, stride) in zip(array.shape, array.strides).reversed() {
-			if dimension.intValue > 1 && stride.intValue != expected { return false }
-			expected *= dimension.intValue
-		}
-		return true
-	}
-
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private static func readVector(_ array: MLMultiArray, count: Int) -> [Double]? {
-		guard array.count >= count else { return nil }
-		if !isContiguous(array) { return (0..<count).map { array[$0].doubleValue } }
-		var result = [Double](repeating: 0, count: count)
-		func copy<T: BinaryFloatingPoint>(_ buffer: UnsafeBufferPointer<T>) {
-			for index in 0..<count { result[index] = Double(buffer[index]) }
-		}
-		switch array.dataType {
-		case .float16: array.withUnsafeBufferPointer(ofType: Float16.self) { copy($0) }
-		case .float32: array.withUnsafeBufferPointer(ofType: Float.self) { copy($0) }
-		case .double: array.withUnsafeBufferPointer(ofType: Double.self) { copy($0) }
-		default: return nil
-		}
+		guard !shouldCancel() else { throw GRUError.cancelled }
 		return result
 	}
 
-	/// Recurrent state after consuming [pad, t0 … t_{n-2}] — the state the first candidate/beam step
-	/// continues from. PERSISTED across word boundaries: when the cached tokens are a prefix of
-	/// `tokens` (the common case — a committed word grows the ≤12-word context), only the divergent
-	/// suffix is threaded, not the whole context from zero, cutting ~20–30 sequential Core ML steps
-	/// per pass to ~one per newly committed token. A prefix mismatch (backspace across a boundary,
-	/// cursor move, field change) rebuilds from zero. The cache holds a pure function of the tokens,
-	/// so a stale entry is never wrong — it either prefix-matches (exact extension) or is discarded.
 	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns context-token/state-cache policy; OBJCXX_BRIDGE owns recurrent-state transport/prediction; SWIFT_IOS coordinates model/session epochs.
+	// MIGRATION-SPLIT: CPP_CORE owns exact query keys, cache lookup and LRU; SWIFT_IOS supplies vocabulary/model epochs and records hit/miss diagnostics.
+	func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]? {
+		lock.lock(); defer { lock.unlock() }
+		let key = searchPriorCache[query] != nil ? query : query.withoutPrefix
+		guard let words = searchPriorCache[key] else { KBDiagnostics.recordSearchPrior(state: "miss"); return nil }
+		KBDiagnostics.recordSearchPrior(state: "hit")
+		searchPriorOrder.removeAll { $0 == key }
+		searchPriorOrder.append(key) // true LRU: hits refresh recency
+		return words
+	}
+
+	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
+	// MIGRATION-SPLIT: SWIFT_IOS coalesces/schedules and publishes current readiness; CPP_CORE owns query/seed and search-cache policy; OBJCXX_BRIDGE executes model batches.
+	func warmSearchPrior(_ query: SearchPriorQuery, lexicon: KBGenerationLexicon) {
+		guard tokenizer != nil, !query.context.isEmpty else { return }
+		let queries = query.prefix == nil ? [query] : [query.withoutPrefix, query]
+		lock.lock()
+		latestWarmQueries = Set(queries)
+		pendingWarmJobs = queries.filter { searchPriorCache[$0] == nil && activeWarmQuery != $0 }
+			.map { WarmJob(query: $0, epoch: modelEpoch, lexicon: lexicon) }
+		guard model != nil else { lock.unlock(); prepareForSelection(); return }
+		let schedule = !drainingWarmJobs && !pendingWarmJobs.isEmpty
+		if schedule { drainingWarmJobs = true }
+		lock.unlock()
+		if schedule { queue.async { [weak self] in self?.drainWarmJobs() } }
+	}
+
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=NeuralLifecycle
+	// MIGRATION-NOTE: Keep bundle selection, runtime-state diagnostics, platform notifications and lifecycle coordination in Swift.
+	private func isCurrent(_ job: WarmJob) -> Bool {
+		lock.lock(); defer { lock.unlock() }
+		return modelEpoch == job.epoch && latestWarmQueries.contains(job.query) && model != nil
+	}
+
+	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
+	// MIGRATION-SPLIT: SWIFT_IOS owns job scheduling, epoch/cancellation checks and notifications; CPP_CORE generates/ranks and manages cache policy; OBJCXX_BRIDGE executes predictions.
+	private func drainWarmJobs() {
+		while true {
+			lock.lock()
+			guard !pendingWarmJobs.isEmpty, let model, let tokenizer else {
+				drainingWarmJobs = false; activeWarmQuery = nil; lock.unlock(); return
+			}
+			let job = pendingWarmJobs.removeFirst()
+			activeWarmQuery = job.query
+			lock.unlock()
+			let started = ProcessInfo.processInfo.systemUptime
+			let cancelled = { !self.isCurrent(job) }
+			let generated = generateNextWords(context: job.query.context, model: model,
+				tokenizer: tokenizer, firstLetters: job.query.prefix?.firstLetters, limit: 24,
+				lexicon: job.lexicon, shouldCancel: cancelled)
+			// Keep all seed words, including adopted words appended after the original pool.
+            var combined = generated.map(\.word)
+            var seen = Set(combined)
+            let letters = (job.query.prefix?.firstLetters ?? []).map(String.init)
+            let seed = KBNeuralMath.knownWords(job.query.pool, lexicon: job.lexicon, firstLetters: letters)
+            for word in seed where seen.insert(word).inserted { combined.append(word) }
+			let ranked = cancelled() ? [] : rankPool(combined, context: job.query.context,
+				model: model, tokenizer: tokenizer, shouldCancel: cancelled)
+			lock.lock()
+			let current = modelEpoch == job.epoch && latestWarmQueries.contains(job.query)
+			let callback = current && !ranked.isEmpty ? readyHandler : nil
+			if current && !ranked.isEmpty {
+				searchPriorCache[job.query] = ranked
+				searchPriorOrder.removeAll { $0 == job.query }
+				searchPriorOrder.append(job.query)
+				while searchPriorOrder.count > Self.searchPriorCacheCapacity {
+					searchPriorCache.removeValue(forKey: searchPriorOrder.removeFirst())
+				}
+			}
+			activeWarmQuery = nil
+			lock.unlock()
+			KBDiagnostics.recordSearchPrior(milliseconds: (ProcessInfo.processInfo.systemUptime - started) * 1000,
+				state: current ? "completed" : "cancelled")
+			callback?(job.query)
+		}
+	}
+
+	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+
+
+	/// GRU log P(word | context) for each supplied word, best first, WITH the log-prob attached.
+	/// Reuses the streaming score path so the words are ranked by the neural LM on one consistent
+	/// scale. Best-effort: a Core ML failure yields [] and the caller keeps the n-gram pool. The
+	/// supplied set is the GRU's GENERATED next-words unioned with the n-gram pool, so ranking spans
+	/// both sources — the GRU no longer merely re-orders what the n-gram already proposed.
+	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
+	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
+	private func rankPool(_ pool: [String], context: [String], model: MLModel,
+		tokenizer: KeyboardSentencePieceTokenizer, shouldCancel: () -> Bool = { false }) -> [SearchPriorWord] {
+		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
+		tokens += tokenizer.encode(KBNeuralMath.lastWords(context, limit: UInt(neuralContextWordCap)).joined(separator: " ").lowercased())
+		let session = Session(contextTokens: tokens)
+		guard let scored = try? streamScore(pool, session: session, model: model,
+			tokenizer: tokenizer, shouldCancel: shouldCancel) else { return [] }
+        let available = pool.filter { scored[$0.lowercased()] != nil }
+        let ordered = KBNeuralRuntime.sortWords(available, scores: available.map { NSNumber(value: scored[$0.lowercased()]!) }, limit: UInt(available.count))
+        return ordered.compactMap { word in scored[word.lowercased()].map { SearchPriorWord(word: word, logProbability: $0) } }
+	}
+
+	// MARK: Next-word GENERATION (subword beam) — the recall fix vs pool reranking
+	//
+	// rankPool only RE-ORDERS the n-gram's candidate pool, so it inherits the n-gram's
+	// next-word recall ceiling. This decodes the GRU's OWN next-word distribution as a
+	// bounded subword beam, GENERATING context-plausible words the n-gram never proposed
+	// (e.g. "on my WAY", "what are you DOING" when those continuations aren't in the sparse
+	// bi/trigram tables). Each word is scored by log P(word) + log P(it ends here), so a
+	// fragment the model wants to keep extending ("apo" → "apolog…") sinks below real words.
+	// Alphabetic candidates only; the engine intersects them with the lexicon (a generated
+	// word helps only if the trie can emit it). Validated against the PyTorch checkpoint in
+	// tools/lm/generate_next_words.py, whose beam this mirrors step for step.
+
+	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
+	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
+
+
+	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
+	// MIGRATION-SPLIT: CPP_CORE owns legal-token filtering, beam hypotheses and complete-word scoring; OBJCXX_BRIDGE predicts recurrent steps; SWIFT_IOS supplies cancellation/epoch validity.
+	private func generateNextWords(context: [String], model: MLModel,
+		tokenizer: KeyboardSentencePieceTokenizer, firstLetters: Set<Character>?, limit: Int,
+		beamWidth: Int = 12, branch: Int = 8, maxPieces: Int = 6,
+		lexicon: KBGenerationLexicon, shouldCancel: () -> Bool = { false })
+		-> [(word: String, logProbability: Double)] {
+		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
+		tokens += tokenizer.encode(KBNeuralMath.lastWords(context, limit: UInt(neuralContextWordCap)).joined(separator: " ").lowercased())
+		if tokens.isEmpty { tokens = [tokenizer.padID] }
+		guard let contextState = try? runContext(tokens, model: model) else { return [] }
+        let allowed = tokenizer.startFirstLetter.map { letter in
+            NSNumber(value: firstLetters.map { letters in letter.map { letters.contains($0) } ?? false } ?? true)
+        }
+        let completed: [String: NSNumber]? = withoutActuallyEscaping(shouldCancel) { cancel in
+            KBNeuralRuntime.generate(tokenizer.native, model: model, state: contextState,
+                previous: tokens.last ?? tokenizer.padID, starts: allowed,
+                width: UInt(max(0, beamWidth)), branch: UInt(max(0, branch)), depth: UInt(max(0, maxPieces)),
+                layers: UInt(layers), hidden: UInt(hidden), lexicon: lexicon, cancel: cancel)
+        }
+        guard let completed else { return [] }
+        let words = Array(completed.keys)
+        return KBNeuralRuntime.sortWords(words, scores: words.map { completed[$0]! }, limit: UInt(max(0, limit)))
+            .map { (word: $0, logProbability: completed[$0]!.doubleValue) }
+	}
+
+	/// Whether a word-initial piece may seed the beam under a prefix constraint — its first letter
+	/// must be in the spatially-plausible set. nil set ⇒ unconstrained (context-only generation).
+	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+	private static func startLetterAllowed(_ index: Int, firstLetters: Set<Character>?,
+		tokenizer: KeyboardSentencePieceTokenizer) -> Bool {
+		guard let firstLetters else { return true }
+		guard index < tokenizer.startFirstLetter.count,
+			let letter = tokenizer.startFirstLetter[index] else { return false }
+		return firstLetters.contains(letter)
+	}
+
+	/// Dense log-softmax read straight off the logits buffer (no per-element NSNumber
+	/// boxing on the beam's hot loop).
+	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
+	// MIGRATION-SPLIT: OBJCXX_BRIDGE extracts checked stride-aware logits; CPP_CORE calculates finite log-softmax values.
 	private func runContext(_ tokens: [Int32], model: MLModel) throws -> MLMultiArray {
 		lock.lock()
 		let epoch = modelEpoch
 		let valid = self.model === model
 		let cached = valid ? contextStateCache : nil
 		lock.unlock()
-		guard valid else { throw GRUError.cancelled }
-		var state: MLMultiArray
-		var previous: Int32
-		var index: Int
-		if let cached, !cached.tokens.isEmpty, tokens.starts(with: cached.tokens) {
-			state = cached.state
-			previous = cached.tokens[cached.tokens.count - 1]
-			index = cached.tokens.count
-		} else {
-			state = try zeroState()
-			previous = tokenizer?.padID ?? 0
-			index = 0
+		guard valid, let tokenizer else { throw GRUError.cancelled }
+		let plan = KBNeuralRuntime.contextPlan(tokens.map(NSNumber.init(value:)),
+			cached: (cached?.tokens ?? []).map(NSNumber.init(value:)), pad: tokenizer.padID)
+		let state = plan[0].boolValue ? cached!.state : KBNeuralRuntime.zeroState(withLayers: UInt(layers), hidden: UInt(hidden))
+		let suffix = Array(tokens.dropFirst(plan[1].intValue)).map(NSNumber.init(value:))
+		let cancelled = { [weak self] in
+			guard let self else { return true }
+			self.lock.lock(); defer { self.lock.unlock() }
+			return self.modelEpoch != epoch || self.model !== model
 		}
-		while index < tokens.count {
-			let (_, nextState) = try step(previous, state: state, model: model)
-			state = nextState
-			previous = tokens[index]
-			index += 1
-		}
+		guard let result = withoutActuallyEscaping(cancelled, do: { cancel in
+			KBNeuralRuntime.threadContext(suffix, tokenizer: tokenizer.native, model: model, state: state,
+				previous: plan[2].int32Value, layers: UInt(layers), hidden: UInt(hidden), cancel: cancel)
+		}) else { throw GRUError.cancelled }
 		lock.lock()
-		if modelEpoch == epoch && self.model === model { contextStateCache = (tokens, state) }
+		if modelEpoch == epoch && self.model === model { contextStateCache = (tokens, result) }
 		lock.unlock()
-		return state
+		return result
 	}
 
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private func step(_ token: Int32, state: MLMultiArray, model: MLModel) throws
-		-> (logits: MLMultiArray, state: MLMultiArray) {
-		lock.lock(); let current = self.model === model; lock.unlock()
-		guard current else { throw GRUError.cancelled }
-		let tokenArray = try MLMultiArray(shape: [1, 1], dataType: .int32)
-		tokenArray[0] = NSNumber(value: token)
-		let provider = try MLDictionaryFeatureProvider(dictionary: [
-			"token": tokenArray, "state_in": state])
-		let output = try model.prediction(from: provider)
-		guard let logits = output.featureValue(for: "logits")?.multiArrayValue,
-			let newState = output.featureValue(for: "state_out")?.multiArrayValue,
-			logits.count == tokenizer?.idToPiece.count,
-			newState.shape.map(\.intValue) == [layers, 1, hidden],
-			newState.dataType == .float32 else {
-			throw GRUError.badOutput
-		}
-		return (logits, newState)
-	}
-
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private func zeroState() throws -> MLMultiArray {
-		let state = try MLMultiArray(
-			shape: [NSNumber(value: layers), 1, NSNumber(value: hidden)], dataType: .float32)
-		memset(state.dataPointer, 0, state.count * MemoryLayout<Float>.stride)
-		return state
-	}
-
-	/// Branch the recurrent state for one candidate. The state is a contiguous fp32 [layers,1,hidden]
-	/// tensor (~512 floats), so a bulk `memcpy` replaces the old element-by-element subscript copy,
-	/// which boxed an NSNumber per float — 512 boxes per candidate on the hottest path. Falls back to
-	/// the element copy if the source is ever non-contiguous or not fp32.
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
-	private func duplicate(_ source: MLMultiArray) throws -> MLMultiArray {
-		let clone = try MLMultiArray(shape: source.shape, dataType: source.dataType)
-		if source.dataType == .float32, source.strides == clone.strides {
-			memcpy(clone.dataPointer, source.dataPointer, source.count * MemoryLayout<Float>.stride)
-		} else {
-			for index in 0..<source.count { clone[index] = source[index] }
-		}
-		return clone
-	}
-
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: OBJCXX_BRIDGE exposes checked logits; CPP_CORE evaluates the log-softmax kernel at the requested index.
-	private static func logSoftmax(_ array: MLMultiArray, at index: Int) -> Double {
-		guard let probabilities = logProbabilities(array), probabilities.indices.contains(index)
-		else { return .nan }
-		return Double(probabilities[index])
-	}
 }

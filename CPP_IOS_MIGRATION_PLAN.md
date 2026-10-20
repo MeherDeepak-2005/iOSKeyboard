@@ -1,6 +1,6 @@
-> Current update: the default ASCII English tap candidate generator and mutable trie backend now run in C++. See [scope, reference paths and verification](docs/decoder-platform/CPP_CANDIDATE_GENERATION.md). Ranking, Unicode fallback, Glide and neural algorithms still have Swift ownership.
+> Current update: English candidate generation, ranking/correction, Unicode alignment, n-gram models, Glide, multiword search and portable neural-search mathematics now run in C++. See [scope, reference paths and verification](docs/decoder-platform/CPP_CANDIDATE_GENERATION.md). Swift still owns iOS lifecycle, model loading, mutable personalization persistence, and UI publication.
 
-> Implementation update: C++ is now the primary English packed/retained search and language-score mathematics backend. The full cross-platform policy/Glide/neural migration remains in progress. See [current Android/iOS architecture](ANDROID_IOS_ARCHITECTURE.md) for exact ownership, default routing and validation.
+> Implementation boundary: Objective-C++ executes Core ML models and transports tensors; the portable core owns decoding policy. The Android bridge and trained-model/device-runtime validation remain separate work. See [current Android/iOS architecture](ANDROID_IOS_ARCHITECTURE.md) for the earlier cross-platform baseline.
 
 # Planned C++ / iOS decoder migration
 
