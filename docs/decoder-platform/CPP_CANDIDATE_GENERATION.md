@@ -137,3 +137,58 @@ more of the 15 MB vocabulary file while selecting seeds, so this RSS comparison
 does not establish a memory win; it identifies startup/page residency as the
 next optimization target. These numbers are for the retained-DP harness, not
 whole-request decode or iPhone latency.
+
+## Shared English engine checkpoint — 2026-10-20
+
+English tap decoding is now one portable request: `kb::Engine` / `EngineSession`
+(`native/DecoderCore/src/Engine.cpp`) runs retained search, generation, n-gram
+scoring, ranking and the correction/suggestion contract behind one call. iOS reaches
+it through `KBSharedEngine` (n-gram tier, `.cpp` backend) and Android through
+`NativeKeyboardEngine` / `SharedEngineJni.cpp`. Streaming Glide sessions, live
+personalization counts, keep/undo state, glide vocabulary and boosts
+(`Personalization`, `VocabularyState`) are native too. Swift keeps scheduling,
+request identity, JSON persistence, UI publication, the neural tiers, batch
+`glide()` and all Telugu/Tenglish code (untouched by this change). `EngineWire`
+is the versioned byte format for Android results and personalization snapshots.
+`Safety.cpp` is the shared KBGUARD reader; a duplicated term keeps its strongest
+action on both platforms (Swift previously trapped on duplicates; the current pack
+has none).
+
+Exactly-equal scores are now ordered by UTF-8 bytes everywhere (C++ and the Swift
+reference), where Swift previously used Dictionary order. Android cannot reproduce
+Swift hash order, so this is required for cross-platform parity. It only reorders
+rows whose scores are bitwise equal.
+
+Parity is checked against goldens written by the production iOS engine
+(`tools/evaluation/fixtures/shared-engine/golden-*.json`, 132 decodes and 60
+streaming glides, plus 21 Unicode boundary fixtures from the Swift decode code):
+
+- `native/tests/run.sh` (ASan/UBSan) and CTest replay them through `kb::Engine`,
+  set up the same way as the Android adapter, and require exact
+  suggestions/correction/candidate order with a 1e-9 tolerance on cost/score.
+- `android/testhost` `EngineReplayTest` passed 5/5 on an API 36 arm64 emulator.
+- The simulator suite passed 118/118 tests in 7 suites. The generic arm64 Release
+  extension is 20,246,444 bytes (24 MB gate).
+
+Matched macOS full-engine benchmark, HEAD `4e82650` versus this tree. Same pack
+(`f796d93b…`), C++ `-Os` / Swift `-Osize`, n-gram mode, 3 alternating processes
+per build, 2,794 requests each; medians of run statistics:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Fresh session, median of case p50, ms | 3.204 | 1.712 |
+| Repeated request p50 / p95 / p99, ms | 0.618 / 3.040 / 3.789 | 0.165 / 1.674 / 2.758 |
+| Request CPU seconds | 5.425 | 3.194 |
+| Backspace p50 `correction` / `recieve`, ms | 0.258 / 2.161 | 0.105 / 0.421 |
+| Streaming Glide p50 / p95, ms | 4.478 / 6.634 | 2.937 / 5.251 |
+| Readiness (10 processes) median, ms | 23.96 | 24.00 |
+| Peak RSS / end footprint, MiB | 45.86 / 23.56 | 47.64 / 25.27 |
+
+Across 396 paired case records there were 327 identical, 66 exact-tie reorders and
+3 tie-membership changes at the 24-row evidence cutoff. There were no correction
+changes and no non-tie ranking changes. The 18 editing records and 60 batch plus
+60 streaming glides were identical. Memory rose about 1.8 MiB. Batch Glide was not
+migrated, and its timing is unchanged. These are macOS CLI timings, not iPhone
+measurements. Raw runs and the report are in
+`/Users/meherdeepak/Downloads/CoreV4/analysis/shared-engine-final-2026-10-20/`; see
+[machine-readable validation](shared-engine-validation.json).

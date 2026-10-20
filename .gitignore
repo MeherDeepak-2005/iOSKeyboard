@@ -89,3 +89,6 @@ android/local.properties
 
 # Portable decoder build definitions are source, not generated text.
 !CMakeLists.txt
+
+# Editor settings
+.vscode/

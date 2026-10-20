@@ -169,6 +169,7 @@ NS_ASSUME_NONNULL_END
 
 NS_ASSUME_NONNULL_BEGIN
 @interface KBPersonalCounts : NSObject
+@property(nonatomic, readonly) uint64_t revision;
 - (instancetype)initWithUnigrams:(NSDictionary<NSString *, NSNumber *> *)unigrams
     bigramWords:(NSDictionary<NSString *, NSArray<NSString *> *> *)biWords
     bigramCounts:(NSDictionary<NSString *, NSArray<NSNumber *> *> *)biCounts
@@ -361,5 +362,74 @@ NS_ASSUME_NONNULL_BEGIN
 @interface KBNeuralMath (ContextWords)
 + (NSArray<NSString *> *)lastWords:(NSArray<NSString *> *)words limit:(NSUInteger)limit;
 + (NSArray<NSString *> *)knownWords:(NSArray<NSString *> *)words lexicon:(KBGenerationLexicon *)lexicon firstLetters:(NSArray<NSString *> *)firstLetters;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBCancellationToken : NSObject
+- (void)cancel;
+@end
+@interface KBEngineResult : NSObject
+@property(nonatomic, readonly) NSArray<NSString *> *suggestions;
+@property(nonatomic, readonly) NSArray<KBScoredRow *> *rows;
+@property(nonatomic, readonly) NSArray<NSString *> *sources;
+@property(nonatomic, readonly) KBCorrectionResult *correction;
+@property(nonatomic, readonly) BOOL cancelled;
+@property(nonatomic, readonly) NSArray<NSNumber *> *phaseMilliseconds;
+@end
+@interface KBSharedEngine : NSObject
+- (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model
+    policy:(NSArray<NSNumber *> *)policy penalties:(NSDictionary<NSString *, NSNumber *> *)penalties profile:(BOOL)profile;
+- (nullable KBEngineResult *)decodeWord:(NSString *)word normalized:(NSString *)normalized context:(NSArray<NSString *> *)context
+    identity:(NSData *)identity offsets:(NSArray<NSNumber *> *)characterOffsets letterFlags:(NSData *)flags
+    tapOffsets:(nullable NSData *)offsets tapValidity:(nullable NSData *)validity
+    lexicon:(KBGenerationLexicon *)lexicon personal:(KBPersonalCounts *)personal topWords:(NSArray<NSString *> *)topWords
+    kept:(BOOL)kept token:(KBCancellationToken *)token error:(NSError **)error
+    NS_SWIFT_NAME(decode(word:normalized:context:identity:characterOffsets:letterFlags:tapOffsets:tapValidity:lexicon:personal:topWords:kept:token:));
+- (void)memoryPressure;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBPersonalState : NSObject
+@property(nonatomic, readonly) uint64_t epoch;
+@property(nonatomic, readonly) NSDictionary<NSString *, NSNumber *> *unigrams;
+@property(nonatomic, readonly) NSDictionary<NSString *, NSNumber *> *confirmed;
+@property(nonatomic, readonly) NSDictionary<NSString *, NSDictionary<NSString *, NSNumber *> *> *bigrams;
+@property(nonatomic, readonly) NSDictionary<NSString *, NSDictionary<NSString *, NSNumber *> *> *trigrams;
+- (KBPersonalCounts *)snapshot;
+- (void)install:(KBPersonalCounts *)counts confirmed:(NSDictionary<NSString *, NSNumber *> *)confirmed epoch:(uint64_t)epoch;
+- (void)reset:(uint64_t)epoch;
+- (void)learn:(NSString *)word context:(NSArray<NSString *> *)context;
+- (void)demote:(NSString *)word;
+- (void)confirm:(NSString *)word;
+- (void)releaseKeep:(NSString *)word;
+- (BOOL)kept:(NSString *)word;
+- (NSInteger)count:(NSString *)word;
+- (NSInteger)confirmationCount:(NSString *)word;
+- (NSUInteger)diversity:(NSString *)word limit:(NSUInteger)limit;
+- (BOOL)prune;
+- (BOOL)allowsAdoption:(NSString *)word count:(NSInteger)count lexicon:(KBGenerationLexicon *)lexicon;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@class KBSharedGlide;
+@interface KBSharedEngine (Glide)
+- (KBSharedGlide *)glideSessionWithContext:(NSArray<NSString *> *)context;
+@end
+@interface KBSharedGlide : NSObject
+- (nullable NSArray<KBScoredRow *> *)update:(NSData *)points keys:(NSData *)keys centers:(NSData *)centers xPitch:(double)x yPitch:(double)y
+    lexicon:(KBGenerationLexicon *)lexicon personal:(KBPersonalCounts *)personal dynamicWords:(NSArray<NSString *> *)dynamic error:(NSError **)error;
+- (void)cancel;
+@end
+NS_ASSUME_NONNULL_END
+NS_ASSUME_NONNULL_BEGIN
+@interface KBVocabularyState : NSObject
+- (instancetype)initWithBlocked:(NSArray<NSString *> *)blocked;
+@property(nonatomic, readonly) KBGenerationSnapshot *snapshot;
+@property(nonatomic, readonly) NSDictionary<NSString *, NSNumber *> *boosts;
+- (void)supplementary:(NSString *)word frequency:(NSInteger)frequency glide:(BOOL)glide;
+- (BOOL)note:(NSString *)word count:(NSInteger)count allowAdoption:(BOOL)allow threshold:(NSInteger)threshold glide:(BOOL)glide
+    packed:(nullable KBPackedLexicon *)packed base:(KBMutableTrie *)base supplementary:(KBMutableTrie *)supplementary personal:(KBMutableTrie *)personal;
+- (NSArray<NSString *> *)dynamicWords:(NSUInteger)limit;
+- (void)resetPersonalization;
 @end
 NS_ASSUME_NONNULL_END

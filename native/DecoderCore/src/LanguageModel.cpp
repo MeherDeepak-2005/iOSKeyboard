@@ -1,5 +1,6 @@
 #include "../include/LanguageModel.hpp"
 #include <algorithm>
+#include "../include/TextOrder.hpp"
 #include <numeric>
 namespace kb {
 namespace {
@@ -162,7 +163,7 @@ CountRows LanguageModel::successors(std::span<const std::string> context, const 
 }
 std::vector<std::string> LanguageModel::nextWords(CountRows tri, CountRows bi, std::size_t limit) {
     if (!limit) return {};
-    auto sort = [](auto& row) { std::stable_sort(row.begin(), row.end(), [](const auto& a, const auto& b) { return a.second > b.second; }); };
+    auto sort = [](auto& row) { std::stable_sort(row.begin(), row.end(), [](const auto& a, const auto& b) { return a.second == b.second ? utf8Less(a.first, b.first) : a.second > b.second; }); };
     sort(tri); sort(bi);
     std::vector<std::string> out;
     auto fill = [&](const auto& row) { for (const auto& [word, count] : row) { (void)count; if (out.size() >= limit) break; if (std::find(out.begin(), out.end(), word) == out.end()) out.push_back(word); } };

@@ -49,6 +49,7 @@ public:
     IncrementalSearch& operator=(const IncrementalSearch&) = delete;
     IncrementalSearch(IncrementalSearch&&) = delete;
     IncrementalSearch& operator=(IncrementalSearch&&) = delete;
+    void reset(std::shared_ptr<const IncrementalSeedSet> seeds);
     bool advanceNormalized(std::string_view word, std::span<const std::optional<TouchOffset>> taps = {});
     std::vector<ChannelCandidate> candidates(double maxCost) const;
     const std::string& typed() const noexcept { return typed_; }

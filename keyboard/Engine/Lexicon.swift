@@ -22,16 +22,9 @@ final class Lexicon {
 	/// way `Trie.bump` edits heap nodes. Only words the user actually types, but the
 	/// KEY COUNT still grows one entry per distinct dictionary word ever typed, so it
 	/// is capped (halve-and-drop, like UserModel) rather than left to accrete forever.
-	private var boosts: [String: Int] = [:] { didSet { nativeGenerationSnapshot = nil } }
-    private var nativeGenerationSnapshot: KBGenerationSnapshot?
-	private static let maxBoosts = 3000
-	/// A small, explicitly bounded side index lets Glide shape-score contact,
-	/// text-replacement, and confirmed personal words that are not in the mmap trie.
-	/// Keeping strings here avoids walking every mutable trie node per preview.
-	private var supplementaryGlideWords: [String: Int] = [:]
-	private var personalGlideWords: [String: Int] = [:]
-	private static let maxSupplementaryGlideWords = 768
-	private static let maxPersonalGlideWords = 384
+    private var boosts: [String: Int] { nativeVocabulary.boosts.mapValues(\.intValue) }
+    private lazy var nativeVocabulary = KBVocabularyState(blocked: nativeBlockedWords)
+
 	/// Highest-frequency words, for the empty-context suggestion bar on a fresh install.
 	private(set) var topWords: [String] = []
 
@@ -48,18 +41,16 @@ final class Lexicon {
 	// typed input is never censored. nil only if the resource is missing in tests.
 	private let safety = KBSafetyLexicon.bundled()
 
+    var nativeSafetyPenalties: [String: NSNumber] { safety?.nativePenalties ?? [:] }
+
     private lazy var nativeBlockedWords = safety?.nativeBlockedWords ?? []
 
     func nativeGenerationView() -> KBGenerationLexicon {
         lock.lock()
-        if nativeGenerationSnapshot == nil {
-            nativeGenerationSnapshot = KBGenerationSnapshot(boosts: boosts.mapValues { NSNumber(value: $0) },
-                blockedWords: nativeBlockedWords)
-        }
         langData?.prepareNativeTextMetadata()
         let view = KBGenerationLexicon(packed: staticTrie ? langData?.nativeCandidateLexicon : nil,
             base: baseTrie.native, supplementary: supplementaryTrie.native, personal: personalTrie.native,
-            snapshot: nativeGenerationSnapshot!)
+            snapshot: nativeVocabulary.snapshot)
         lock.unlock()
         return view
     }
@@ -193,19 +184,14 @@ final class Lexicon {
 		lock.lock(); defer { lock.unlock() }
 		supplementaryTrie.insert(lw, freq: freq)
 		vocabularyEpoch &+= 1
-		if Self.isGlideSpelling(lw),
-		   supplementaryGlideWords.count < Self.maxSupplementaryGlideWords
-				|| supplementaryGlideWords[lw] != nil {
-			supplementaryGlideWords[lw] = max(supplementaryGlideWords[lw] ?? 0, freq)
-		}
+        nativeVocabulary.supplementary(lw, frequency: freq, glide: Self.isGlideSpelling(lw))
 	}
 
 	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func glideDynamicWords(limit: Int) -> [String] {
 		lock.lock(); defer { lock.unlock() }
-        return KBGlidePipeline.dynamicWords(Array(supplementaryGlideWords.keys), counts: supplementaryGlideWords.values.map { NSNumber(value: $0) },
-            personal: Array(personalGlideWords.keys), counts: personalGlideWords.values.map { NSNumber(value: $0) }, limit: UInt(max(0, limit)))
+        return nativeVocabulary.dynamicWords(UInt(max(0, limit)))
 	}
 
 	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
@@ -388,35 +374,9 @@ final class Lexicon {
 	func noteUse(of lw: String, timesUsed: Int, adoptAfter: Int,
 				 allowAdoption: Bool = false) {
 		lock.lock(); defer { lock.unlock() }
-		let baseWord = (staticTrie && langData?.trieContains(lw) == true)
-			|| (!staticTrie && baseTrie.contains(lw))
-		if baseWord {
-			boosts[lw] = min((boosts[lw] ?? 0) + 1, 100)
-			// Bound the key count: halve every entry, drop what falls to zero. Habits
-			// (high boosts) survive; one-off words shed. Rare (only past the cap).
-			if boosts.count > Self.maxBoosts {
-				boosts = boosts.compactMapValues { $0 >= 2 ? $0 >> 1 : nil }
-			}
-		} else if supplementaryTrie.contains(lw) {
-			if supplementaryGlideWords[lw] != nil {
-				supplementaryGlideWords[lw] = min((supplementaryGlideWords[lw] ?? 0) + 1, 500)
-			}
-			return
-		} else if personalTrie.contains(lw) {
-			personalTrie.bump(lw)
-			personalGlideWords[lw] = min((personalGlideWords[lw] ?? timesUsed) + 1, 500)
-		} else if allowAdoption, timesUsed >= adoptAfter {
-			personalTrie.insert(lw, freq: timesUsed)
-			vocabularyEpoch &+= 1
-			if Self.isGlideSpelling(lw) {
-				personalGlideWords[lw] = timesUsed
-				if personalGlideWords.count > Self.maxPersonalGlideWords {
-					let keep = personalGlideWords.sorted { $0.value > $1.value }
-						.prefix(Self.maxPersonalGlideWords)
-					personalGlideWords = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
-				}
-			}
-		}
+        if nativeVocabulary.note(lw, count: timesUsed, allowAdoption: allowAdoption, threshold: adoptAfter,
+            glide: Self.isGlideSpelling(lw), packed: staticTrie ? langData?.nativeCandidateLexicon : nil,
+            base: baseTrie.native, supplementary: supplementaryTrie.native, personal: personalTrie.native) { vocabularyEpoch &+= 1 }
 	}
 
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=VocabularyLifecycle
@@ -425,8 +385,7 @@ final class Lexicon {
 		lock.lock()
 		vocabularyEpoch &+= 1
 		personalTrie = Trie()
-		personalGlideWords.removeAll(keepingCapacity: false)
-		boosts.removeAll(keepingCapacity: false)
+        nativeVocabulary.resetPersonalization()
 		lock.unlock()
 	}
 

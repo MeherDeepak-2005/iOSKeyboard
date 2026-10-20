@@ -1,5 +1,6 @@
 #include "../include/Glide.hpp"
 #include <algorithm>
+#include "../include/TextOrder.hpp"
 #include <cmath>
 #include <limits>
 #include <numeric>
@@ -328,7 +329,7 @@ std::vector<RankedRow> rankGlide(const GenerationLexicon& lexicon, std::span<con
         auto score = -c.cost / sigma + 0.6 * language[i] + 0.10 * frequency - safety[i] + 0.35 * bonus;
         out.push_back({c, c.word, safety[i], language[i], score, {}});
     }
-    std::stable_sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.score > b.score; }); return out;
+    std::stable_sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.score == b.score ? utf8Less(a.key, b.key) : a.score > b.score; }); return out;
 }
 std::vector<std::string> dynamicGlideWords(const CountRows& supplementary, const CountRows& personal, std::size_t limit) {
     std::unordered_map<std::string, std::int64_t> merged;

@@ -93,9 +93,10 @@ std::vector<ChannelCandidate> MutableTrie::search(std::string_view typed, double
     if (extra > 1'000'000 || typed.size() > 1'000'000) throw std::length_error("search input too large");
     const auto n = typed.size(), maxDepth = n + std::size_t(extra) + 2;
     if (maxDepth + 1 > SIZE_MAX / (n + 1)) throw std::length_error("search DP overflow");
+    auto priors = makeFunding(funding);
+    if (nodes_.size() == 1) return {};
     std::vector<double> dp((maxDepth + 1) * (n + 1));
     for (std::size_t i = 0; i <= n; ++i) dp[i] = double(i) * insertionCost;
-    auto priors = makeFunding(funding);
     std::vector<ChannelCandidate> out;
     auto visit = [&](auto&& self, std::size_t index, std::uint8_t letter, std::uint8_t previousLetter,
                      std::size_t depth, double penalty, std::size_t prior) -> void {

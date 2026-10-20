@@ -122,6 +122,8 @@ final class KeyboardEngine {
 	/// Eager and immutable. Every decode in a word session uses this same model tier;
 	/// memory pressure cannot silently change ranking semantics mid-word.
 	private let ngram: NgramScorer
+    private var sharedEngine: KBSharedEngine?
+    private var sharedDecodeToken: KBCancellationToken?
     private let candidateBackend: DecoderCoreBackend
 	/// Two INDEPENDENT neural roles, both optional and promotion-gated (the production singleton
 	/// supplies neither until a checkpoint passes blind quality + device gates):
@@ -253,10 +255,10 @@ final class KeyboardEngine {
 
 	/// Session-only autocorrect rejections. Every access is serialized on `queue`;
 	/// the controller never reads this set on the input path.
-	private var sessionKept = Set<String>()
+	// Session keep/undo state lives in native Personalization.
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
-	private func isKept(_ word: String) -> Bool { sessionKept.contains(word) }
+	private func isKept(_ word: String) -> Bool { user.isKept(word) }
 
 	/// Learning fires on every committed word, and `user.save()` re-encodes the WHOLE
 	/// personal model to JSON — O(model) work and a matching transient allocation on
@@ -344,6 +346,7 @@ final class KeyboardEngine {
 			self.glideProfile.load()          // #37: restore this user's adapted glide σ / gate
 			languageData?.warmGlideAnchorIndex()   // Phase 2: prebuild the endpoint index off the first-glide path
 			self.applyLearned()
+            if self.candidateBackend == .cpp { self.sharedEngine = self.ngram.makeSharedEngine(lexicon: self.lexicon.nativeGenerationView(), policy: self.correctionPolicy.nativeValues, penalties: self.lexicon.nativeSafetyPenalties) }
 			KBPersonalData.acknowledgeReset(epoch: KBPersonalData.currentEpoch)
 		}
 	}
@@ -390,6 +393,7 @@ final class KeyboardEngine {
 	func handleMemoryPressure() {
 		rescorer?.handleMemoryPressure()
 		searchPrior?.handleMemoryPressure()
+        queue.async { [weak self] in self?.sharedEngine?.memoryPressure() }
 	}
 
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
@@ -444,7 +448,6 @@ final class KeyboardEngine {
 			// Drop any cached neural next-word predictions from the reset personalization epoch.
 			self.searchPrior?.handleMemoryPressure()
 			self.savePending = false
-			self.sessionKept.removeAll(keepingCapacity: false)
 			self.user.reset(to: epoch)
 			self.lexicon.resetPersonalization()
 			self.glideProfile.reset(to: epoch)
@@ -812,7 +815,6 @@ final class KeyboardEngine {
 		let lw = word.lowercased()
 		queue.async { [weak self] in
 			guard let self else { return }
-			self.sessionKept.insert(lw)
 			self.user.confirmSpelling(lw)
 			self.scheduleSave()
 		}
@@ -825,7 +827,7 @@ final class KeyboardEngine {
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func correctionStood(_ original: String) {
 		let lw = original.lowercased()
-		queue.async { [weak self] in self?.sessionKept.remove(lw) }
+		queue.async { [weak self] in self?.user.releaseKeep(lw) }
 	}
 
 	/// The user actively replaced `original` with a different word (picked a suggestion
@@ -840,7 +842,7 @@ final class KeyboardEngine {
 		guard lw != replacement.lowercased() else { return }
 		queue.async { [weak self] in
 			guard let self else { return }
-			self.sessionKept.remove(lw)
+			self.user.releaseKeep(lw)
 			self.user.demote(lw)
 			self.scheduleSave()
 		}
@@ -896,6 +898,7 @@ final class KeyboardEngine {
 		var rawPointCount = 0
 		var layoutPitch: (CGFloat, CGFloat)?
 		let native = KBNativeGlideSession()
+        var shared: KBSharedGlide?
 		var resampler = IncrementalGlideResampler()
 		var candidates: [String: OnlineGlideCandidate] = [:]
 		var endpointSignature = ""
@@ -1044,6 +1047,20 @@ final class KeyboardEngine {
 	// MIGRATION-SPLIT: SWIFT_IOS converts UIKit layout/points to numeric buffers; CPP_CORE resamples and consumes the retained trajectory.
 	private func consumeStreamingPath(_ path: [CGPoint], layout: GlideLayout,
 		languageData: LangData, session: inout StreamingGlideSession) -> GlideUpdate? {
+        if candidateBackend == .cpp, scoringPrior == nil, searchPrior == nil, let engine = sharedEngine {
+            if session.shared == nil { session.shared = engine.glideSession(withContext: session.context.map { $0.lowercased() }) }
+            do {
+                let scored = try session.shared!.update(GlideBuffers.points(path), keys: GlideBuffers.keys(layout),
+                    centers: GlideBuffers.points(layout.centers.map(\.point)), xPitch: Double(layout.xPitch), yPitch: Double(layout.yPitch),
+                    lexicon: lexicon.nativeGenerationView(), personal: user.nativeCountsSnapshot(), dynamicWords: lexicon.glideDynamicWords(limit: 128))
+                guard let winner = scored.first else { return nil }
+                let prediction = GlidePrediction(word: winner.word, alternatives: scored.dropFirst().prefix(3).map(\.word),
+                    shapeCostByWord: Dictionary(scored.prefix(12).map { ($0.word, $0.cost) }, uniquingKeysWith: min),
+                    margin: scored.count > 1 ? scored[0].score - scored[1].score : .greatestFiniteMagnitude)
+                session.revision &+= 1; session.latestPrediction = prediction
+                return GlideUpdate(sessionID: session.id, revision: session.revision, prediction: prediction)
+            } catch { session.invalid = true; return nil }
+        }
         if candidateBackend == .cpp {
             let native = session.native
             guard native.consume(GlideBuffers.points(path), keys: GlideBuffers.keys(layout), centers: GlideBuffers.points(layout.centers.map(\.point)),
@@ -1155,14 +1172,14 @@ final class KeyboardEngine {
 		guard !rows.isEmpty else { return nil }
 		let words = rows.map(\.word)
 		let priors = ngram.logProbs(words, context: session.context)
-		let scored = rows.enumerated().map { index, candidate in
-			let frequency = lexicon.logFreq(of: candidate.word) ?? 0
-			let score = -candidate.prefixCost / 0.10
+		let scored: [(String, Double, Double)] = rows.enumerated().map { index, candidate in
+			let frequency: Double = lexicon.logFreq(of: candidate.word) ?? 0
+			let score: Double = -candidate.prefixCost / 0.10
 				+ glideLMWeight * priors[index]
 				+ glideFreqWeight * frequency
 				- lexicon.safetyPenalty(candidate.word)
 			return (candidate.word, candidate.prefixCost, score)
-		}.sorted { $0.2 > $1.2 }
+		}.sorted { $0.2 == $1.2 ? $0.0.utf8.lexicographicallyPrecedes($1.0.utf8) : $0.2 > $1.2 }
 		guard let winner = scored.first else { return nil }
 		let margin = scored.count > 1 ? scored[0].2 - scored[1].2 : .greatestFiniteMagnitude
 		let alternatives = scored.dropFirst().prefix(3).map(\.0)
@@ -1297,7 +1314,7 @@ final class KeyboardEngine {
 				- lexicon.safetyPenalty(candidate.word)
 				+ dwellBonus)
 		}
-		.sorted { $0.s > $1.s }
+		.sorted { $0.s == $1.s ? $0.word.utf8.lexicographicallyPrecedes($1.word.utf8) : $0.s > $1.s }
 	}
 
 #endif
@@ -1592,7 +1609,7 @@ final class KeyboardEngine {
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func cancelSuggestions() {
-		genLock.lock(); suggestGen &+= 1; genLock.unlock()
+		genLock.lock(); sharedDecodeToken?.cancel(); suggestGen &+= 1; genLock.unlock()
 		searchPrior?.cancelPendingSearch()
 	}
 
@@ -1933,7 +1950,7 @@ final class KeyboardEngine {
 
 
 	func decode(_ request: DecodeRequest, completion: @escaping (DecodeSnapshot) -> Void) {
-		genLock.lock(); suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
+		genLock.lock(); sharedDecodeToken?.cancel(); let nativeToken = KBCancellationToken(); sharedDecodeToken = nativeToken; suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
 		let started = ProcessInfo.processInfo.systemUptime
 		// A decode with no partial word is a fresh word start — it builds the context /
 		// prediction search space (Gboard's UpdateLM). Time it separately as initialization
@@ -2002,6 +2019,44 @@ final class KeyboardEngine {
 					completedAtUptime: ProcessInfo.processInfo.systemUptime)
 				DispatchQueue.main.async { completion(snapshot) }
 			}
+
+            if self.candidateBackend == .cpp, request.requestedModelTier == .ngram {
+                let view = self.lexicon.nativeGenerationView()
+                if self.sharedEngine == nil {
+                    self.sharedEngine = self.ngram.makeSharedEngine(lexicon: view,
+                        policy: self.correctionPolicy.nativeValues, penalties: self.lexicon.nativeSafetyPenalties)
+                }
+                if let engine = self.sharedEngine {
+                    let identity = [request.fieldRevision, request.documentRevision, request.wordSessionID,
+                        request.generation, request.layoutRevision, self.lexicon.vocabularyRevision, KBPersonalData.currentEpoch]
+                    var offsets = [0]
+                    for ch in lw { offsets.append(offsets.last! + String(ch).utf8.count) }
+                    let flags = Data(lw.flatMap { ch in Array(repeating: UInt8(ch.isLetter ? 1 : 0), count: String(ch).utf8.count) })
+                    let buffers = NativeTapBuffers(taps: taps, expectedCount: lw.utf8.count)
+                    do {
+                        let result = try engine.decode(word: currentWord, normalized: lw, context: context.map { $0.lowercased() },
+                            identity: identity.withUnsafeBytes { Data($0) }, characterOffsets: offsets.map { NSNumber(value: $0) },
+                            letterFlags: flags, tapOffsets: buffers?.offsets, tapValidity: buffers?.validity,
+                            lexicon: view, personal: self.user.nativeCountsSnapshot(),
+                            topWords: self.lexicon.topWords.map { $0.lowercased() }, kept: self.isKept(lw), token: nativeToken)
+                        guard !result.cancelled, self.isLatest(gen) else { return }
+                        let typedScore = result.rows.first(where: { $0.word == lw })?.score ?? 0
+                        let evidence = zip(result.rows, result.sources).map { row, source in
+                            DecodeCandidateEvidence(word: row.word, score: row.score, spatialCost: row.cost,
+                                logFrequency: row.logFrequency, logLanguageProbability: row.language,
+                                source: DecodeCandidateSource(rawValue: source) ?? .fuzzyLexicon, typedWordMargin: row.score - typedScore)
+                        }
+                        let decision = result.correction
+                        if let kind = decision.kind.flatMap(CorrectionGateEvidence.Kind.init(rawValue:)), let candidate = decision.candidate {
+                            self.correctionObserver?(CorrectionGateEvidence(typed: lw, candidate: candidate, kind: kind,
+                                typedMargin: decision.margin, candidateGap: decision.gap?.doubleValue,
+                                spatialCost: decision.cost, allowsCloseRescue: decision.allowsCloseRescue))
+                        }
+                        publishEnglish(result.suggestions, evidence, decision.word, decision.margin, .ngram)
+                        return
+                    } catch { KBDiagnostics.recorder.storageFailure(operation: "native-decode") }
+                }
+            }
 
 			if currentWord.isEmpty {
 				let next = self.nextWords(context: context)
@@ -2210,13 +2265,7 @@ final class KeyboardEngine {
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func allowsPersonalAdoption(of word: String, count: Int) -> Bool {
-		guard count >= adoptAfter else { return false }
-		if lexicon.contains(word) { return true }
-		if user.spellingConfirmationCount(word) > 0 { return true }
-		guard user.contextDiversity(for: word) >= 2 || count >= adoptAfter * 2 else { return false }
-		return !lexicon.corrections(for: word, maxCost: 1.05).contains {
-			$0.word != word && $0.cost <= 1.05 && lexicon.isStaticWord($0.word)
-		}
+        return user.allowsAdoption(word, count: count, lexicon: lexicon.nativeGenerationView())
 	}
 
 	// MARK: Ranking — the blend of channel, prior, personalization, and frequency
@@ -2293,8 +2342,9 @@ final class KeyboardEngine {
 		let cap = limit.map { extra == nil ? $0 : $0 - 1 }
 		if let cap, list.count > cap {
 			list.sort {
-				(-$0.cost + freqWeight * frequencyTerm($0.logFreq, mode: frequencyMode))
-					> (-$1.cost + freqWeight * frequencyTerm($1.logFreq, mode: frequencyMode))
+                let a = -$0.cost + freqWeight * frequencyTerm($0.logFreq, mode: frequencyMode)
+                let b = -$1.cost + freqWeight * frequencyTerm($1.logFreq, mode: frequencyMode)
+                return a == b ? $0.word.utf8.lexicographicallyPrecedes($1.word.utf8) : a > b
 			}
 			list = Array(list.prefix(cap))
 		}
@@ -2321,7 +2371,7 @@ final class KeyboardEngine {
 					neuralLogProbability: nil
 				)
 			}
-			.sorted { $0.score > $1.score }
+			.sorted { $0.score == $1.score ? $0.word.utf8.lexicographicallyPrecedes($1.word.utf8) : $0.score > $1.score }
 		if doLog, let label {
 			let ms = t0.map { Date().timeIntervalSince($0) * 1000 } ?? 0
 			var rows: [KBDiagnostics.RankRow] = []

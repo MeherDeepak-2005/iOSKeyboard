@@ -2,6 +2,8 @@
 #include "../DecoderCore/include/PackedLexicon.hpp"
 #include "../DecoderCore/include/IncrementalSearch.hpp"
 #include "../DecoderCore/include/CandidateGeneration.hpp"
+#include "../DecoderCore/include/Engine.hpp"
+#include "../DecoderCore/include/Personalization.hpp"
 #include <memory>
 #include <cmath>
 #include <stdexcept>
@@ -366,6 +368,7 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
 }
 @interface KBMutableTrie ()
 - (std::shared_ptr<const kb::MutableTrie>)nativeSnapshot;
+- (kb::MutableTrie&)nativeMutable;
 @end
 @implementation KBMutableTrie {
     std::shared_ptr<kb::MutableTrie> _trie;
@@ -375,6 +378,7 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
     return self;
 }
 - (std::shared_ptr<const kb::MutableTrie>)nativeSnapshot { return _trie; }
+- (kb::MutableTrie&)nativeMutable { [self prepareMutation]; return *_trie; }
 - (void)prepareMutation {
     if (_trie.use_count() != 1) _trie = std::make_shared<kb::MutableTrie>(*_trie);
 }
@@ -424,9 +428,11 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
 @end
 @interface KBGenerationSnapshot ()
 - (const kb::GenerationSnapshot *)nativeSnapshot;
+- (instancetype)initWithSharedGeneration:(std::shared_ptr<const kb::GenerationSnapshot>)generation;
 @end
 @implementation KBGenerationSnapshot {
     kb::GenerationSnapshot _snapshot;
+    std::shared_ptr<const kb::GenerationSnapshot> _sharedGeneration;
 }
 - (instancetype)initWithBoosts:(NSDictionary<NSString *, NSNumber *> *)boosts blockedWords:(NSArray<NSString *> *)blocked {
     if ((self = [super init])) {
@@ -435,10 +441,12 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
     }
     return self;
 }
-- (const kb::GenerationSnapshot *)nativeSnapshot { return &_snapshot; }
+- (const kb::GenerationSnapshot *)nativeSnapshot { return _sharedGeneration ? _sharedGeneration.get() : &_snapshot; }
+- (instancetype)initWithSharedGeneration:(std::shared_ptr<const kb::GenerationSnapshot>)generation { if ((self = [super init])) _sharedGeneration = std::move(generation); return self; }
 @end
 @interface KBGenerationLexicon ()
 - (kb::GenerationLexicon)nativeLexicon;
+- (KBPackedLexicon *)packedOwner;
 @end
 @implementation KBGenerationLexicon {
     KBPackedLexicon *_packed;
@@ -454,6 +462,7 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
     }
     return self;
 }
+- (KBPackedLexicon *)packedOwner { return _packed; }
 - (kb::GenerationLexicon)nativeLexicon {
     return {[_packed nativeLexicon], _base.get(), _supplementary.get(), _personal.get(), [_snapshot nativeSnapshot]};
 }
@@ -512,9 +521,12 @@ static kb::CountRows KBCountRows(NSArray<NSString *> *words, NSArray<NSNumber *>
 }
 @interface KBPersonalCounts ()
 - (const kb::PersonalCounts&)nativeCounts;
+- (instancetype)initWithSharedCounts:(std::shared_ptr<const kb::PersonalCounts>)counts revision:(std::uint64_t)revision;
 @end
 @implementation KBPersonalCounts {
     kb::PersonalCounts _counts;
+    std::shared_ptr<const kb::PersonalCounts> _shared;
+    std::uint64_t _revision;
 }
 - (instancetype)initWithUnigrams:(NSDictionary<NSString *, NSNumber *> *)unigrams
     bigramWords:(NSDictionary<NSString *, NSArray<NSString *> *> *)biWords
@@ -528,7 +540,9 @@ static kb::CountRows KBCountRows(NSArray<NSString *> *words, NSArray<NSNumber *>
     }
     return self;
 }
-- (const kb::PersonalCounts&)nativeCounts { return _counts; }
+- (const kb::PersonalCounts&)nativeCounts { return _shared ? *_shared : _counts; }
+- (instancetype)initWithSharedCounts:(std::shared_ptr<const kb::PersonalCounts>)counts revision:(std::uint64_t)revision { if ((self = [super init])) { _shared = std::move(counts); _revision = revision; } return self; }
+- (uint64_t)revision { return _revision; }
 @end
 @interface KBSuccessorCounts ()
 - (instancetype)initWithRows:(const kb::CountRows&)rows;
@@ -543,19 +557,23 @@ static kb::CountRows KBCountRows(NSArray<NSString *> *words, NSArray<NSNumber *>
     return self;
 }
 @end
+@interface KBNativeLanguageModel ()
+- (std::shared_ptr<const kb::LanguageModel>)nativeModel;
+@end
 @implementation KBNativeLanguageModel {
     KBPackedLexicon *_packed;
-    std::unique_ptr<kb::LanguageModel> _model;
+    std::shared_ptr<kb::LanguageModel> _model;
 }
 - (instancetype)initWithPacked:(KBPackedLexicon *)packed smoothing:(NSString *)smoothing {
     if ((self = [super init])) {
         _packed = packed;
         auto estimator = [smoothing isEqualToString:@"modifiedKneserNey"] ? kb::Smoothing::modifiedKneserNey
             : [smoothing isEqualToString:@"frequencyBackoff"] ? kb::Smoothing::frequencyBackoff : kb::Smoothing::wittenBell;
-        _model = std::make_unique<kb::LanguageModel>([packed nativeLexicon], estimator);
+        _model = std::make_shared<kb::LanguageModel>([packed nativeLexicon], estimator);
     }
     return self;
 }
+- (std::shared_ptr<const kb::LanguageModel>)nativeModel { return _model; }
 - (NSData *)scoresForWords:(NSArray<NSString *> *)words context:(NSArray<NSString *> *)context
     personal:(KBPersonalCounts *)personal lexicon:(KBGenerationLexicon *)lexicon {
     auto result = _model->scores(KBTexts(words), KBTexts(context), [personal nativeCounts], [lexicon nativeLexicon]);
@@ -1018,4 +1036,147 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
 @implementation KBNeuralMath (ContextWords)
 + (NSArray<NSString *> *)lastWords:(NSArray<NSString *> *)words limit:(NSUInteger)limit {auto rows=kb::lastContextWords(KBTexts(words),limit);NSMutableArray *out=[NSMutableArray array];for(auto& w:rows)[out addObject:@(w.c_str())];return out;}
 + (NSArray<NSString *> *)knownWords:(NSArray<NSString *> *)words lexicon:(KBGenerationLexicon *)lexicon firstLetters:(NSArray<NSString *> *)firstLetters {auto view=[lexicon nativeLexicon];auto rows=kb::filterKnownWords(KBTexts(words),view,KBTexts(firstLetters));NSMutableArray *out=[NSMutableArray array];for(auto& w:rows)[out addObject:@(w.c_str())];return out;}
+@end
+@interface KBCancellationToken ()
+- (const kb::CancellationToken *)nativeToken;
+@end
+@implementation KBCancellationToken { kb::CancellationToken _token; }
+- (void)cancel { _token.cancel(); }
+- (const kb::CancellationToken *)nativeToken { return &_token; }
+@end
+@interface KBEngineResult ()
+- (instancetype)initWithOutput:(const kb::DecodeOutput&)output;
+@end
+@implementation KBEngineResult
+- (instancetype)initWithOutput:(const kb::DecodeOutput&)output {
+    if ((self = [super init])) {
+        NSMutableArray *suggestions = [NSMutableArray array], *rows = [NSMutableArray array], *sources = [NSMutableArray array];
+        for (const auto& word : output.suggestions) [suggestions addObject:[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]];
+        for (const auto& row : output.candidates) {
+            [rows addObject:[[KBScoredRow alloc] initWithRanked:row.ranked]];
+            [sources addObject:@[@"typed", @"fuzzyLexicon", @"completion", @"contextInjection", @"broadRecovery", @"splitCorrection"][static_cast<NSUInteger>(row.source)]];
+        }
+        _suggestions = suggestions; _rows = rows; _sources = sources;
+        _correction = [[KBCorrectionResult alloc] initWithCorrection:output.correction];
+        _cancelled = output.status == kb::EngineStatus::cancelled;
+        _phaseMilliseconds = @[@(output.timings.session), @(output.timings.generation), @(output.timings.scoring), @(output.timings.policy)];
+    } return self;
+}
+@end
+@implementation KBSharedEngine {
+    KBPackedLexicon *_resourceOwner;
+    std::shared_ptr<kb::Engine> _engine;
+    std::unique_ptr<kb::EngineSession> _session;
+    // Immutable after init; Glide sessions share it rather than copying per gesture.
+    std::shared_ptr<const std::unordered_map<std::string, double>> _penalties;
+}
+- (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model policy:(NSArray<NSNumber *> *)policy
+    penalties:(NSDictionary<NSString *,NSNumber *> *)penalties profile:(BOOL)profile {
+    if ((self = [super init])) {
+        _resourceOwner = [lexicon packedOwner];
+        auto view = [lexicon nativeLexicon];
+        // _resourceOwner retains the mapping, EngineSession retains Engine.
+        auto packed = std::shared_ptr<const kb::PackedLexicon>(view.packed, [owner = _resourceOwner](const kb::PackedLexicon *) { (void)owner; });
+        kb::EngineOptions options; options.correction = KBPolicy(policy); options.profile = profile;
+        _engine = std::make_shared<kb::Engine>(packed, options, [model nativeModel]); _session = _engine->createSession();
+        auto table = std::make_shared<std::unordered_map<std::string, double>>();
+        for (NSString *word in penalties) table->emplace(KBText(word), penalties[word].doubleValue);
+        _penalties = std::move(table);
+    } return self;
+}
+- (KBEngineResult *)decodeWord:(NSString *)word normalized:(NSString *)normalized context:(NSArray<NSString *> *)context
+    identity:(NSData *)identity offsets:(NSArray<NSNumber *> *)characterOffsets letterFlags:(NSData *)flags
+    tapOffsets:(NSData *)offsets tapValidity:(NSData *)validity lexicon:(KBGenerationLexicon *)lexicon
+    personal:(KBPersonalCounts *)personal topWords:(NSArray<NSString *> *)topWords kept:(BOOL)kept token:(KBCancellationToken *)token error:(NSError **)error {
+    try {
+        if (identity.length != 7 * sizeof(std::uint64_t)) throw std::invalid_argument("invalid identity shape");
+        kb::DecodeInput input; std::uint64_t fields[7]; std::memcpy(fields, identity.bytes, sizeof(fields));
+        input.identity = {fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]};
+        input.word = KBText(word); input.normalized = KBText(normalized); input.context = KBTexts(context); input.kept = kept;
+        for (NSNumber *offset in characterOffsets) input.characterOffsets.push_back(offset.unsignedIntegerValue);
+        const auto *bytes = static_cast<const std::uint8_t *>(flags.bytes); input.letterFlags.assign(bytes, bytes + flags.length);
+        input.taps = KBTaps(offsets, validity, input.normalized.size());
+        auto top = KBTexts(topWords);
+        kb::EngineView view{[lexicon nativeLexicon], &[personal nativeCounts], top, _penalties.get(), personal.revision};
+        return [[KBEngineResult alloc] initWithOutput:_session->decode(input, view, [token nativeToken])];
+    } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
+}
+- (void)memoryPressure { _session->memoryPressure(); }
+@end
+static NSDictionary *KBExportCounts(const std::unordered_map<std::string, std::int64_t>& counts) {
+    NSMutableDictionary *out = [NSMutableDictionary dictionaryWithCapacity:counts.size()];
+    for (const auto& [key,count] : counts) out[[[NSString alloc] initWithBytes:key.data() length:key.size() encoding:NSUTF8StringEncoding]] = @(count);
+    return out;
+}
+static NSDictionary *KBExportContexts(const std::unordered_map<std::string, kb::CountRows>& rows) {
+    NSMutableDictionary *out = [NSMutableDictionary dictionaryWithCapacity:rows.size()];
+    for (const auto& [key,row] : rows) {
+        NSMutableDictionary *counts = [NSMutableDictionary dictionaryWithCapacity:row.size()];
+        for (const auto& [word,count] : row) counts[[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]] = @(count);
+        out[[[NSString alloc] initWithBytes:key.data() length:key.size() encoding:NSUTF8StringEncoding]] = counts;
+    } return out;
+}
+@implementation KBPersonalState { kb::Personalization _state; }
+- (uint64_t)epoch { return _state.epoch(); }
+- (NSDictionary *)unigrams { return KBExportCounts(_state.counts()->unigram); }
+- (NSDictionary *)bigrams { return KBExportContexts(_state.counts()->bigram); }
+- (NSDictionary *)trigrams { return KBExportContexts(_state.counts()->trigram); }
+- (NSDictionary *)confirmed { return KBExportCounts(_state.confirmed()); }
+- (KBPersonalCounts *)snapshot { return [[KBPersonalCounts alloc] initWithSharedCounts:_state.counts() revision:_state.revision()]; }
+- (void)install:(KBPersonalCounts *)counts confirmed:(NSDictionary<NSString *,NSNumber *> *)confirmed epoch:(uint64_t)epoch {
+    kb::PersonalizationSnapshot snapshot; snapshot.counts = [counts nativeCounts]; snapshot.epoch = epoch;
+    for (NSString *word in confirmed) snapshot.confirmed.emplace(KBText(word), confirmed[word].longLongValue);
+    _state.install(std::move(snapshot));
+}
+- (void)reset:(uint64_t)epoch { _state.reset(epoch); }
+- (void)learn:(NSString *)word context:(NSArray<NSString *> *)context { _state.learn(KBTexts(context), KBText(word)); }
+- (void)demote:(NSString *)word { _state.demote(KBText(word)); }
+- (void)confirm:(NSString *)word { _state.confirm(KBText(word)); }
+- (void)releaseKeep:(NSString *)word { _state.releaseKeep(KBText(word)); }
+- (BOOL)kept:(NSString *)word { return _state.kept(KBText(word)); }
+- (NSInteger)count:(NSString *)word { return _state.counts()->uni(KBText(word)); }
+- (NSInteger)confirmationCount:(NSString *)word { return _state.confirmations(KBText(word)); }
+- (NSUInteger)diversity:(NSString *)word limit:(NSUInteger)limit { return _state.diversity(KBText(word), limit); }
+- (BOOL)prune { return _state.prune(); }
+- (BOOL)allowsAdoption:(NSString *)word count:(NSInteger)count lexicon:(KBGenerationLexicon *)lexicon { return _state.allowsAdoption(KBText(word), count, [lexicon nativeLexicon]); }
+@end
+@interface KBSharedGlide ()
+- (instancetype)initWithEngine:(std::shared_ptr<kb::Engine>)engine penalties:(std::shared_ptr<const std::unordered_map<std::string,double>>)penalties context:(NSArray<NSString *> *)context;
+@end
+@implementation KBSharedEngine (Glide)
+- (KBSharedGlide *)glideSessionWithContext:(NSArray<NSString *> *)context {
+    return [[KBSharedGlide alloc] initWithEngine:_engine penalties:_penalties context:context];
+}
+@end
+@implementation KBSharedGlide {
+    std::unique_ptr<kb::EngineSession> _session;
+    std::shared_ptr<const std::unordered_map<std::string,double>> _penalties;
+    kb::CancellationToken _token;
+}
+- (instancetype)initWithEngine:(std::shared_ptr<kb::Engine>)engine penalties:(std::shared_ptr<const std::unordered_map<std::string,double>>)penalties context:(NSArray<NSString *> *)context {
+    if ((self = [super init])) { _session = engine->createSession(); _session->beginGlide(KBTexts(context)); _penalties = std::move(penalties); } return self;
+}
+- (NSArray<KBScoredRow *> *)update:(NSData *)points keys:(NSData *)keys centers:(NSData *)centers xPitch:(double)x yPitch:(double)y
+    lexicon:(KBGenerationLexicon *)lexicon personal:(KBPersonalCounts *)personal dynamicWords:(NSArray<NSString *> *)dynamic error:(NSError **)error {
+    try {
+        auto layout = KBGlideLayout(keys,centers,x,y); auto path = KBPoints(points); auto words = KBTexts(dynamic);
+        kb::EngineView view{[lexicon nativeLexicon], &[personal nativeCounts], {}, _penalties.get(), personal.revision};
+        return KBRankedRows(_session->updateGlide(path,layout,view,words,&_token));
+    } catch (const std::exception& e) { KBSetError(error,e); return nil; }
+}
+- (void)cancel { _token.cancel(); }
+@end
+@implementation KBVocabularyState { kb::VocabularyState _state; }
+- (instancetype)initWithBlocked:(NSArray<NSString *> *)blocked {if((self=[super init])){std::unordered_set<std::string> words;for(NSString*word in blocked)words.insert(KBText(word));_state.setBlocked(std::move(words));}return self;}
+- (KBGenerationSnapshot *)snapshot {return [[KBGenerationSnapshot alloc] initWithSharedGeneration:_state.snapshot()];}
+- (NSDictionary *)boosts {return KBExportCounts(_state.snapshot()->boosts);}
+- (void)supplementary:(NSString *)word frequency:(NSInteger)frequency glide:(BOOL)glide {_state.supplementary(KBText(word),frequency,glide);}
+- (BOOL)note:(NSString *)word count:(NSInteger)count allowAdoption:(BOOL)allow threshold:(NSInteger)threshold glide:(BOOL)glide
+    packed:(KBPackedLexicon *)packed base:(KBMutableTrie *)base supplementary:(KBMutableTrie *)supplementary personal:(KBMutableTrie *)personal {
+    auto baseline=[base nativeSnapshot],supp=[supplementary nativeSnapshot];
+    auto& mutablePersonal=[personal nativeMutable];kb::GenerationLexicon lexicon{[packed nativeLexicon],baseline.get(),supp.get(),&mutablePersonal,nullptr};
+    return _state.noteUse(lexicon,mutablePersonal,KBText(word),count,allow,threshold,glide);
+}
+- (NSArray<NSString *> *)dynamicWords:(NSUInteger)limit {NSMutableArray*out=[NSMutableArray array];for(const auto&word:_state.dynamicWords(limit))[out addObject:[[NSString alloc]initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]];return out;}
+- (void)resetPersonalization {_state.resetPersonalization();}
 @end

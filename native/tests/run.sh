@@ -21,3 +21,9 @@ trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
   "$repo_root/native/DecoderCore/src/"*.cpp \
   "$repo_root/native/tests/NeuralSearchTests.cpp" -o "$work_dir/neural-tests"
 "$work_dir/neural-tests"
+
+"${CXX:-clang++}" -std=c++20 -Wall -Wextra -Werror -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  "$repo_root/native/DecoderCore/src/"*.cpp \
+  "$repo_root/native/tests/EngineTests.cpp" -o "$work_dir/engine-tests"
+"$work_dir/engine-tests" "$repo_root/keyboard/langdata.bin" "$repo_root" "$repo_root/tools/evaluation/fixtures/shared-engine"

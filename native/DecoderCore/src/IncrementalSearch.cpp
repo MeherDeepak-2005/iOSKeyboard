@@ -24,7 +24,10 @@ void IncrementalSeedSet::prepareOffsets() {
 }
 IncrementalSearch::IncrementalSearch(std::vector<LexiconSeed> seeds)
     : IncrementalSearch(std::make_shared<const IncrementalSeedSet>(std::move(seeds))) {}
-IncrementalSearch::IncrementalSearch(std::shared_ptr<const IncrementalSeedSet> seeds) : seedSet_(std::move(seeds)) {
+IncrementalSearch::IncrementalSearch(std::shared_ptr<const IncrementalSeedSet> seeds) { reset(std::move(seeds)); }
+void IncrementalSearch::reset(std::shared_ptr<const IncrementalSeedSet> seeds) {
+    seedSet_ = std::move(seeds);
+    typed_.clear(); appliedTaps_.clear(); canRollback_ = false;
     if (!seedSet_) throw std::invalid_argument("missing incremental seed set");
     auto cells = seedSet_->cellCount();
     previous_.resize(cells); previousPrevious_.resize(cells); scratch_.resize(cells);

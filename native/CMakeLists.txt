@@ -3,6 +3,10 @@ project(XploreeDecoderCore VERSION 1.0 LANGUAGES CXX)
 
 # Platform-neutral algorithms only. Foundation/JNI/model APIs belong in adapters.
 add_library(DecoderCore STATIC
+    DecoderCore/src/Personalization.cpp
+    DecoderCore/src/EngineWire.cpp
+    DecoderCore/src/Engine.cpp
+    DecoderCore/src/Safety.cpp
     DecoderCore/src/Adaptation.cpp
     DecoderCore/src/CandidateGeneration.cpp
     DecoderCore/src/Glide.cpp
@@ -23,6 +27,10 @@ endif()
 option(KB_BUILD_TESTS "Build portable decoder tests" ON)
 if(KB_BUILD_TESTS)
     enable_testing()
+    add_executable(shared-engine-tests tests/EngineTests.cpp)
+    target_link_libraries(shared-engine-tests PRIVATE DecoderCore)
+    add_test(NAME shared-engine COMMAND shared-engine-tests "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin"
+        "${CMAKE_CURRENT_SOURCE_DIR}/.." "${CMAKE_CURRENT_SOURCE_DIR}/../tools/evaluation/fixtures/shared-engine")
     add_executable(candidate-generation-tests tests/CandidateGenerationTests.cpp)
     target_link_libraries(candidate-generation-tests PRIVATE DecoderCore)
     add_test(NAME candidate-generation COMMAND candidate-generation-tests)
@@ -34,6 +42,7 @@ if(KB_BUILD_TESTS)
     # These small portable executables use assert for their independent goldens.
     # Release must still execute them rather than compiling the checks away.
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(shared-engine-tests PRIVATE -UNDEBUG)
         target_compile_options(candidate-generation-tests PRIVATE -UNDEBUG)
         target_compile_options(neural-search-tests PRIVATE -UNDEBUG)
         target_compile_options(decoder-core-tests PRIVATE -UNDEBUG)

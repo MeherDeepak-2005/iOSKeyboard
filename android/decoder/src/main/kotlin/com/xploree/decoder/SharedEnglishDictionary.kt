@@ -10,7 +10,12 @@ import java.security.MessageDigest
  */
 object SharedEnglishDictionary {
     @Synchronized
-    fun open(context: Context): NativeChannelDecoder {
+    fun open(context: Context): NativeChannelDecoder = NativeChannelDecoder(install(context).absolutePath)
+
+    @Synchronized
+    fun openEngine(context: Context): NativeKeyboardEngine = NativeKeyboardEngine(install(context).absolutePath, context.assets.open("safety.kbguard").use { it.readBytes() })
+
+    private fun install(context: Context): File {
         val expected = context.assets.open("langdata.sha256").bufferedReader().use { it.readText().trim() }
         require(expected.matches(Regex("[0-9a-f]{64}"))) { "Invalid dictionary resource hash" }
         val directory = File(context.noBackupFilesDir, "xploree-decoder")
@@ -29,7 +34,7 @@ object SharedEnglishDictionary {
             } finally { temporary.delete() }
         }
         if (!target.setReadOnly()) throw IOException("Cannot protect dictionary resource")
-        return NativeChannelDecoder(target.absolutePath)
+        return target
     }
 
     private fun digest(file: File): String {

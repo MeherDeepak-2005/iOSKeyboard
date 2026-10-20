@@ -1,5 +1,6 @@
 #include "../include/Ranking.hpp"
 #include <algorithm>
+#include "../include/TextOrder.hpp"
 #include <cmath>
 #include <limits>
 #include <numeric>
@@ -29,8 +30,9 @@ std::vector<RankedRow> shortlist(std::vector<RankedRow> rows, const std::optiona
     auto cap = limit ? std::optional<std::size_t>(*limit - (typed && *limit > 0 ? 1 : 0)) : std::nullopt;
     if (cap && rows.size() > *cap) {
         std::stable_sort(rows.begin(), rows.end(), [&](const auto& a, const auto& b) {
-            return -a.channel.cost + 0.3 * frequencyTerm(a.channel.logFrequency, compressed)
-                > -b.channel.cost + 0.3 * frequencyTerm(b.channel.logFrequency, compressed);
+            auto lhs = -a.channel.cost + 0.3 * frequencyTerm(a.channel.logFrequency, compressed);
+            auto rhs = -b.channel.cost + 0.3 * frequencyTerm(b.channel.logFrequency, compressed);
+            return lhs == rhs ? utf8Less(a.key, b.key) : lhs > rhs;
         }); rows.resize(*cap);
     }
     if (typed) { std::erase_if(rows, [&](const auto& row) { return row.key == typed->key; }); rows.push_back(*typed); }
@@ -42,7 +44,7 @@ std::vector<RankedRow> rank(std::vector<RankedRow> rows, std::string_view typed,
         row.score = -row.channel.cost - (row.key == typed ? 0 : row.safety) + 1.0 * prior
             + 0.3 * frequencyTerm(row.channel.logFrequency, compressed);
     }
-    std::stable_sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.score > b.score; });
+    std::stable_sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.score == b.score ? utf8Less(a.key, b.key) : a.score > b.score; });
     if (limit && rows.size() > *limit) {
         auto found = std::find_if(rows.begin(), rows.end(), [&](const auto& row) { return row.key == typed; });
         std::optional<RankedRow> extra = found != rows.end() ? std::optional(*found) : std::nullopt;

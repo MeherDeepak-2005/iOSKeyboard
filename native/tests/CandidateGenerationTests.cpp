@@ -5,6 +5,18 @@
 #include <iostream>
 using namespace kb;
 int main() {
+    MutableTrie empty;
+    assert(empty.search("typo", 1.8).empty());
+    bool invalidRadiusRejected = false;
+    try { (void)empty.search("typo", -1); }
+    catch (const std::invalid_argument&) { invalidRadiusRejected = true; }
+    assert(invalidRadiusRejected);
+    std::vector<WordFunding> invalidFunding{{"typo", 1.7}};
+    bool invalidFundingRejected = false;
+    try { (void)empty.search("typo", 1.8, {}, std::span<const WordFunding>(invalidFunding)); }
+    catch (const std::invalid_argument&) { invalidFundingRejected = true; }
+    assert(invalidFundingRejected);
+
     MutableTrie base, personal, supplementary;
     base.insert("correction", 100); base.insert("coercion", 10);
     base.insert("the", 900); base.insert("hello", 200); base.insert("help", 150);

@@ -31,6 +31,10 @@ final class NgramScorer {
 #endif
         native = KBNativeLanguageModel(packed: data?.nativeCandidateLexicon, smoothing: smoothing.rawValue)
     }
+    func makeSharedEngine(lexicon: KBGenerationLexicon, policy: [NSNumber], penalties: [String: NSNumber], profile: Bool = false) -> KBSharedEngine? {
+        guard let native else { return nil }
+        return KBSharedEngine(lexicon: lexicon, model: native, policy: policy, penalties: penalties, profile: profile)
+    }
     func logProbs(_ candidates: [String], context: [String]) -> [Double] {
 #if DEBUG || KB_REFERENCE_DECODER_YES
         if let reference { return reference.logProbs(candidates, context: context) }
@@ -76,16 +80,8 @@ final class NgramScorer {
         let context = context.map { $0.lowercased() }, personal = user.nativeCountsSnapshot()
         let tri = native.successors(forContext: context, personal: personal, trigram: true, limit: UInt(limit))
         let bi = native.successors(forContext: context, personal: personal, trigram: false, limit: UInt(limit))
-        // Preserve Swift Dictionary's historical tie permutation. This adapter
-        // performs no count merging, thresholding, ranking or truncation.
-        func order(_ row: KBSuccessorCounts) -> [(String, NSNumber)] {
-            var dictionary: [String: Int] = [:]
-            for (word, count) in zip(row.words, row.counts) { dictionary[word] = count.intValue }
-            return dictionary.map { ($0.key, NSNumber(value: $0.value)) }
-        }
-        let t = order(tri), b = order(bi)
-        return KBNativeLanguageModel.nextWords(withTrigramWords: t.map(\.0), counts: t.map(\.1),
-            bigramWords: b.map(\.0), counts: b.map(\.1), limit: UInt(limit))
+        return KBNativeLanguageModel.nextWords(withTrigramWords: tri.words, counts: tri.counts,
+            bigramWords: bi.words, counts: bi.counts, limit: UInt(limit))
     }
 }
 
@@ -347,7 +343,7 @@ final class SwiftNgramScorer {
 			}
 		}
 		m[""] = nil
-		return m.sorted { $0.value > $1.value }.map(\.key)
+		return m.sorted { $0.value == $1.value ? $0.key.utf8.lexicographicallyPrecedes($1.key.utf8) : $0.value > $1.value }.map(\.key)
 	}
 }
 

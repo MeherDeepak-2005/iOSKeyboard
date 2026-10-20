@@ -10,6 +10,7 @@
 #include <functional>
 #include <unordered_map>
 #include <mutex>
+#include <array>
 #include "SpatialModel.hpp"
 
 namespace kb {
@@ -74,7 +75,9 @@ private:
     Continuations readRange(std::size_t base, Range range, std::size_t limit) const;
     void validateRange(Range range, std::uint32_t count) const;
     void validate();
-    mutable std::once_flag metadataOnce_, anchorsOnce_;
+    mutable std::once_flag metadataOnce_, anchorsOnce_, seedIndexOnce_;
+    mutable std::array<std::vector<std::uint32_t>, 256> seedIDs_;
+    mutable bool emptySeedWord_ = false;
     mutable std::unordered_map<std::int32_t, TextMetadata> textMetadata_;
     mutable std::unordered_map<std::uint16_t, std::vector<std::int32_t>> anchors_;
     std::optional<std::size_t> trieNode(std::string_view prefix) const;

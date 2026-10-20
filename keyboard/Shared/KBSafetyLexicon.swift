@@ -51,6 +51,15 @@ final class KBSafetyLexicon {
 		data = d
 	}
 
+    var nativePenalties: [String: NSNumber] {
+        // Same rule as kb::parseSafetyPenalties: a duplicated term keeps its strongest action.
+        Dictionary((0..<count).compactMap { i in
+            let action = entryAction(i)
+            guard action != .allow else { return nil }
+            return (entryTerm(i), action == .demote ? 4.0 : Double.infinity)
+        }, uniquingKeysWith: max).mapValues { NSNumber(value: $0) }
+    }
+
     /// Immutable normalized terms for native English generation. Unicode input
     /// normalization remains at the platform boundary; generation receives ASCII.
     var nativeBlockedWords: [String] {

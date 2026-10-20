@@ -1,6 +1,7 @@
 #include "../include/PackedLexicon.hpp"
 #include "../include/IncrementalSearch.hpp"
 #include <algorithm>
+#include <queue>
 #include <array>
 #include <cmath>
 #include <unordered_map>
@@ -277,17 +278,34 @@ std::shared_ptr<const IncrementalSeedSet> PackedLexicon::incrementalSeeds(
         if (!boostView.emplace(boost.word, boost.count).second)
             throw std::invalid_argument("duplicate personalization boost");
     }
-    BorrowedSeedViews seeds;
-    seeds.entries.reserve(std::min<std::size_t>(stateCap, words_ / 3));
-    for (std::uint32_t id = 0; id < words_; ++id) {
+    std::call_once(seedIndexOnce_, [&] {
+        for (std::uint32_t id = 0; id < words_; ++id) {
+            auto spelling = word(id);
+            if (spelling.empty()) { emptySeedWord_ = true; continue; }
+            seedIDs_[static_cast<unsigned char>(spelling.front())].push_back(id);
+        }
+    });
+    if (emptySeedWord_) return {};
+    std::size_t selected = 0;
+    for (std::size_t label = 0; label < allowed.size(); ++label) if (allowed[label]) {
+        const auto count = seedIDs_[label].size();
+        if (count > stateCap - std::min(stateCap, selected)) return {};
+        selected += count;
+    }
+    BorrowedSeedViews seeds; seeds.entries.reserve(selected);
+    using Cursor = std::pair<std::uint32_t, std::uint16_t>;
+    std::priority_queue<Cursor, std::vector<Cursor>, std::greater<Cursor>> pending;
+    std::array<std::size_t, 256> positions{};
+    for (std::size_t label = 0; label < allowed.size(); ++label)
+        if (allowed[label] && !seedIDs_[label].empty()) pending.emplace(seedIDs_[label][0], std::uint16_t(label));
+    while (!pending.empty()) {
+        const auto [id, label] = pending.top(); pending.pop();
         auto spelling = word(id);
-        if (spelling.empty()) return {}; // Swift checks this even for excluded roots.
-        if (!allowed[static_cast<unsigned char>(spelling.front())]) continue;
-        if (seeds.entries.size() >= stateCap) return {};
         double logFrequency = std::log(double(std::max(frequency(id), 1u)) + 1);
         if (auto boost = boostView.find(spelling); boost != boostView.end())
             logFrequency = std::log(std::exp(logFrequency) + double(boost->second));
         seeds.entries.push_back({spelling, spelling, logFrequency});
+        if (++positions[label] < seedIDs_[label].size()) pending.emplace(seedIDs_[label][positions[label]], label);
     }
     return std::make_shared<const IncrementalSeedSet>(std::move(seeds));
 }

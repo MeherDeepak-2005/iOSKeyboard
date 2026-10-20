@@ -1,0 +1,1158 @@
+[
+  {
+    "id": "c000",
+    "category": "ordinary_typo",
+    "typed": "hellp",
+    "target": "hello",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c001",
+    "category": "ordinary_typo",
+    "typed": "hellp",
+    "target": "hello",
+    "context": [
+      "say"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c002",
+    "category": "ordinary_typo",
+    "typed": "wprld",
+    "target": "world",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c003",
+    "category": "ordinary_typo",
+    "typed": "wprld",
+    "target": "world",
+    "context": [
+      "hello"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c004",
+    "category": "ordinary_typo",
+    "typed": "sebd",
+    "target": "send",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c005",
+    "category": "ordinary_typo",
+    "typed": "sebd",
+    "target": "send",
+    "context": [
+      "can",
+      "you"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c006",
+    "category": "ordinary_typo",
+    "typed": "correcgion",
+    "target": "correction",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c007",
+    "category": "ordinary_typo",
+    "typed": "correcgion",
+    "target": "correction",
+    "context": [
+      "auto"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c008",
+    "category": "ordinary_typo",
+    "typed": "tomorow",
+    "target": "tomorrow",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c009",
+    "category": "ordinary_typo",
+    "typed": "tomorow",
+    "target": "tomorrow",
+    "context": [
+      "see",
+      "you"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c010",
+    "category": "ordinary_typo",
+    "typed": "adress",
+    "target": "address",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c011",
+    "category": "ordinary_typo",
+    "typed": "adress",
+    "target": "address",
+    "context": [
+      "your"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c012",
+    "category": "ordinary_typo",
+    "typed": "comming",
+    "target": "coming",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c013",
+    "category": "ordinary_typo",
+    "typed": "comming",
+    "target": "coming",
+    "context": [
+      "i",
+      "am"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c014",
+    "category": "ordinary_typo",
+    "typed": "definately",
+    "target": "definitely",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c015",
+    "category": "ordinary_typo",
+    "typed": "definately",
+    "target": "definitely",
+    "context": [
+      "i",
+      "will"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c016",
+    "category": "ordinary_typo",
+    "typed": "seperate",
+    "target": "separate",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c017",
+    "category": "ordinary_typo",
+    "typed": "seperate",
+    "target": "separate",
+    "context": [
+      "keep",
+      "them"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c018",
+    "category": "ordinary_typo",
+    "typed": "aple",
+    "target": "apple",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c019",
+    "category": "ordinary_typo",
+    "typed": "aple",
+    "target": "apple",
+    "context": [
+      "an"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c020",
+    "category": "ordinary_typo",
+    "typed": "recieve",
+    "target": "receive",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c021",
+    "category": "ordinary_typo",
+    "typed": "recieve",
+    "target": "receive",
+    "context": [
+      "i",
+      "will"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c022",
+    "category": "ordinary_typo",
+    "typed": "coudl",
+    "target": "could",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c023",
+    "category": "ordinary_typo",
+    "typed": "coudl",
+    "target": "could",
+    "context": [
+      "this"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c024",
+    "category": "ordinary_typo",
+    "typed": "teh",
+    "target": "the",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c025",
+    "category": "ordinary_typo",
+    "typed": "teh",
+    "target": "the",
+    "context": [
+      "in"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c026",
+    "category": "ordinary_typo",
+    "typed": "thier",
+    "target": "their",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c027",
+    "category": "ordinary_typo",
+    "typed": "thier",
+    "target": "their",
+    "context": [
+      "it",
+      "is"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c028",
+    "category": "ordinary_typo",
+    "typed": "becuase",
+    "target": "because",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c029",
+    "category": "ordinary_typo",
+    "typed": "becuase",
+    "target": "because",
+    "context": [
+      "just"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c030",
+    "category": "ordinary_typo",
+    "typed": "pleae",
+    "target": "please",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c031",
+    "category": "ordinary_typo",
+    "typed": "pleae",
+    "target": "please",
+    "context": [
+      "yes"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c032",
+    "category": "ordinary_typo",
+    "typed": "mesage",
+    "target": "message",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c033",
+    "category": "ordinary_typo",
+    "typed": "mesage",
+    "target": "message",
+    "context": [
+      "send",
+      "a"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c034",
+    "category": "ordinary_typo",
+    "typed": "keybaord",
+    "target": "keyboard",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c035",
+    "category": "ordinary_typo",
+    "typed": "keybaord",
+    "target": "keyboard",
+    "context": [
+      "my"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c036",
+    "category": "ordinary_typo",
+    "typed": "firend",
+    "target": "friend",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c037",
+    "category": "ordinary_typo",
+    "typed": "firend",
+    "target": "friend",
+    "context": [
+      "my"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c038",
+    "category": "ordinary_typo",
+    "typed": "wrok",
+    "target": "work",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c039",
+    "category": "ordinary_typo",
+    "typed": "wrok",
+    "target": "work",
+    "context": [
+      "at"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c040",
+    "category": "valid_common",
+    "typed": "hello",
+    "target": "hello",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c041",
+    "category": "valid_common",
+    "typed": "world",
+    "target": "world",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c042",
+    "category": "valid_common",
+    "typed": "thanks",
+    "target": "thanks",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c043",
+    "category": "valid_common",
+    "typed": "meeting",
+    "target": "meeting",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c044",
+    "category": "valid_common",
+    "typed": "tomorrow",
+    "target": "tomorrow",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c045",
+    "category": "valid_common",
+    "typed": "might",
+    "target": "might",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c046",
+    "category": "valid_common",
+    "typed": "night",
+    "target": "night",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c047",
+    "category": "valid_common",
+    "typed": "form",
+    "target": "form",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c048",
+    "category": "valid_common",
+    "typed": "from",
+    "target": "from",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c049",
+    "category": "valid_common",
+    "typed": "thus",
+    "target": "thus",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c050",
+    "category": "valid_common",
+    "typed": "this",
+    "target": "this",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c051",
+    "category": "valid_common",
+    "typed": "their",
+    "target": "their",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c052",
+    "category": "valid_common",
+    "typed": "there",
+    "target": "there",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c053",
+    "category": "valid_common",
+    "typed": "don't",
+    "target": "don't",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c054",
+    "category": "valid_common",
+    "typed": "what's",
+    "target": "what's",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c055",
+    "category": "valid_common",
+    "typed": "running",
+    "target": "running",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c056",
+    "category": "valid_common",
+    "typed": "receive",
+    "target": "receive",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c057",
+    "category": "valid_common",
+    "typed": "definitely",
+    "target": "definitely",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c058",
+    "category": "valid_common",
+    "typed": "correction",
+    "target": "correction",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c059",
+    "category": "valid_common",
+    "typed": "information",
+    "target": "information",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c060",
+    "category": "contraction",
+    "typed": "dont",
+    "target": "don't",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c061",
+    "category": "contraction",
+    "typed": "cant",
+    "target": "can't",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c062",
+    "category": "contraction",
+    "typed": "whats",
+    "target": "what's",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c063",
+    "category": "contraction",
+    "typed": "im",
+    "target": "i'm",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c064",
+    "category": "contraction",
+    "typed": "youre",
+    "target": "you're",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c065",
+    "category": "contraction",
+    "typed": "wouldnt",
+    "target": "wouldn't",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c066",
+    "category": "contraction",
+    "typed": "shouldve",
+    "target": "should've",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c067",
+    "category": "contraction",
+    "typed": "thads",
+    "target": "that's",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c068",
+    "category": "contraction",
+    "typed": "whens",
+    "target": "when's",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c069",
+    "category": "contraction",
+    "typed": "theres",
+    "target": "there's",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c070",
+    "category": "valid_vocabulary",
+    "typed": "rizz",
+    "target": "rizz",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c071",
+    "category": "valid_vocabulary",
+    "typed": "doomscrolling",
+    "target": "doomscrolling",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c072",
+    "category": "valid_vocabulary",
+    "typed": "situationship",
+    "target": "situationship",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c073",
+    "category": "valid_vocabulary",
+    "typed": "passkeys",
+    "target": "passkeys",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c074",
+    "category": "valid_vocabulary",
+    "typed": "screenshots",
+    "target": "screenshots",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c075",
+    "category": "valid_vocabulary",
+    "typed": "haptic",
+    "target": "haptic",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c076",
+    "category": "valid_vocabulary",
+    "typed": "idk",
+    "target": "idk",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c077",
+    "category": "valid_vocabulary",
+    "typed": "brb",
+    "target": "brb",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c078",
+    "category": "valid_vocabulary",
+    "typed": "prolly",
+    "target": "prolly",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c079",
+    "category": "valid_vocabulary",
+    "typed": "colour",
+    "target": "colour",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c080",
+    "category": "valid_vocabulary",
+    "typed": "favourite",
+    "target": "favourite",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c081",
+    "category": "valid_vocabulary",
+    "typed": "organise",
+    "target": "organise",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c082",
+    "category": "valid_vocabulary",
+    "typed": "bengaluru",
+    "target": "bengaluru",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c083",
+    "category": "valid_vocabulary",
+    "typed": "hyderabad",
+    "target": "hyderabad",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c084",
+    "category": "valid_vocabulary",
+    "typed": "meher",
+    "target": "meher",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c085",
+    "category": "valid_vocabulary",
+    "typed": "epistemology",
+    "target": "epistemology",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c086",
+    "category": "valid_vocabulary",
+    "typed": "acetylcholine",
+    "target": "acetylcholine",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c087",
+    "category": "valid_vocabulary",
+    "typed": "interoperability",
+    "target": "interoperability",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c088",
+    "category": "valid_vocabulary",
+    "typed": "asynchronous",
+    "target": "asynchronous",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c089",
+    "category": "valid_vocabulary",
+    "typed": "chlorofluorocarbon",
+    "target": "chlorofluorocarbon",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c090",
+    "category": "valid_vocabulary",
+    "typed": "sociolinguistics",
+    "target": "sociolinguistics",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c091",
+    "category": "valid_vocabulary",
+    "typed": "haemoglobin",
+    "target": "haemoglobin",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c092",
+    "category": "context_realword",
+    "typed": "might",
+    "target": "might",
+    "context": [
+      "they"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c093",
+    "category": "context_realword",
+    "typed": "form",
+    "target": "form",
+    "context": [
+      "fill",
+      "the"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c094",
+    "category": "context_realword",
+    "typed": "form",
+    "target": "from",
+    "context": [
+      "i",
+      "am"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c095",
+    "category": "context_realword",
+    "typed": "thus",
+    "target": "this",
+    "context": [
+      "what's"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c096",
+    "category": "context_realword",
+    "typed": "id",
+    "target": "id",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c097",
+    "category": "context_realword",
+    "typed": "id",
+    "target": "id",
+    "context": [
+      "send",
+      "your"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c098",
+    "category": "context_realword",
+    "typed": "id",
+    "target": "is",
+    "context": [
+      "this"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c099",
+    "category": "context_realword",
+    "typed": "hoe",
+    "target": "how",
+    "context": [
+      "tell",
+      "me"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c100",
+    "category": "context_realword",
+    "typed": "its",
+    "target": "its",
+    "context": [
+      "the",
+      "dog",
+      "wagged"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c101",
+    "category": "context_realword",
+    "typed": "were",
+    "target": "were",
+    "context": [
+      "they"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c102",
+    "category": "context_realword",
+    "typed": "night",
+    "target": "night",
+    "context": [
+      "good"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c103",
+    "category": "severe",
+    "typed": "coeevitjkn",
+    "target": "correction",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c104",
+    "category": "severe",
+    "typed": "coeevitjkn",
+    "target": "correction",
+    "context": [
+      "auto"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c105",
+    "category": "severe",
+    "typed": "coeevitjkn",
+    "target": "correction",
+    "context": [
+      "possibly",
+      "receive"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c106",
+    "category": "severe",
+    "typed": "coeevitjkn",
+    "target": "correction",
+    "context": [
+      "for",
+      "definitely",
+      "decided"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c107",
+    "category": "severe",
+    "typed": "coeevitjkn",
+    "target": "correction",
+    "context": [
+      "could",
+      "definitely",
+      "receive"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c108",
+    "category": "severe",
+    "typed": "qorrwctuon",
+    "target": "correction",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c109",
+    "category": "severe",
+    "typed": "zzzzzzzz",
+    "target": "zzzzzzzz",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c110",
+    "category": "severe",
+    "typed": "thsi",
+    "target": "this",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c111",
+    "category": "severe",
+    "typed": "recieev",
+    "target": "receive",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c112",
+    "category": "multiword",
+    "typed": "thisbis",
+    "target": "this is",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c113",
+    "category": "multiword",
+    "typed": "iamhere",
+    "target": "i am here",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c114",
+    "category": "multiword",
+    "typed": "helloworld",
+    "target": "hello world",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c115",
+    "category": "multiword",
+    "typed": "thankyou",
+    "target": "thank you",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c116",
+    "category": "multiword",
+    "typed": "alot",
+    "target": "a lot",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c117",
+    "category": "literal_edge",
+    "typed": "qzvaxon",
+    "target": "qzvaxon",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c118",
+    "category": "literal_edge",
+    "typed": "zzqqx",
+    "target": "zzqqx",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c119",
+    "category": "literal_edge",
+    "typed": "Xylarion",
+    "target": "Xylarion",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c120",
+    "category": "literal_edge",
+    "typed": "abc123",
+    "target": "abc123",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c121",
+    "category": "literal_edge",
+    "typed": "café",
+    "target": "café",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c122",
+    "category": "literal_edge",
+    "typed": "naïve",
+    "target": "naïve",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c123",
+    "category": "literal_edge",
+    "typed": "résumé",
+    "target": "résumé",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c124",
+    "category": "literal_edge",
+    "typed": "São",
+    "target": "São",
+    "context": [],
+    "scored": true
+  },
+  {
+    "id": "c125",
+    "category": "literal_edge",
+    "typed": "user@example.com",
+    "target": "user@example.com",
+    "context": [],
+    "scored": false
+  },
+  {
+    "id": "c126",
+    "category": "literal_edge",
+    "typed": "https://example.com",
+    "target": "https://example.com",
+    "context": [],
+    "scored": false
+  },
+  {
+    "id": "c127",
+    "category": "next_word",
+    "typed": "",
+    "target": "you",
+    "context": [
+      "thank"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c128",
+    "category": "next_word",
+    "typed": "",
+    "target": "morning",
+    "context": [
+      "good"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c129",
+    "category": "next_word",
+    "typed": "",
+    "target": "you",
+    "context": [
+      "how",
+      "are"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c130",
+    "category": "next_word",
+    "typed": "",
+    "target": "tomorrow",
+    "context": [
+      "see",
+      "you"
+    ],
+    "scored": true
+  },
+  {
+    "id": "c131",
+    "category": "next_word",
+    "typed": "",
+    "target": "going",
+    "context": [
+      "i",
+      "am"
+    ],
+    "scored": true
+  }
+]

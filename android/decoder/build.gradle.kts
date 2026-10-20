@@ -25,12 +25,12 @@ android {
             version = "3.22.1"
         }
     }
-    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/decoder-assets"))
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/decoder-assets").get().asFile)
 }
 
 // Stage the SAME pack and notices; do not commit a second Android dictionary.
 val stageDecoderAssets by tasks.registering(Copy::class) {
-    from("../../keyboard/langdata.bin", "../../keyboard/ThirdPartyNotices.txt")
+    from("../../keyboard/langdata.bin", "../../keyboard/safety.kbguard", "../../keyboard/ThirdPartyNotices.txt")
     into(layout.buildDirectory.dir("generated/decoder-assets"))
     doLast {
         val sha = MessageDigest.getInstance("SHA-256")

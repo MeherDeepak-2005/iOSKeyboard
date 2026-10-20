@@ -1,0 +1,224 @@
+{
+ "date": "2026-10-20",
+ "baseline_commit": "4e82650",
+ "scope": "Shared English engine: whole tap decode, streaming Glide session, personalization and vocabulary state in portable C++; iOS and Android adapters",
+ "untouched": [
+  "Telugu",
+  "Tenglish transliteration",
+  "neural tiers",
+  "batch glide()"
+ ],
+ "simulator": {
+  "device": "iPhone 17 Pro",
+  "configuration": "Debug",
+  "tests_total": 118,
+  "suites": 7,
+  "suite_passed": true
+ },
+ "portable": {
+  "asan_ubsan": "passed, including golden replay",
+  "cmake_ctest": "4/4 passed; assertions enabled in Release"
+ },
+ "golden_parity": {
+  "source": "production iOS engine via macOS CLI",
+  "decodes": 132,
+  "streaming_glides": 60,
+  "unicode_boundary_fixtures": 21,
+  "host_cpp_replay": "exact",
+  "android_emulator": "5/5 EngineReplayTest passed, API 36 arm64-v8a",
+  "numeric_tolerance": 1e-09
+ },
+ "release": {
+  "build": "generic iOS arm64 Release; CODE_SIGNING_ALLOWED=NO",
+  "extension_bytes": 20246444,
+  "gate_bytes": 24000000,
+  "artifact_gate_passed": true
+ },
+ "benchmark": {
+  "median_of_trials": {
+   "before": {
+    "warm_p50_ms": 0.6180833152029663,
+    "warm_p95_ms": 3.0397500086110085,
+    "warm_p99_ms": 3.789291688008234,
+    "fresh_session_median_case_p50_ms": 3.2036874908953905,
+    "request_cpu_seconds": 5.425351999999993,
+    "requests": 2794,
+    "peak_rss_bytes": 48087040,
+    "end_footprint_bytes": 24707648,
+    "ready_first_decode_ms": 23.146291670855135,
+    "context_warm_p50_ms": 0.680791650665924,
+    "context_warm_p95_ms": 3.3754166797734797,
+    "context_fresh_median_case_p50_ms": 2.448791667120531,
+    "no_context_warm_p50_ms": 0.5152083467692137,
+    "no_context_warm_p95_ms": 3.0397500086110085,
+    "no_context_fresh_median_case_p50_ms": 3.212999989045784
+   },
+   "after": {
+    "warm_p50_ms": 0.1646250020712614,
+    "warm_p95_ms": 1.6736249963287264,
+    "warm_p99_ms": 2.7575833373703063,
+    "fresh_session_median_case_p50_ms": 1.7119166877819225,
+    "request_cpu_seconds": 3.1942939999999913,
+    "requests": 2794,
+    "peak_rss_bytes": 49954816,
+    "end_footprint_bytes": 26493504,
+    "ready_first_decode_ms": 23.77862500725314,
+    "context_warm_p50_ms": 0.2006666618399322,
+    "context_warm_p95_ms": 1.7446666897740215,
+    "context_fresh_median_case_p50_ms": 0.6219999922905117,
+    "no_context_warm_p50_ms": 0.13604166451841593,
+    "no_context_warm_p95_ms": 1.6268749895971268,
+    "no_context_fresh_median_case_p50_ms": 1.740999985486269
+   }
+  },
+  "startup": {
+   "before": {
+    "samples_ms": [
+     25.330208329251036,
+     24.13808333221823,
+     23.91437499318272,
+     25.623416673624888,
+     24.522666644770652,
+     23.99845831678249,
+     23.268958349945024,
+     23.466208338504657,
+     23.52212500409223,
+     23.633458331460133
+    ],
+    "median_ms": 23.956416654982604,
+    "p95_ms": 25.623416673624888
+   },
+   "after": {
+    "samples_ms": [
+     24.63083335896954,
+     24.43662501173094,
+     24.293416645377874,
+     24.124499992467463,
+     23.881833330960944,
+     24.156791652785614,
+     23.56137498281896,
+     23.391958326101303,
+     23.696541669778526,
+     23.494791646953672
+    ],
+    "median_ms": 24.003166661714204,
+    "p95_ms": 24.63083335896954
+   }
+  },
+  "glide": {
+   "before": {
+    "cases": 60,
+    "batch_p50_ms": 3.2212916703429073,
+    "batch_p95_ms": 3.7376666732598096,
+    "streaming_p50_ms": 4.4777499861083925,
+    "streaming_p95_ms": 6.634791672695428,
+    "streaming_unstable": []
+   },
+   "after": {
+    "cases": 60,
+    "batch_p50_ms": 3.3099583233706653,
+    "batch_p95_ms": 3.8530000019818544,
+    "streaming_p50_ms": 2.9366666567511857,
+    "streaming_p95_ms": 5.25133335031569,
+    "streaming_unstable": []
+   }
+  },
+  "editing": {
+   "hello": {
+    "before": {
+     "append_p50_ms": 0.6779583345633,
+     "append_p95_ms": 4.462874989258125,
+     "backspace_p50_ms": 0.5639583396259695,
+     "backspace_p95_ms": 0.7094583124853671
+    },
+    "after": {
+     "append_p50_ms": 0.1607916783541441,
+     "append_p95_ms": 3.1904583156574517,
+     "backspace_p50_ms": 0.16758334822952747,
+     "backspace_p95_ms": 0.30037498800083995
+    }
+   },
+   "correction": {
+    "before": {
+     "append_p50_ms": 0.7729166827630252,
+     "append_p95_ms": 4.671458329539746,
+     "backspace_p50_ms": 0.25824998738244176,
+     "backspace_p95_ms": 0.38512502214871347
+    },
+    "after": {
+     "append_p50_ms": 0.5304999940562993,
+     "append_p95_ms": 2.8982083313167095,
+     "backspace_p50_ms": 0.10450000991113484,
+     "backspace_p95_ms": 0.2613333344925195
+    }
+   },
+   "coeevitjkn": {
+    "before": {
+     "append_p50_ms": 1.3282500149216503,
+     "append_p95_ms": 4.024374997243285,
+     "backspace_p50_ms": 1.7072500195354223,
+     "backspace_p95_ms": 1.7192916420754045
+    },
+    "after": {
+     "append_p50_ms": 0.9570833353791386,
+     "append_p95_ms": 2.854833350284025,
+     "backspace_p50_ms": 1.5434999950230122,
+     "backspace_p95_ms": 1.6605000128038228
+    }
+   },
+   "definitely": {
+    "before": {
+     "append_p50_ms": 1.5997083391994238,
+     "append_p95_ms": 1.8531249952502549,
+     "backspace_p50_ms": 1.5864999732002616,
+     "backspace_p95_ms": 1.7400416545569897
+    },
+    "after": {
+     "append_p50_ms": 0.17087499145418406,
+     "append_p95_ms": 0.3245416737627238,
+     "backspace_p50_ms": 0.18637502216733992,
+     "backspace_p95_ms": 0.39508333429694176
+    }
+   },
+   "recieve": {
+    "before": {
+     "append_p50_ms": 0.763374991947785,
+     "append_p95_ms": 2.2482500062324107,
+     "backspace_p50_ms": 2.16116665978916,
+     "backspace_p95_ms": 2.2285416489467025
+    },
+    "after": {
+     "append_p50_ms": 0.18008332699537277,
+     "append_p95_ms": 0.4690416681114584,
+     "backspace_p50_ms": 0.42141665471717715,
+     "backspace_p95_ms": 0.521541660418734
+    }
+   },
+   "qzvaxon": {
+    "before": {
+     "append_p50_ms": 0.4288333293516189,
+     "append_p95_ms": 2.9497499926947057,
+     "backspace_p50_ms": 0.1592083426658064,
+     "backspace_p95_ms": 0.17295833094976842
+    },
+    "after": {
+     "append_p50_ms": 0.20000000949949026,
+     "append_p95_ms": 1.7821250075940043,
+     "backspace_p50_ms": 0.1410833210684359,
+     "backspace_p95_ms": 0.16183333355002105
+    }
+   }
+  },
+  "case_evidence": {
+   "identical": 327,
+   "tie-order": 66,
+   "tie-cutoff": 3
+  },
+  "real_case_changes": [],
+  "changed_editing_evidence": []
+ },
+ "not_validated": [
+  "physical-iPhone or physical-Android runtime, latency or residency",
+  "trained GRU/transformer quality"
+ ]
+}

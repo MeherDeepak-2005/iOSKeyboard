@@ -14,9 +14,8 @@ struct RequestIdentity {
     std::uint64_t personalizationEpoch = 0;
     bool operator==(const RequestIdentity&) const = default;
 };
-// Current native implementation is the English retained channel, not a complete
-// cross-platform keyboard. Keep UI/lifecycle/model backends outside DecoderCore.
-inline constexpr std::uint32_t platformContractVersion = 1;
-inline constexpr std::uint32_t currentLanguagePackVersion = 5;
+// Shared English engine contract. UI/lifecycle/model runtimes stay in adapters.
+inline constexpr std::uint32_t platformContractVersion = 2;
+inline constexpr std::uint32_t currentLanguagePackVersion = 6;
 inline constexpr std::uint32_t defaultIncrementalStateCap = 24'000;
 } // namespace kb

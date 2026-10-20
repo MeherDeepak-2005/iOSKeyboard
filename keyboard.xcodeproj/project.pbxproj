@@ -7,7 +7,19 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2F1B9C49352B352C1FAF550C /* native/DecoderCore/src/LanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */; };
+		361255DFE50D2D62BD8BFB5E /* native/DecoderCore/src/LanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */; };
+		5206758E3E61B9687AE8C5FE /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
+		537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
+		564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
+		693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
 		83C6F30D2FE821180014EA39 /* demo_keyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83C6F3062FE821180014EA39 /* demo_keyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
+		D22000000000000000000001 /* native/DecoderCore/src/Engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000001 /* native/DecoderCore/src/Engine.cpp */; };
+		D22000000000000000000005 /* native/DecoderCore/src/EngineWire.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */; };
+		D22000000000000000000003 /* native/DecoderCore/src/Personalization.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000002 /* native/DecoderCore/src/Personalization.cpp */; };
+		8A77364AA091280987C485A1 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
+		A188A11F039D8AA323A727B8 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
 		B12000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */; };
 		B12000000000000000000002 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */; };
 		B12000000000000000000003 /* native/iOS/KBDecoderBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000002 /* native/iOS/KBDecoderBridge.mm */; };
@@ -18,18 +30,12 @@
 		B12000000000000000000008 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */; };
 		B12000000000000000000009 /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */; };
 		B1200000000000000000000A /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */; };
-		361255DFE50D2D62BD8BFB5E /* native/DecoderCore/src/LanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */; };
-		2F1B9C49352B352C1FAF550C /* native/DecoderCore/src/LanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */; };
-		A188A11F039D8AA323A727B8 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
-		ED1F51886B6A6B2857E4FA31 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
-		693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
-		8A77364AA091280987C485A1 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
-		5206758E3E61B9687AE8C5FE /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
-		537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
-		D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
-		564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
-		8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
 		D319972CC0421BE8B12A84FE /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
+		D22000000000000000000002 /* native/DecoderCore/src/Engine.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000001 /* native/DecoderCore/src/Engine.cpp */; };
+		D22000000000000000000006 /* native/DecoderCore/src/EngineWire.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */; };
+		D22000000000000000000004 /* native/DecoderCore/src/Personalization.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000002 /* native/DecoderCore/src/Personalization.cpp */; };
+		D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
+		ED1F51886B6A6B2857E4FA31 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,26 +77,36 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Glide.cpp; sourceTree = SOURCE_ROOT; };
+		7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Ranking.cpp; sourceTree = SOURCE_ROOT; };
+		80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Multiword.cpp; sourceTree = SOURCE_ROOT; };
 		83C6F2B92FE7B47E0014EA39 /* keyboard.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = keyboard.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F2CB2FE7B4800014EA39 /* keyboardTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = keyboardTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F2D52FE7B4800014EA39 /* keyboardUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = keyboardUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		83C6F3062FE821180014EA39 /* demo_keyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = demo_keyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000012FE821180014EA39 /* Extension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Extension.xcconfig; sourceTree = "<group>"; };
 		A10000022FE821180014EA39 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
+		A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Adaptation.cpp; sourceTree = SOURCE_ROOT; };
+		D21000000000000000000001 /* native/DecoderCore/src/Engine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Engine.cpp; sourceTree = SOURCE_ROOT; };
+		D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/EngineWire.cpp; sourceTree = SOURCE_ROOT; };
+		D21000000000000000000002 /* native/DecoderCore/src/Personalization.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Personalization.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/PackedLexicon.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000002 /* native/iOS/KBDecoderBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = native/iOS/KBDecoderBridge.mm; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000003 /* native/DecoderCore/src/SpatialModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/SpatialModel.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/IncrementalSearch.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/CandidateGeneration.cpp; sourceTree = SOURCE_ROOT; };
 		D1BF64A2B88251707D9E592C /* native/DecoderCore/src/LanguageModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/LanguageModel.cpp; sourceTree = SOURCE_ROOT; };
-		7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Ranking.cpp; sourceTree = SOURCE_ROOT; };
-		11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Glide.cpp; sourceTree = SOURCE_ROOT; };
-		80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Multiword.cpp; sourceTree = SOURCE_ROOT; };
 		E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralSearch.cpp; sourceTree = SOURCE_ROOT; };
-		A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Adaptation.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		831577463087631500FC0999 /* Exceptions for "demo_keyboard" folder in "demo_keyboard" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 83C6F3052FE821180014EA39 /* demo_keyboard */;
+		};
 		837F018D2FE8D47D0033ED99 /* Exceptions for "keyboard" folder in "demo_keyboard" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -126,6 +142,7 @@
 				telugu_layout.kbpack,
 				telugu_pack_manifest.json,
 				tenglish_lexicon.bin,
+				ThirdPartyNotices.txt,
 				Views/ClipboardPanel.swift,
 				Views/Emoji.swift,
 				Views/Keyboard.swift,
@@ -144,13 +161,6 @@
 				safety.kbguard,
 			);
 			target = 83C6F2B82FE7B47E0014EA39 /* keyboard */;
-		};
-		83C6F3112FE821180014EA39 /* Exceptions for "demo_keyboard" folder in "demo_keyboard" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 83C6F3052FE821180014EA39 /* demo_keyboard */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -177,7 +187,7 @@
 		83C6F3072FE821180014EA39 /* demo_keyboard */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				83C6F3112FE821180014EA39 /* Exceptions for "demo_keyboard" folder in "demo_keyboard" target */,
+				831577463087631500FC0999 /* Exceptions for "demo_keyboard" folder in "demo_keyboard" target */,
 			);
 			path = demo_keyboard;
 			sourceTree = "<group>";
@@ -223,6 +233,9 @@
 				B11000000000000000000004 /* native/DecoderCore/src/IncrementalSearch.cpp */,
 				B11000000000000000000005 /* native/DecoderCore/src/CandidateGeneration.cpp */,
 				A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */,
+				D21000000000000000000001 /* native/DecoderCore/src/Engine.cpp */,
+				D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */,
+				D21000000000000000000002 /* native/DecoderCore/src/Personalization.cpp */,
 				E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */,
 				80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */,
 				11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */,
@@ -474,6 +487,9 @@
 				B12000000000000000000007 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */,
 				B12000000000000000000009 /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
 				8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */,
+				D22000000000000000000001 /* native/DecoderCore/src/Engine.cpp in Sources */,
+				D22000000000000000000005 /* native/DecoderCore/src/EngineWire.cpp in Sources */,
+				D22000000000000000000003 /* native/DecoderCore/src/Personalization.cpp in Sources */,
 				D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */,
 				5206758E3E61B9687AE8C5FE /* native/DecoderCore/src/Multiword.cpp in Sources */,
 				693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */,
@@ -506,6 +522,9 @@
 				B12000000000000000000008 /* native/DecoderCore/src/IncrementalSearch.cpp in Sources */,
 				B1200000000000000000000A /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
 				D319972CC0421BE8B12A84FE /* native/DecoderCore/src/Adaptation.cpp in Sources */,
+				D22000000000000000000002 /* native/DecoderCore/src/Engine.cpp in Sources */,
+				D22000000000000000000006 /* native/DecoderCore/src/EngineWire.cpp in Sources */,
+				D22000000000000000000004 /* native/DecoderCore/src/Personalization.cpp in Sources */,
 				564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */,
 				537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */,
 				8A77364AA091280987C485A1 /* native/DecoderCore/src/Glide.cpp in Sources */,
@@ -642,7 +661,10 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited) KB_REFERENCE_DECODER_$(ENABLE_TESTABILITY)=1";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"KB_REFERENCE_DECODER_$(ENABLE_TESTABILITY)=1",
+				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;
@@ -655,8 +677,8 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) KB_REFERENCE_DECODER_$(ENABLE_TESTABILITY)";
+				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -669,7 +691,7 @@
 				CODE_SIGN_ENTITLEMENTS = keyboard/keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				DEVELOPMENT_TEAM = 9AMJFQB2M3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
@@ -706,7 +728,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				DEVELOPMENT_TEAM = 9AMJFQB2M3;
 				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -729,8 +751,8 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/native/iOS/Keyboard-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -826,7 +848,7 @@
 				CODE_SIGN_ENTITLEMENTS = demo_keyboard/demo_keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				DEVELOPMENT_TEAM = 9AMJFQB2M3;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
@@ -862,7 +884,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEPLOYMENT_POSTPROCESSING = YES;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				DEVELOPMENT_TEAM = 9AMJFQB2M3;
 				ENABLE_CODE_COVERAGE = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
@@ -883,8 +905,8 @@
 				STRIP_SWIFT_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				SWIFT_OBJC_BRIDGING_HEADER = "$(SRCROOT)/native/iOS/Keyboard-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-Osize";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
