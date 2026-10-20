@@ -1,5 +1,9 @@
+// MIGRATION-FILE: planned SPLIT | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: CPP_CORE owns English/Glide search and policy; SWIFT_IOS owns queues, identity and publication; OBJCXX_BRIDGE executes models.
 import Foundation
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 nonisolated struct GlidePrediction {
 	let word: String
 	let alternatives: [String]
@@ -7,14 +11,68 @@ nonisolated struct GlidePrediction {
 	let margin: Double
 }
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 nonisolated struct GlideSessionID: Hashable, Sendable {
 	let rawValue: UInt64
 }
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 nonisolated struct GlideUpdate {
 	let sessionID: GlideSessionID
 	let revision: UInt64
 	let prediction: GlidePrediction
+}
+
+/// Immutable correction gates. Calibration replays these exact gates against
+/// captured production decisions; it never regenerates candidates from labels.
+nonisolated struct CorrectionPolicy: Codable, Equatable {
+    var oovMargin = 3.0
+    var realWordMargin = 5.0
+    var closeRescueMargin = 3.0
+    var closeRescueGap = 0.0
+    var minimumCloseGap = 0.0
+    var closeRescueMaxCost = 1.6
+    static let baseline = CorrectionPolicy()
+    // Frozen on development families; see correction-calibration-2026-10-19 artifacts.
+    static let calibrated = CorrectionPolicy(oovMargin: 3, realWordMargin: 5,
+        closeRescueMargin: 0, closeRescueGap: 0.5, minimumCloseGap: 0.25,
+        closeRescueMaxCost: 1.2)
+    static let severeMargin = log(10.0)
+    static let severeGap = log(2.0)
+    static let looseGap = 1.0
+
+    func accepts(_ evidence: CorrectionGateEvidence) -> Bool {
+        switch evidence.kind {
+        case .realWord:
+            return evidence.typedMargin > realWordMargin
+        case .severe:
+            return evidence.typedMargin > Self.severeMargin
+                && (evidence.candidateGap.map { $0 >= Self.severeGap } ?? true)
+        case .loose:
+            return evidence.typedMargin > oovMargin
+                && (evidence.candidateGap.map { $0 >= Self.looseGap } ?? true)
+        case .close:
+            guard evidence.candidateGap.map({ $0 >= minimumCloseGap }) ?? true else { return false }
+            if evidence.typedMargin > oovMargin { return true }
+            return evidence.allowsCloseRescue && evidence.spatialCost <= closeRescueMaxCost
+                && evidence.typedMargin > closeRescueMargin
+                && (evidence.candidateGap.map { $0 >= closeRescueGap } ?? true)
+        }
+    }
+}
+
+nonisolated struct CorrectionGateEvidence: Codable, Equatable {
+    enum Kind: String, Codable { case realWord, close, loose, severe }
+    let typed: String
+    let candidate: String
+    let kind: Kind
+    let typedMargin: Double
+    /// nil means there is no eligible runner-up. Finite values use raw commit scores.
+    let candidateGap: Double?
+    let spatialCost: Double
+    let allowsCloseRescue: Bool
 }
 
 // Noisy-channel engine with one versioned, asynchronously published decode contract.
@@ -35,6 +93,8 @@ nonisolated struct GlideUpdate {
 // counts in full). Only a small dynamic trie (adopted + contact words) stays on the
 // heap; a v2 file falls back to loading the full vocab into that trie as before.
 
+// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+// MIGRATION-SPLIT: CPP_CORE owns English/Glide candidate generation, retained search and scoring; SWIFT_IOS owns scheduling, settings, language routing and result publication.
 final class KeyboardEngine {
 
 	/// SERIAL, deliberately. One background pass at a time: a superseded suggestion pass
@@ -53,6 +113,8 @@ final class KeyboardEngine {
 	private let glidePreviewLock = NSLock()
 	private var glidePreviewGeneration = 0
 	private let glidePreviewCacheLock = NSLock()
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private struct GlidePreviewCache {
 		let key: UInt64
 		let createdAt: TimeInterval
@@ -60,7 +122,9 @@ final class KeyboardEngine {
 	}
 	private var glidePreviewCache: GlidePreviewCache?
 	private let lexicon = Lexicon()
-	private let user = UserModel()
+	private let user: UserModel
+    private let correctionPolicy: CorrectionPolicy
+    private let correctionObserver: ((CorrectionGateEvidence) -> Void)?
 	/// Eager and immutable. Every decode in a word session uses this same model tier;
 	/// memory pressure cannot silently change ranking semantics mid-word.
 	private let ngram: NgramScorer
@@ -74,6 +138,12 @@ final class KeyboardEngine {
 	///     slot conflated the two roles and one silently displaced the other).
 	private let rescorer: NeuralLanguagePrior?
 	private let searchPrior: NeuralSearchPrior?
+	private var scoringPrior: NeuralLanguagePrior? {
+		if let rescorer { return rescorer }
+		return searchPrior
+	}
+	static let searchPriorReadyNotification = Notification.Name("KBSearchPriorReady")
+	private var latestSearchRequest: (request: DecodeRequest, generation: Int)?
 	/// Accessed only on `queue`; one prepared rescorer context is retained for the active word.
 	private var preparedNeuralSession: (id: UInt64, context: [String])?
 	/// Static fuzzy-search DP columns retained for one append-only English word.
@@ -92,6 +162,8 @@ final class KeyboardEngine {
 	/// noise); normal words ~2; long words ~3, since a longer word accumulates more
 	/// independent slips before you notice. These are the weighted spatial model's costs,
 	/// so they're budgets, not integer edit counts (1 substitution ≈ 0.3-1.1, 1 ins/del = 1.6).
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func maxCost(for length: Int) -> Double {
 		switch length {
 		case ...4:  return 1.8      // ≈ 1 edit
@@ -125,15 +197,14 @@ final class KeyboardEngine {
 	/// Autocorrect confidence gate: the best candidate must beat the TYPED string's
 	/// blended score by this margin (natural-log units; 3 ≈ 20× more likely) before
 	/// a correction fires. Genuine typos clear it by 8–15; slang/names that fit the
-	/// context sit near 0 and survive uncorrected — no lexicon entry needed. Active
-	private let correctionMargin = 3.0
+	/// context sit near 0 and survive uncorrected. CorrectionPolicy additionally permits
+    /// calibrated close rescues with a positive typed margin and a clear runner-up gap.
 	/// Broad recovery is reached only for long OOV input after the normal-radius trie
 	/// fails. A ten-to-one posterior win over the literal plus a two-to-one win over
 	/// an unrelated runner-up is sufficient there; requiring the normal typo margin
 	/// discarded useful severe recoveries even after singleton context injection was
 	/// removed.
-	private let severeRecoveryMargin = log(10.0)
-	private let severeRunnerUpMargin = log(2.0)
+	private let severeRecoveryMargin = CorrectionPolicy.severeMargin
 	/// Real-word correction (the "hoe → how", "js → is" case): a word that IS in the
 	/// dictionary is only replaced when a near-neighbour real word dominates it in
 	/// context by this much — far stricter than `correctionMargin`, because wrongly
@@ -141,7 +212,6 @@ final class KeyboardEngine {
 	/// n-gram alone (a real typed word has a genuine n-gram score, not the OOV floor).
 	/// 5.0 is calibrated from the harness: legit real words in-context top out ~2.4,
 	/// while genuine slips (js→is 7.0, hoe→how 5.3, od→of 9.4) clear it — a safe gap.
-	private let realWordMargin = 5.0
 	/// …and the winning neighbour must be within this channel cost of the typed word
 	/// (≈ one edit), so only genuine slips — not distant words — can win.
 	private let realWordMaxCost = 1.6
@@ -161,7 +231,9 @@ final class KeyboardEngine {
 	/// rescue coeevitjkn→correction leads coercion by 1.26 nats in every context,
 	/// while the junk pool physician/communion/corrections (over-confident 1-count
 	/// "receive …" bigrams) is separated by only 0.22.
-	private let looseRunnerUpMargin = 1.0
+	// CorrectionPolicy.looseGap owns this threshold for both replay and commit.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private struct RankedCandidate {
 		let word: String
 		let score: Double
@@ -174,6 +246,8 @@ final class KeyboardEngine {
 	/// Session-only autocorrect rejections. Every access is serialized on `queue`;
 	/// the controller never reads this set on the input path.
 	private var sessionKept = Set<String>()
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func isKept(_ word: String) -> Bool { sessionKept.contains(word) }
 
 	/// Learning fires on every committed word, and `user.save()` re-encodes the WHOLE
@@ -182,6 +256,8 @@ final class KeyboardEngine {
 	/// Rare, signal-bearing events (kept words, undo healing) still save immediately;
 	/// losing ≤2 s of ordinary counts to a jetsam kill is an acceptable trade.
 	private var savePending = false
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func scheduleSave() {
 		guard !savePending else { return }
 		savePending = true
@@ -195,17 +271,11 @@ final class KeyboardEngine {
 	/// Process-wide engine: iOS may prewarm more than one controller, while language
 	/// data and personalization should be loaded exactly once per extension process.
 	///
-	/// This edition ships WITHOUT either neural role. The GRU's value is in-trie candidate
-	/// generation (`contextSearchPrior`) and the transformer's is rescoring (`rank`); the two are
-	/// now separate slots, so the default build (Debug and Release alike) is n-gram + in-trie
-	/// search prior only, and each role is a one-switch revival — independently:
-	///   • `INTERNAL_NEURAL` → the transformer W8 rescorer (`CoreMLNeuralLanguagePrior`) in the
-	///     `rescorer` slot. Add it to `SWIFT_ACTIVE_COMPILATION_CONDITIONS` and set
-	///     `INTERNAL_NEURAL_ENABLED = YES` (Config/Secrets.xcconfig) to also bundle the model.
-	///   • `INTERNAL_GRU` → the GRU streaming prior (`GRULanguagePrior`) in the `searchPrior` slot,
-	///     for profiling the exported `gru.mlpackage` once it is bundled.
-	/// Both flags together fill both slots — the GRU generates, the transformer rescores — which is
-	/// the intended end state (measure both models resident against the jetsam budget first).
+	/// Default builds use the n-gram decoder. Internal builds can install a transformer
+	/// rescorer (`INTERNAL_NEURAL`) or a GRU search and scoring prior (`INTERNAL_GRU`).
+	/// GRU-only sessions retain GRU evidence through ranking and boundary selection.
+	/// With both flags, the GRU generates and the transformer ranks. Enable model
+	/// bundling separately in Secrets.xcconfig and measure residency before promotion.
 	static let shared: KeyboardEngine = {
 		#if INTERNAL_GRU && INTERNAL_NEURAL
 		return KeyboardEngine(rescorer: CoreMLNeuralLanguagePrior.bundled(),
@@ -219,12 +289,36 @@ final class KeyboardEngine {
 		#endif
 	}()
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	init(languageDataURL: URL? = nil, rescorer: NeuralLanguagePrior? = nil,
-		 searchPrior: NeuralSearchPrior? = nil) {
-		let ng = NgramScorer(user: user)
+		 searchPrior: NeuralSearchPrior? = nil,
+         correctionPolicy: CorrectionPolicy = .baseline, userModel: UserModel? = nil,
+         smoothing: NgramSmoothing = .wittenBell,
+         correctionObserver: ((CorrectionGateEvidence) -> Void)? = nil) {
+        let personal = userModel ?? UserModel()
+        self.user = personal
+        self.correctionPolicy = correctionPolicy
+        self.correctionObserver = correctionObserver
+		let ng = NgramScorer(user: personal, smoothing: smoothing)
 		ngram = ng
 		self.rescorer = rescorer
 		self.searchPrior = searchPrior
+		searchPrior?.onSearchPriorReady = { [weak self] query in
+			guard let self else { return }
+			self.queue.async {
+				guard let latest = self.latestSearchRequest, self.isLatest(latest.generation),
+					latest.request.languageMode == .english, KBSettings.neuralEnabled,
+					latest.request.context.map({ $0.lowercased() }) == query.context,
+					query.vocabularyRevision == self.lexicon.vocabularyRevision,
+					query.prefix == nil || query.prefix?.text == latest.request.currentWord.lowercased()
+				else { return }
+				DispatchQueue.main.async {
+					NotificationCenter.default.post(name: Self.searchPriorReadyNotification,
+						object: self, userInfo: ["request": latest.request])
+				}
+			}
+		}
 		initializationGroup.enter()
 		let ready = initializationGroup
 		queue.async { [weak self] in
@@ -248,29 +342,30 @@ final class KeyboardEngine {
 	/// the production singleton above, which has no neural prior and therefore always
 	/// return `.ngram`. Internal profiling can inject a verified prior without creating
 	/// a second ranking path in the controller.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func preferredModelTier(for languageMode: KBLanguageMode) -> DecodeModelTier {
-		rescorer?.prepareForSelection()
-		// The search prior is always-on and orthogonal to the tier; warm it (English only) so its
-		// model is loading before the first recovery search needs it. It never freezes a tier.
-		if languageMode == .english { searchPrior?.prepareForSelection() }
 		let neuralAllowed = KBSettings.neuralEnabled
-		let tier: DecodeModelTier
-		if languageMode == .english, let rescorer, rescorer.isReady, neuralAllowed {
-			tier = rescorer.modelTier
-		} else {
-			tier = .ngram
+		if neuralAllowed && languageMode == .english {
+			scoringPrior?.prepareForSelection()
+			searchPrior?.prepareForSelection()
 		}
+		let tier: DecodeModelTier
+		if languageMode == .english, let prior = scoringPrior, prior.isReady, neuralAllowed {
+			tier = prior.modelTier
+		} else { tier = .ngram }
+
 		// NEURAL_DEBUG_TELEMETRY_REMOVE
-		#if DEBUG || INTERNAL_NEURAL
+		#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
 		if languageMode != .english {
 			KBDiagnostics.recordNeuralState(tier: .ngram, ready: false,
 				state: "disabled-for-language")
-		} else if rescorer == nil {
+		} else if scoringPrior == nil {
 			KBDiagnostics.recordNeuralState(tier: .ngram, ready: false,
 				state: "not-configured")
 		} else if !neuralAllowed {
 			KBDiagnostics.recordNeuralState(tier: .ngram,
-				ready: rescorer?.isReady ?? false, state: "disabled-by-setting")
+				ready: scoringPrior?.isReady ?? false, state: "disabled-by-setting")
 		} else if tier != .ngram {
 			KBDiagnostics.recordNeuralState(tier: tier, ready: true, state: "ready")
 		}
@@ -280,11 +375,15 @@ final class KeyboardEngine {
 		return tier
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func handleMemoryPressure() {
 		rescorer?.handleMemoryPressure()
 		searchPrior?.handleMemoryPressure()
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func discardModelSession(_ wordSessionID: UInt64) {
 		queue.async { [weak self] in
 			guard let self else { return }
@@ -294,9 +393,11 @@ final class KeyboardEngine {
 			if self.incrementalDecodeSession?.id == wordSessionID {
 				self.incrementalDecodeSession = nil
 			}
-			self.rescorer?.discardSession(wordSessionID)
+			self.scoringPrior?.discardSession(wordSessionID)
 		}
 	}
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS loads personal counts and adoption policy; CPP_CORE receives bounded immutable boosts and mutable-trie update events.
 	private func applyLearned() {
 		// Kept words deliberately do NOT enter the trie: keeping means "stop
 		// correcting this", not "suggest this". They still adopt organically below
@@ -311,6 +412,8 @@ final class KeyboardEngine {
 	/// Applies an app-initiated personal-data reset to the already-running extension.
 	/// Generation tickets are invalidated synchronously; mutable model state is cleared
 	/// on the engine queue after initialization so no decoder observes a half-reset state.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS advances/reset storage epochs; CPP_CORE clears mutable vocabulary/search snapshots; OBJCXX_BRIDGE invalidates inference state.
 	func resetPersonalization(to epoch: UInt64 = KBPersonalData.currentEpoch) {
 		cancelSuggestions()
 		cancelGlidePreviews()
@@ -325,7 +428,7 @@ final class KeyboardEngine {
 			guard let self else { return }
 			self.initializationGroup.wait()
 			if let session = self.preparedNeuralSession {
-				self.rescorer?.discardSession(session.id)
+				self.scoringPrior?.discardSession(session.id)
 				self.preparedNeuralSession = nil
 			}
 			// Drop any cached neural next-word predictions from the reset personalization epoch.
@@ -354,6 +457,8 @@ final class KeyboardEngine {
 		"valid", "fake", "user", "login", "student", "employee", "email", "caller",
 	]
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private struct CorrectionDecision {
 		let word: String?
 		/// Winner minus typed-word score in natural-log units. This is the actual
@@ -361,15 +466,21 @@ final class KeyboardEngine {
 		let margin: Double
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func rawScore(_ candidate: RankedCandidate) -> Double {
-		-candidate.spatialCost + lmWeight * candidate.logLanguageProbability
-			+ freqWeight * candidate.logFrequency
+		let prior = candidate.neuralLogProbability.map {
+			neuralPriorWeight * $0 + (1 - neuralPriorWeight) * candidate.logLanguageProbability
+		} ?? candidate.logLanguageProbability
+		return -candidate.spatialCost + lmWeight * prior + freqWeight * candidate.logFrequency
 	}
 
 	/// The user typed a trailing 's' that the bare-base correction would DROP; if
 	/// base+"'s" is a real contraction it renders the typed letters better ("thads" →
 	/// base "that", but the typed 's' means "that's"). Validity-gated, so only genuine
 	/// dictionary contractions are ever promoted.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func contractionPreservingTypedSuffix(base: String, typed lw: String) -> String? {
 		guard lw.hasSuffix("s"), !base.hasSuffix("s") else { return nil }
 		let contraction = base + "'s"
@@ -382,6 +493,8 @@ final class KeyboardEngine {
 	/// favours a completion extending the current prefix: the character each higher-ranked
 	/// completion adds gets a rank-decayed weight, normalized, and folded in with MAX so
 	/// context can only ENLARGE a likely key, never shrink one below its lexical baseline.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func contextualCharPriors(evidence: [DecodeCandidateEvidence], prefix lw: String,
 									  base: [Character: Double]) -> [Character: Double] {
 		guard !lw.isEmpty else { return base }
@@ -405,11 +518,16 @@ final class KeyboardEngine {
 	/// Decide from the same already-scored table used by the suggestion strip. The
 	/// language model is never invoked here; display and commit therefore share one
 	/// candidate generation pass and one prior batch.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE applies the existing correction/channel/runner-up gates using a supplied keep-state view; SWIFT_IOS records the decision diagnostics.
 	private func correction(from scored: [RankedCandidate], correctionCosts: [String: Double],
 							typed lw: String, context: [String],
 							split: (candidate: Candidate, a: String, b: String)?,
 							looseWords: Set<String> = [],
 							broadRecoveryWords: Set<String> = []) -> CorrectionDecision {
+        // These calibrated margins were measured with the n-gram prior only.
+        let policy = scored.contains { $0.neuralLogProbability != nil }
+            ? CorrectionPolicy.baseline : correctionPolicy
 		guard !isKept(lw) else { return CorrectionDecision(word: nil, margin: 0) }
 
 		guard let typed = scored.first(where: { $0.word == lw }) else {
@@ -449,9 +567,14 @@ final class KeyboardEngine {
 				return CorrectionDecision(word: nil, margin: 0)
 			}
 			let margin = bestScore - typedScore
-			let fire = margin > realWordMargin
+            let runnerUp = eligible.filter { $0.word != bestWord }.map(rawScore).max()
+            let gate = CorrectionGateEvidence(typed: lw, candidate: bestWord, kind: .realWord,
+                typedMargin: margin, candidateGap: runnerUp.map { bestScore - $0 },
+                spatialCost: cost, allowsCloseRescue: false)
+            correctionObserver?(gate)
+            let fire = policy.accepts(gate)
 			KBDiagnostics.logDecision(typed: lw, best: bestWord, margin: margin,
-									  threshold: realWordMargin, corrected: fire)
+									  threshold: policy.realWordMargin, corrected: fire)
 			return CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
 		}
 
@@ -479,14 +602,7 @@ final class KeyboardEngine {
 		}
 
 		guard lw.count >= 3 else { return CorrectionDecision(word: nil, margin: 0) }
-		// Missing-space split ("alot" → "a lot"): rides the same gates as single-word
-		// candidates. Score it as two conditional n-gram probabilities because the
-		// single-word scorer intentionally has no multi-word candidate representation.
-		if let split {
-			let s = -split.candidate.cost + freqWeight * split.candidate.logFreq
-				+ lmWeight * ngram.pairLogProb(split.a, split.b, context: context)
-			if s > bestScore { bestWord = split.candidate.word; bestScore = s }
-		}
+
 		if let current = bestWord, !current.contains("'"),
 		   let promoted = contractionPreservingTypedSuffix(base: current, typed: lw) {
 			bestWord = promoted
@@ -494,34 +610,35 @@ final class KeyboardEngine {
 		guard let bestWord else { return CorrectionDecision(word: nil, margin: 0) }
 		let margin = bestScore - typedScore
 		let isSevereBroadRecovery = lw.count >= 8 && broadRecoveryWords.contains(bestWord)
-		let requiredMargin = isSevereBroadRecovery ? severeRecoveryMargin : correctionMargin
-		var fire = margin > requiredMargin
-		// A LOOSE winner (context injection / broad recovery) is a heavy rewrite of
-		// what the user typed. At those spatial costs the channel can no longer
-		// discriminate between candidates, so unless the language model clearly
-		// separates the winner from the runner-up the "rescue" is a frequency coin
-		// flip — live 2026-07-20 committed "physician" for "coeevitjkn". Fire only
-		// when the winner dominates every other candidate by looseRunnerUpMargin;
-		// otherwise the strip still offers the pool for a one-tap fix.
-		if fire, looseWords.contains(bestWord) {
-			// Near-forms of the winner (correction/corrections) are not rivals —
-			// committing either is the same rescue. Only an UNRELATED contender
-			// scoring close means the pool is a coin flip.
-			let contender = eligible
-				.filter { $0.word != bestWord && !Self.nearForm($0.word, bestWord) }
-				.map(rawScore).max()
-			let requiredRunnerUp = isSevereBroadRecovery
-				? severeRunnerUpMargin : looseRunnerUpMargin
-			if let contender, bestScore - contender < requiredRunnerUp { fire = false }
-		}
+		let requiredMargin = isSevereBroadRecovery ? severeRecoveryMargin : policy.oovMargin
+        let isLoose = looseWords.contains(bestWord)
+        // Preserve the existing unrelated-runner guard for broad/context recovery.
+        // Close rescues compare against every eligible alternative, including forms.
+        let contender = eligible.filter {
+            $0.word != bestWord && (!isLoose || !Self.nearForm($0.word, bestWord))
+        }.map(rawScore).max()
+        let cost = correctionCosts[bestWord] ?? Double.greatestFiniteMagnitude
+        let gate = CorrectionGateEvidence(typed: lw, candidate: bestWord,
+            kind: isLoose ? (isSevereBroadRecovery ? .severe : .loose) : .close,
+            typedMargin: margin, candidateGap: contender.map { bestScore - $0 },
+            spatialCost: cost,
+            allowsCloseRescue: !isLoose && cost <= realWordMaxCost
+                && lexicon.isStaticWord(bestWord) && !bestWord.contains(" ")
+                && !bestWord.contains("'") && lw.count >= 4)
+        correctionObserver?(gate)
+        let fire = policy.accepts(gate)
+        let loggedThreshold = fire && gate.kind == .close && margin <= policy.oovMargin
+            ? policy.closeRescueMargin : requiredMargin
 		KBDiagnostics.logDecision(typed: lw, best: bestWord, margin: margin,
-								  threshold: requiredMargin, corrected: fire)
+								  threshold: loggedThreshold, corrected: fire)
 		return CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
 	}
 
 	/// Plain (unit-cost) edit distance ≤ 2 — "correction"/"corrections" are one form.
 	/// Deliberately NOT the keyboard-weighted channel cost: form-similarity is a
 	/// lexical question, not a typing-slip question.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private static func nearForm(_ a: String, _ b: String) -> Bool {
 		let x = Array(a.utf8), y = Array(b.utf8)
 		if abs(x.count - y.count) > 2 { return false }
@@ -553,6 +670,8 @@ final class KeyboardEngine {
 	/// candidate ("its" → "it's"). Well under one edit: the omission is a keyboard
 	/// layout gap, not a slip — ranking, not this cost, decides if it surfaces.
 	private static let apostropheCost = 0.5
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func splitCandidate(of lw: String) -> (candidate: Candidate, a: String, b: String)? {
 		guard lw.count >= 4 else { return nil }
 		var best: (Candidate, String, String)?
@@ -583,6 +702,59 @@ final class KeyboardEngine {
 		return (best.0, best.1, best.2)
 	}
 
+	/// Scores each beam expansion as a full continuation from committed context.
+	/// Streaming scoring branches the shared recurrent state, so a second/third word
+	/// is conditioned on its own uncommitted prefix, not a hard-coded split winner.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE expands, scores and prunes phrase hypotheses; OBJCXX_BRIDGE executes model work; SWIFT_IOS schedules callbacks and rejects stale generations.
+	private func multiwordCandidates(typed: String, taps: [KeyTap?]?, request: DecodeRequest,
+		generation: Int, completion: @escaping ([Candidate]) -> Void) {
+		guard request.requestedModelTier == .neuralGRU, !lexicon.contains(typed),
+			let prior = scoringPrior, prior.modelTier == .neuralGRU else { completion([]); return }
+		let search = MultiwordSearch(typed: typed, taps: taps) { [lexicon] word, taps in
+			lexicon.corrections(for: word, maxCost: 1.8, taps: taps).filter { !lexicon.isProfane($0.word) }
+		}
+		prior.prepareContext(request.context, wordSessionID: request.wordSessionID)
+		preparedNeuralSession = (request.wordSessionID, request.context)
+		var finished: [Candidate] = []
+		func advance(_ frontier: [MultiwordSearch.Hypothesis], depth: Int) {
+			guard self.isLatest(generation) else { return }
+			let expanded = search.expand(frontier, shouldCancel: { !self.isLatest(generation) })
+			guard !expanded.isEmpty else { completion(finished); return }
+			let words = Array(Set(expanded.map { $0.candidate.word })).sorted()
+			prior.score(candidates: words, wordSessionID: request.wordSessionID) { result in
+				self.queue.async {
+					guard self.isLatest(generation) else { return }
+					guard case .success(let probabilities) = result else { completion(finished); return }
+					var ranked: [(MultiwordSearch.Hypothesis, Double)] = []
+					for state in expanded {
+						guard let neural = probabilities[state.candidate.word], neural.isFinite else { continue }
+						let language = self.ngram.sequenceLogProb(state.words, context: request.context)
+						let score = -state.cost + self.lmWeight * (self.neuralPriorWeight * neural
+							+ (1 - self.neuralPriorWeight) * language)
+							+ self.freqWeight * self.frequencyTerm(state.logFrequency, mode: .compressed)
+						ranked.append((state, score))
+					}
+					ranked.sort { $0.1 == $1.1 ? $0.0.candidate.word < $1.0.candidate.word : $0.1 > $1.1 }
+					var perPosition: [Int: Int] = [:]
+					var next: [MultiwordSearch.Hypothesis] = []
+					for (state, _) in ranked {
+						if state.offset == search.inputCount {
+							if state.words.count >= 2 { finished.append(state.candidate) }
+						} else if (perPosition[state.offset] ?? 0) < MultiwordSearch.beamPerPosition {
+							perPosition[state.offset, default: 0] += 1; next.append(state)
+						}
+					}
+					if depth < MultiwordSearch.maximumWords && !next.isEmpty { advance(next, depth: depth + 1) }
+					else { completion(finished) }
+				}
+			}
+		}
+		advance([search.root], depth: 1)
+	}
+
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func dontCorrect(_ word: String) {
 		let lw = word.lowercased()
 		queue.async { [weak self] in
@@ -596,6 +768,8 @@ final class KeyboardEngine {
 	/// The user let an autocorrect of `original` stand (typed on instead of undoing).
 	/// Acceptance is counter-evidence against an earlier rejection this session —
 	/// lift the keep so correction resumes. Nothing persists; keeps are session-scoped.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func correctionStood(_ original: String) {
 		let lw = original.lowercased()
 		queue.async { [weak self] in self?.sessionKept.remove(lw) }
@@ -606,6 +780,8 @@ final class KeyboardEngine {
 	/// and retyped something else by hand). Strong evidence `original` was a mistake:
 	/// lift its session keep — so autocorrect resumes immediately — and walk back one
 	/// learned use, so repeated hand-fixes keep it from adopting into the dictionary.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func wordReplaced(original: String, with replacement: String) {
 		let lw = original.lowercased()
 		guard lw != replacement.lowercased() else { return }
@@ -659,6 +835,8 @@ final class KeyboardEngine {
 
 	/// Accessed only on `glidePreviewQueue`. Each session retains its resampler,
 	/// candidate pool, and online DTW rows for the lifetime of one finger gesture.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private struct StreamingGlideSession {
 		let id: GlideSessionID
 		let context: [String]
@@ -673,11 +851,15 @@ final class KeyboardEngine {
 	}
 	private var glideSessions: [GlideSessionID: StreamingGlideSession] = [:]
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func currentGlidePreviewGeneration() -> Int {
 		glidePreviewLock.lock(); defer { glidePreviewLock.unlock() }
 		return glidePreviewGeneration
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func isCurrentGlidePreview(_ generation: Int) -> Bool {
 		glidePreviewLock.lock(); defer { glidePreviewLock.unlock() }
 		return generation == glidePreviewGeneration
@@ -685,6 +867,8 @@ final class KeyboardEngine {
 
 	/// Called at gesture start, cancellation, and lift. A decoder already running checks
 	/// this ticket once per trie depth and exits instead of competing with the final pass.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func cancelGlidePreviews() {
 		glidePreviewLock.lock()
 		glidePreviewGeneration &+= 1
@@ -692,6 +876,8 @@ final class KeyboardEngine {
 		glidePreviewQueue.async { [weak self] in self?.glideSessions.removeAll(keepingCapacity: true) }
 	}
 
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS assigns session/revision identity and schedules work; CPP_CORE initializes its portable hypothesis/resampler state.
 	func beginGlideSession(context: [String]) -> GlideSessionID {
 		glideSessionIDLock.lock()
 		nextGlideSessionID &+= 1
@@ -703,6 +889,8 @@ final class KeyboardEngine {
 		return id
 	}
 
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS invalidates ownership/generations; CPP_CORE releases retained session state.
 	func cancelGlideSession(_ id: GlideSessionID) {
 		glidePreviewQueue.async { [weak self] in self?.glideSessions[id] = nil }
 	}
@@ -710,6 +898,8 @@ final class KeyboardEngine {
 	/// Consume a cumulative UIKit path while processing only its unconsumed suffix.
 	/// Completion is always delivered on main so the controller can directly publish
 	/// the middle suggestion without another synchronization hop.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS captures/converts input, validates identity and publishes previews; CPP_CORE consumes samples and updates/ranks hypotheses.
 	func updateGlideSession(_ id: GlideSessionID, path: [CGPoint], times: [TimeInterval],
 		layout: GlideLayout, completion: @escaping (GlideUpdate?) -> Void) {
 		let started = ProcessInfo.processInfo.systemUptime
@@ -738,6 +928,8 @@ final class KeyboardEngine {
 
 	/// Finalizes from the same retained session. Only the winner and visible runners-up
 	/// receive exact full-path shape validation; trie search is not restarted.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS validates ownership and delivers one final result; CPP_CORE finalizes and ranks the portable Glide session.
 	func finishGlideSession(_ id: GlideSessionID, path: [CGPoint], times: [TimeInterval],
 		layout: GlideLayout, completion: @escaping (String?, [String]) -> Void) {
 		let started = ProcessInfo.processInfo.systemUptime
@@ -794,6 +986,8 @@ final class KeyboardEngine {
 		}
 	}
 
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS converts UIKit layout/points to numeric buffers; CPP_CORE resamples and consumes the retained trajectory.
 	private func consumeStreamingPath(_ path: [CGPoint], layout: GlideLayout,
 		languageData: LangData, session: inout StreamingGlideSession) -> GlideUpdate? {
 		guard !session.invalid, path.count >= session.rawPointCount,
@@ -828,6 +1022,8 @@ final class KeyboardEngine {
 			prediction: prediction)
 	}
 
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE expands/prunes anchors and dynamic-word candidates; SWIFT_IOS supplies snapshot inputs and handles diagnostics/cancellation.
 	private func augmentStreamingCandidates(languageData: LangData,
 		session: inout StreamingGlideSession) {
 		guard let start = session.resampler.samples.first,
@@ -871,6 +1067,8 @@ final class KeyboardEngine {
 		}
 	}
 
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE scores/ranks retained Glide evidence; SWIFT_IOS retains diagnostics and result packaging.
 	private func rankStreamingCandidates(_ session: StreamingGlideSession) -> GlidePrediction? {
 		let rows = session.candidates.values.filter { $0.prefixCost.isFinite }
 		guard !rows.isEmpty else { return nil }
@@ -896,6 +1094,8 @@ final class KeyboardEngine {
 	/// In-progress decode for UI feedback. It runs the exact production candidate and
 	/// ranking pipeline used on release. The controller keeps this single-flight, so
 	/// preview work can never occupy the final decoder or suggestion queue.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS schedules, rejects stale work and publishes UI previews; CPP_CORE generates and ranks the numerical search results.
 	func glidePreview(path: [CGPoint], times: [TimeInterval] = [], layout: GlideLayout,
 					  context: [String], completion: @escaping (GlidePrediction?) -> Void) {
 		let generation = currentGlidePreviewGeneration()
@@ -932,6 +1132,8 @@ final class KeyboardEngine {
 		}
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func storeGlidePreview(_ prediction: GlidePrediction, key: UInt64) {
 		glidePreviewCacheLock.lock()
 		glidePreviewCache = GlidePreviewCache(
@@ -942,6 +1144,8 @@ final class KeyboardEngine {
 		glidePreviewCacheLock.unlock()
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func recentGlidePreview(key: UInt64) -> GlidePrediction? {
 		glidePreviewCacheLock.lock(); defer { glidePreviewCacheLock.unlock() }
 		guard let cached = glidePreviewCache,
@@ -958,6 +1162,8 @@ final class KeyboardEngine {
 	/// Stable FNV-1a fingerprint of the exact raw path, timing samples, layout scale,
 	/// and language context. A cache hit therefore means preview and commit consumed
 	/// identical evidence, not merely a similar endpoint.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func glideCacheKey(path: [CGPoint], times: [TimeInterval], layout: GlideLayout,
 							   context: [String]) -> UInt64 {
 		var hash: UInt64 = 0xcbf29ce484222325
@@ -980,6 +1186,8 @@ final class KeyboardEngine {
 		return hash
 	}
 
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE combines shape, frequency and language scores; OBJCXX_BRIDGE services neural batches; SWIFT_IOS coordinates asynchronous completion.
 	private func scoreGlideCandidates(_ candidates: [(word: String, cost: Double)],
 									  glide: ProcessedGlide, context: [String]) -> [(word: String, s: Double)] {
 		let sigma = glideProfile.sigma
@@ -999,6 +1207,8 @@ final class KeyboardEngine {
 		.sorted { $0.s > $1.s }
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private struct GlideDecodeResult {
 		let candidates: [(word: String, cost: Double)]
 		let scored: [(word: String, s: Double)]
@@ -1007,6 +1217,8 @@ final class KeyboardEngine {
 	/// The single production Glide pipeline used by both live feedback and final commit.
 	/// Keeping candidate generation, recovery, gating, and ranking here prevents the preview
 	/// from promising a word that a different release-time decoder would immediately replace.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE performs beam/shape/admission search; SWIFT_IOS supplies cancellation identity and records diagnostics.
 	private func decodeGlide(_ glide: ProcessedGlide, lang: LangData, context: [String],
 								 shouldCancel: (() -> Bool)? = nil) -> GlideDecodeResult? {
 		guard shouldCancel?() != true else { return nil }
@@ -1070,6 +1282,8 @@ final class KeyboardEngine {
 	/// rerank with the language prior + frequency and gate (P4). Delivers the winner and
 	/// up to 3 alternatives for the suggestion bar (swap targets) on the MAIN queue;
 	/// (nil, []) when the swipe matched nothing well enough to commit.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS owns language routing, queue/identity and callbacks; CPP_CORE owns English Glide search/scoring; OBJCXX_BRIDGE services neural work.
 	func glide(path: [CGPoint], times: [TimeInterval] = [], layout: GlideLayout, context: [String],
 				   publishedPrediction: GlidePrediction? = nil,
 				   completion: @escaping (String?, [String]) -> Void) {
@@ -1159,6 +1373,8 @@ final class KeyboardEngine {
 		}
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func logCachedGlide(_ prediction: GlidePrediction, path: [CGPoint], times: [TimeInterval],
 							layout: GlideLayout, processed: ProcessedGlide, gestureID: String) {
 		let displayed = [prediction.word] + prediction.alternatives
@@ -1175,6 +1391,8 @@ final class KeyboardEngine {
 
 	/// #5 helper: how many of a word's DOUBLED letters the finger dwelled on. "hello" with a
 	/// dwell at `l` → 1; "little" with dwells at `t` → 1. Positive evidence for the double.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func dwelledDoubles(_ word: String, _ dwell: Set<Character>) -> Int {
 		let chars = Array(word.lowercased())
 		var count = 0
@@ -1195,6 +1413,8 @@ final class KeyboardEngine {
 	// `glideLock`, so a verdict fired from the main thread is a couple of microseconds.
 
 	private let glideLock = NSLock()
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private struct GlideOutcome {
 		let id: String
 		let winner: String
@@ -1203,6 +1423,8 @@ final class KeyboardEngine {
 	private var lastGlideOutcome: GlideOutcome?
 
 	@discardableResult
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func noteGlideCommit(winner: String, shapeCostByWord: [String: Double]) -> String {
 		let id = UUID().uuidString
 		glideLock.lock()
@@ -1210,16 +1432,22 @@ final class KeyboardEngine {
 		glideLock.unlock()
 		return id
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func takeGlideOutcome() -> GlideOutcome? {
 		glideLock.lock(); defer { lastGlideOutcome = nil; glideLock.unlock() }; return lastGlideOutcome
 	}
 
 	/// Typing on is not proof that the automatic winner was intended. Discard the
 	/// pending sample without adapting; only an explicit alternative supplies a label.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func glideUnverified() { _ = takeGlideOutcome() }
 	/// The user swapped the glided word for a bar alternative — THAT word is the true one,
 	/// so its shape cost is the correct sample (the winner was a near-miss the σ/gate should
 	/// learn to rank better next time).
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func glideCorrected(to word: String) {
 		guard let o = takeGlideOutcome() else { return }
 		KBDiagnostics.captureGlideLabel(id: o.id, intended: word.lowercased())
@@ -1229,6 +1457,8 @@ final class KeyboardEngine {
 	}
 	/// The user backspaced the whole glided word away. We don't know what they meant, so the
 	/// cost statistics stay put; we only drop the stash so a later verdict can't double-count.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func glideRejected() { _ = takeGlideOutcome() }
 
 	// MARK: Suggestions (background; also precomputes the autocorrect decision)
@@ -1242,12 +1472,21 @@ final class KeyboardEngine {
 	/// caller's thread.
 	private let genLock = NSLock()
 	private var suggestGen = 0
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func isLatest(_ gen: Int) -> Bool { genLock.lock(); defer { genLock.unlock() }; return gen == suggestGen }
-	func cancelSuggestions() { genLock.lock(); suggestGen &+= 1; genLock.unlock() }
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
+	func cancelSuggestions() {
+		genLock.lock(); suggestGen &+= 1; genLock.unlock()
+		searchPrior?.cancelPendingSearch()
+	}
 
 	/// Targeted spatial alignment between two fixed strings using the same per-character
 	/// cost table as the trie DP, so injected candidates compare directly in ranking.
 	/// O(n·m) where n = typed length, m = target length — fast enough to call per word.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func spatialCost(typed t: String, target g: String, taps: [KeyTap?]? = nil) -> Double {
 		let tb = Array(t.utf8), gb = Array(g.utf8)
 		let n = tb.count, m = gb.count
@@ -1282,6 +1521,8 @@ final class KeyboardEngine {
 	///    include at max-budget cost. The LM margin gate (typed OOV ≈ −18 vs predicted
 	///    word in context ≈ −7) provides the safety filter; no spatial budget needed when
 	///    the LM signal is this decisive.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE selects successors and computes channel admission; SWIFT_IOS supplies normalized safe inputs and the immutable safety view.
 	private func contextInjectedCandidates(typed lw: String, context: [String],
 	                                        taps: [KeyTap?]? = nil) -> [Candidate] {
 		guard lw.count >= 4, !context.isEmpty else { return [] }
@@ -1307,6 +1548,8 @@ final class KeyboardEngine {
 		return out
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func tenglishToTeluguSnapshot(for request: DecodeRequest) -> DecodeSnapshot {
 		let currentWord = request.currentWord
 		if currentWord.isEmpty {
@@ -1361,6 +1604,8 @@ final class KeyboardEngine {
 			completedAtUptime: ProcessInfo.processInfo.systemUptime)
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func romanTeluguSnapshot(for request: DecodeRequest) -> DecodeSnapshot {
 		let currentWord = request.currentWord.lowercased()
 		let candidates = (currentWord.isEmpty
@@ -1395,6 +1640,8 @@ final class KeyboardEngine {
 	/// Tenglish exact lookup is a bounded memory-mapped binary search. It is the only
 	/// synchronous boundary fallback, preventing a fast space from outrunning the
 	/// asynchronous preview without ever putting English/neural work on the main thread.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func immediateBoundarySnapshot(_ request: DecodeRequest) -> DecodeSnapshot? {
 		guard !request.currentWord.isEmpty else { return nil }
 		switch request.languageMode {
@@ -1408,6 +1655,8 @@ final class KeyboardEngine {
 	/// continue through the exact full-trie implementation because short-word root
 	/// penalties and budgets deliberately differ; from length five onward the retained
 	/// state is complete for the normal production radius.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE owns seeds, DP columns and append/reset logic; SWIFT_IOS validates word-session/layout identity and coordinates lifetime.
 	private func retainedDecodeSession(for request: DecodeRequest, word: String,
 		taps: [KeyTap?]?) -> IncrementalDecodeSession? {
 		let bytes = Array(word.utf8)
@@ -1433,6 +1682,8 @@ final class KeyboardEngine {
 		return session
 	}
 
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE computes English candidates, ranking and correction; SWIFT_IOS routes languages, retains revision/generation identity, schedules work and publishes on main.
 	func decode(_ request: DecodeRequest, completion: @escaping (DecodeSnapshot) -> Void) {
 		genLock.lock(); suggestGen &+= 1; let gen = suggestGen; genLock.unlock()
 		let started = ProcessInfo.processInfo.systemUptime
@@ -1448,6 +1699,7 @@ final class KeyboardEngine {
 				if isWordStart { KBDiagnostics.recordInitializationLatency(milliseconds: ms) }
 			}
 			guard let self, self.isLatest(gen) else { return }   // superseded — the newest pass delivers
+			self.latestSearchRequest = (request, gen)
 			KBDiagnostics.recorder.sample()   // cheap footprint/headroom probe, background only
 			let currentWord = request.currentWord
 			let context = request.context
@@ -1561,16 +1813,15 @@ final class KeyboardEngine {
 					&& (lw.count >= 8 || corrections.isEmpty || closestCost > 0.65)
 				let broadCorrections: [Candidate] = shouldRecover
 					? Array(
-						(retained?.candidates(maxCost: normalCost * 2.0)
-							?? self.lexicon.broadCorrections(for: lw,
+						self.lexicon.broadCorrections(for: lw,
 								maxCost: normalCost * 2.0, taps: taps, prior: recoveryPrior,
-								shouldCancel: { [weak self] in self?.isLatest(gen) != true }))
+								shouldCancel: { [weak self] in self?.isLatest(gen) != true })
 							.sorted {
 								let lhs = $0.cost - 0.12 * $0.logFreq
 								let rhs = $1.cost - 0.12 * $1.logFreq
 								return lhs == rhs ? $0.word < $1.word : lhs < rhs
 							}
-							.prefix(24)
+							.prefix(request.requestedModelTier == .neuralGRU ? Int.max : 24)
 					  )
 					: []
 				// Channel-dominance guard: any match inside the NORMAL budget caps how
@@ -1606,8 +1857,11 @@ final class KeyboardEngine {
 				// Exit before ranking if Glide or a newer key took ownership.
 				guard self.isLatest(gen) else { return }
 				let split = self.splitCandidate(of: lw)
+				func finish(_ neuralSplits: [Candidate]) {
+				let splitCandidates = (split.map { [$0.candidate] } ?? []) + neuralSplits
+				let splitWords = Set(splitCandidates.map(\.word))
 				var scoringCandidates = completions + correctionSuggestions + allCorrections
-				if let split { scoringCandidates.append(split.candidate) }
+				scoringCandidates += splitCandidates
 				// The typed row is always present, including for a real dictionary word.
 				// Using its shipped frequency fixes the old real-word gate, which compared
 				// candidates against a typed row whose frequency was incorrectly near zero.
@@ -1619,7 +1873,7 @@ final class KeyboardEngine {
 				let contextWords = Set(newFromContext.map(\.word))
 				let completionWords = Set(completions.map(\.word))
 				var displayWords = Set((completions + correctionSuggestions).map(\.word))
-				if let split { displayWords.insert(split.candidate.word) }
+				displayWords.formUnion(splitWords)
 				self.rank(scoringCandidates, including: typed, context: context,
 					request: request, generation: gen, log: "decode '\(lw)'",
 					frequencyMode: .compressed) { outcome in
@@ -1629,7 +1883,7 @@ final class KeyboardEngine {
 					let typedScore = ranked.first(where: { $0.word == lw })?.score ?? 0
 					func source(for word: String) -> DecodeCandidateSource {
 						if word == lw { return .typed }
-						if split?.candidate.word == word { return .splitCorrection }
+						if splitWords.contains(word) { return .splitCorrection }
 						if closeWords.contains(word) { return .fuzzyLexicon }
 						if contextWords.contains(word) { return .contextInjection }
 						if broadWords.contains(word) { return .broadRecovery }
@@ -1657,7 +1911,9 @@ final class KeyboardEngine {
 								correctionCosts[candidate.word] ?? .infinity,
 								candidate.cost)
 						}
-						if let split { correctionCosts[split.candidate.word] = split.candidate.cost }
+						for split in splitCandidates {
+							correctionCosts[split.word] = min(correctionCosts[split.word] ?? .infinity, split.cost)
+						}
 						let broadRecoveryWords = broadWords.subtracting(closeWords)
 						let resolved = self.correction(from: ranked,
 							correctionCosts: correctionCosts, typed: lw,
@@ -1681,6 +1937,12 @@ final class KeyboardEngine {
 					publishEnglish(Array(result.prefix(3)), evidence, decision,
 						decisionConfidence, tier)
 				}
+				}
+				if request.requestedModelTier == .neuralGRU {
+					self.multiwordCandidates(typed: lw, taps: taps, request: request,
+						generation: gen, completion: finish)
+				} else { finish([]) }
+
 				return
 			}
 		}
@@ -1688,6 +1950,8 @@ final class KeyboardEngine {
 
 	/// Compatibility wrapper for tests and non-controller callers. Production typing
 	/// uses the versioned `decode` contract above.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func suggestions(currentWord: String, context: [String], taps: [KeyTap?]? = nil,
 					 completion: @escaping ([String], [Character: Double]) -> Void) {
 		let request = DecodeRequest(fieldRevision: 0, documentRevision: 0,
@@ -1700,6 +1964,8 @@ final class KeyboardEngine {
 	/// these words first-class citizens — suggestable and immune to autocorrect —
 	/// exactly how stock stops "mangling" names. Modest frequency: context counts,
 	/// not the freq term, should surface them.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS schedules/imports and publishes vocabulary revisions; CPP_CORE inserts the supplied normalized words.
 	func importSupplementaryLexicon(_ words: [String]) {
 		queue.async { [weak self] in
 			guard let self else { return }
@@ -1712,6 +1978,8 @@ final class KeyboardEngine {
 		}
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func learn(context: [String], word: String) {
 		let lw = word.lowercased()
 		// ≥2 chars, or the only real one-letter words. Single letters must never learn
@@ -1734,6 +2002,8 @@ final class KeyboardEngine {
 
 	/// Learn only from a literal, accepted static word. Autocorrections and suggestion
 	/// replacements are excluded because their intended per-letter alignment is unknown.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func learnTouchProfile(word: String, taps: [KeyTap?]) {
 		let lower = word.lowercased()
 		guard lower.utf8.count == taps.count,
@@ -1750,6 +2020,8 @@ final class KeyboardEngine {
 	/// needs use in multiple contexts (or twice the normal count) and must not be a
 	/// one-edit neighbour of a shipped word. This keeps repeated fat-finger errors out
 	/// of completions without preventing genuinely novel vocabulary from adapting.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
+	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	private func allowsPersonalAdoption(of word: String, count: Int) -> Bool {
 		guard count >= adoptAfter else { return false }
 		if lexicon.contains(word) { return true }
@@ -1763,8 +2035,12 @@ final class KeyboardEngine {
 	// MARK: Ranking — the blend of channel, prior, personalization, and frequency
 
 	/// Dedupes (keeping each word's cheapest channel cost), drops blocked words, then
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private enum FrequencyMode { case raw, compressed }
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func frequencyTerm(_ logFreq: Double, mode: FrequencyMode) -> Double {
 		switch mode {
 		case .raw:
@@ -1781,9 +2057,11 @@ final class KeyboardEngine {
 	/// Runs only on the serial decoder queue.
 	/// `extra` (the margin gate's typed-word row) is exempt from the profanity filter
 	/// and the cap: it must always come back scored.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE deduplicates, filters, calculates probabilities/scores and ranks; SWIFT_IOS retains optional diagnostic logging outside the math kernel.
 	private func rankNgram(_ cands: [Candidate], including extra: Candidate? = nil,
 						  context: [String], log label: String? = nil,
-						  frequencyMode: FrequencyMode = .raw) -> [RankedCandidate] {
+						  frequencyMode: FrequencyMode = .raw, limit: Int? = 32) -> [RankedCandidate] {
 		var best: [String: Candidate] = [:]
 		for c in cands where c.word == extra?.word || !lexicon.isProfane(c.word) {
 			if let cur = best[c.word], cur.cost <= c.cost { continue }
@@ -1794,8 +2072,8 @@ final class KeyboardEngine {
 		var list = Array(best.values)
 		// Bound long candidate tails before one batched n-gram lookup. With an `extra`
 		// typed row, keep one slot free so confidence always compares against the input.
-		let cap = extra == nil ? scoreCap : scoreCap - 1
-		if list.count > cap {
+		let cap = limit.map { extra == nil ? $0 : $0 - 1 }
+		if let cap, list.count > cap {
 			list.sort {
 				(-$0.cost + freqWeight * frequencyTerm($0.logFreq, mode: frequencyMode))
 					> (-$1.cost + freqWeight * frequencyTerm($1.logFreq, mode: frequencyMode))
@@ -1808,7 +2086,10 @@ final class KeyboardEngine {
 		}
 		let doLog = label != nil && KBDiagnostics.verbose
 		let t0 = doLog ? Date() : nil
-		let priors = ngram.logProbs(list.map(\.word), context: context)
+		var priors = ngram.logProbs(list.map(\.word), context: context)
+		for index in list.indices where list[index].word.contains(" ") {
+			priors[index] = ngram.sequenceLogProb(list[index].word.split(separator: " ").map(String.init), context: context)
+		}
 		let scored = zip(list, priors)
 			.map { candidate, prior in
 				RankedCandidate(
@@ -1845,24 +2126,27 @@ final class KeyboardEngine {
 	/// scoring is asynchronous and never blocks either host insertion or the serial
 	/// decoder queue. A failed neural session publishes no replacement snapshot; it
 	/// cannot silently change ranking semantics to n-gram halfway through a word.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE deduplicates, blends scores, sorts and caps candidates; OBJCXX_BRIDGE executes model batches; SWIFT_IOS validates generations and emits diagnostics/completion.
 	private func rank(_ cands: [Candidate], including extra: Candidate? = nil,
 					  context: [String], request: DecodeRequest, generation: Int,
 					  log label: String? = nil,
 					  frequencyMode: FrequencyMode = .raw,
 					  completion: @escaping (([RankedCandidate], DecodeModelTier)?) -> Void) {
 		let ngramRows = rankNgram(cands, including: extra, context: context,
-			log: label, frequencyMode: frequencyMode)
+			log: label, frequencyMode: frequencyMode,
+			limit: request.requestedModelTier == .neuralGRU ? nil : scoreCap)
 		guard request.requestedModelTier != .ngram else {
 			completion((ngramRows, .ngram))
 			return
 		}
 		guard request.languageMode == .english,
-			  let rescorer,
+			  let rescorer = scoringPrior,
 			  rescorer.modelTier == request.requestedModelTier,
 			  !ngramRows.isEmpty else {
 			// NEURAL_DEBUG_TELEMETRY_REMOVE
-			#if DEBUG || INTERNAL_NEURAL
-			if rescorer == nil {
+			#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
+			if scoringPrior == nil {
 				KBDiagnostics.recordNeuralState(tier: request.requestedModelTier,
 					ready: false, state: "not-configured")
 			}
@@ -1899,7 +2183,7 @@ final class KeyboardEngine {
 				for row in ngramRows {
 					guard let neural = probabilities[row.word], neural.isFinite else {
 						// NEURAL_DEBUG_TELEMETRY_REMOVE
-						#if DEBUG || INTERNAL_NEURAL
+						#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
 						KBDiagnostics.recordNeuralState(tier: request.requestedModelTier,
 							ready: rescorer.isReady, state: "incomplete-score-result",
 							detail: "Core ML omitted a score for \(row.word)")
@@ -1922,7 +2206,7 @@ final class KeyboardEngine {
 				}
 				rescored.sort { $0.score > $1.score }
 				// NEURAL_DEBUG_TELEMETRY_REMOVE
-				#if DEBUG || INTERNAL_NEURAL
+				#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
 				let ngramRank = Dictionary(uniqueKeysWithValues:
 					ngramRows.enumerated().map { ($0.element.word, $0.offset + 1) })
 				let ngramByWord = Dictionary(uniqueKeysWithValues:
@@ -1942,7 +2226,14 @@ final class KeyboardEngine {
 					typedWord: request.currentWord, context: context,
 					wordSessionID: request.wordSessionID, rows: telemetryRows)
 				#endif
-				completion((rescored, request.requestedModelTier))
+				// Apply the publication cap only after the combined objective is known.
+				var published = Array(rescored.prefix(self.scoreCap))
+				if let extra, !published.contains(where: { $0.word == extra.word }),
+					let typed = rescored.first(where: { $0.word == extra.word }) {
+					if published.count == self.scoreCap { published.removeLast() }
+					published.append(typed)
+				}
+				completion((published, request.requestedModelTier))
 			}
 		}
 	}
@@ -1961,11 +2252,13 @@ final class KeyboardEngine {
 	/// ready — until then this transparently falls back to the n-gram, so the prior is never blocked
 	/// on Core ML. Once the typed word is long enough to pin the word down, generation is additionally
 	/// PREFIX-constrained to word-starts spatially reachable from the first tap.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE forms constrained query keys, seed pools and funding; SWIFT_IOS gates settings/epochs and readiness publication; OBJCXX_BRIDGE services neural work.
 	private func contextSearchPrior(_ context: [String], typedPrefix lw: String = "",
 		taps: [KeyTap?]? = nil) -> TrieSearchPrior? {
 		guard !context.isEmpty else { return nil }
 		let pool = ngram.nextWords(context: context, limit: 24)
-		if let searchPrior {
+		if let searchPrior, KBSettings.neuralEnabled {
 			// Prefix-aware generation only once a few characters pin the word down; below that the
 			// spatial first-letter set is too permissive to sharpen anything.
 			let prefix: SearchPrefix? = lw.count >= 3
@@ -1979,8 +2272,10 @@ final class KeyboardEngine {
 			// corpus tables never proposed it. They're in the personal trie, so the trie can emit them.
 			let seeded = pool + userAdoptedNextWords(context: context,
 				excluding: Set(pool.map { $0.lowercased() }))
-			searchPrior.warmSearchPrior(context: context, prefix: prefix, pool: seeded)
-			if let scored = searchPrior.searchPriorWords(context: context, prefix: prefix) {
+			let query = SearchPriorQuery(context: context, prefix: prefix, pool: seeded,
+				vocabularyRevision: lexicon.vocabularyRevision)
+			searchPrior.warmSearchPrior(query, isKnownWord: { [lexicon] in lexicon.contains($0) && !lexicon.isProfane($0) })
+			if let scored = searchPrior.searchPriorWords(query) {
 				// The neural set GENERATES next-words (subword beam), not just reranks the pool.
 				// Keep only words the trie can emit — a prefix bonus on an OOV word funds a path to
 				// no candidate; the generated in-lexicon words the sparse n-gram tables missed are
@@ -1989,12 +2284,14 @@ final class KeyboardEngine {
 				if !usable.isEmpty {
 					let prior = TrieSearchPrior(
 						scoredWords: usable.map { ($0.word, $0.logProbability) })
+					KBDiagnostics.recordSearchPrior(state: "neural-funded")
 					return prior.isEmpty ? nil : prior
 				}
 			}
 		}
 		guard !pool.isEmpty else { return nil }
 		let prior = TrieSearchPrior(likelyWords: pool)
+		KBDiagnostics.recordSearchPrior(state: "ngram-funded")
 		return prior.isEmpty ? nil : prior
 	}
 
@@ -2003,6 +2300,8 @@ final class KeyboardEngine {
 	/// the beam only spends on words whose start is reachable from where the finger actually landed,
 	/// tolerating a first-letter slip instead of hard-filtering on the literal character. Empty ⇒
 	/// no constraint.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=DecoderPolicy
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func plausibleFirstLetters(typedPrefix lw: String, taps: [KeyTap?]?) -> Set<Character> {
 		guard let firstByte = lw.utf8.first else { return [] }
 		let aligned = taps?.count == lw.utf8.count ? taps : nil
@@ -2022,6 +2321,8 @@ final class KeyboardEngine {
 	/// the GRU can rank them by P(word|context) — signal neither the n-gram (OOV floor only) nor the
 	/// current wiring can express. Bounded and best-count-first; `seen` (the n-gram pool) is skipped.
 	/// Must run on `queue`.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: SWIFT_IOS supplies an epoch-tagged immutable personal-count snapshot; CPP_CORE filters/ranks adopted successors without per-word Swift callbacks.
 	private func userAdoptedNextWords(context: [String], excluding seen: Set<String>,
 		limit: Int = 12) -> [String] {
 		guard let last = context.last?.lowercased() else { return [] }
@@ -2043,14 +2344,21 @@ final class KeyboardEngine {
 	/// has it, and returns whatever is already cached (nil ⇒ empty, today's behavior). Kept to
 	/// trie-emittable words for parity with the recovery path. Safe off any queue — the provider is
 	/// internally locked. `pool` seeds the warm (the n-gram next-words already computed by the caller).
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE selects cached generated words and seeds; SWIFT_IOS owns settings and readiness/cancellation coordination; OBJCXX_BRIDGE services prediction batches.
 	private func neuralNextWords(context: [String], seed pool: [String], limit: Int = 24) -> [String] {
 		guard let searchPrior, !context.isEmpty else { return [] }
-		searchPrior.warmSearchPrior(context: context, prefix: nil, pool: pool)
-		guard let scored = searchPrior.searchPriorWords(context: context, prefix: nil) else { return [] }
+		guard KBSettings.neuralEnabled else { return [] }
+		let query = SearchPriorQuery(context: context, prefix: nil, pool: pool,
+			vocabularyRevision: lexicon.vocabularyRevision)
+		searchPrior.warmSearchPrior(query, isKnownWord: { [lexicon] in lexicon.contains($0) && !lexicon.isProfane($0) })
+		guard let scored = searchPrior.searchPriorWords(query) else { return [] }
 		return scored.prefix(limit).map(\.word).filter { lexicon.contains($0) }
 	}
 
 	/// Must run on `queue`.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
+	// MIGRATION-SPLIT: CPP_CORE merges and ranks n-gram, personal and neural continuations; SWIFT_IOS gates platform settings and emits diagnostics.
 	private func nextWords(context: [String]) -> [String] {
 		// Never re-offer the word that was just committed — "the the" reads as a bug,
 		// and stock never does it. (Legit doubles are rare and still typeable.)
@@ -2097,6 +2405,8 @@ final class KeyboardEngine {
 // glide pass and feeds samples from the main thread without touching the engine queue. The
 // tiny Codable state persists to the App Group so a user's tuning survives across sessions.
 
+// MIGRATION: planned SPLIT | stage=policy-glide | target=GlideAdaptation
+// MIGRATION-SPLIT: CPP_CORE owns EWMA/statistical updates; SWIFT_IOS owns epoch checks, locks, persistence and publication of profile values.
 final class GlideProfile {
 	/// Baked grid-searched defaults — identical to the constants glide shipped with.
 	static let baseSigma = 0.10
@@ -2104,6 +2414,8 @@ final class GlideProfile {
 
 	/// EWMA of the CORRECT-word shape cost, seeded near the synthetic-harness correct-cost
 	/// distribution (mean ~0.22, var ~0.006) so early on-device samples blend smoothly.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=GlideAdaptation
+	// MIGRATION-SPLIT: CPP_CORE receives a numeric statistics mirror; SWIFT_IOS retains Codable storage and the personal-data epoch.
 	private nonisolated struct State: Codable {
 		var epoch: UInt64?
 		var n = 0
@@ -2123,6 +2435,7 @@ final class GlideProfile {
 	private static let sigmaK = baseSigma / 0.22     // σ tracks the mean, anchored so mean 0.22 → baseSigma
 	private static let gateK  = 2.7                  // gate sits ~2.7σ above the mean (≈ the offline p95 midpoint)
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=GlideProfileStorage
 	func load() {
 		let epoch = KBPersonalData.currentEpoch
 		guard let d = Self.store.data(forKey: Self.key),
@@ -2134,6 +2447,7 @@ final class GlideProfile {
 		s.epoch = epoch
 		lock.lock(); state = s; lock.unlock()
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=GlideProfileStorage
 	private func persist(_ s: State) {
 		Self.io.async {
 			guard let epoch = s.epoch,
@@ -2144,9 +2458,12 @@ final class GlideProfile {
 			}
 		}
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=GlideProfileStorage
 	private func snapshot() -> State { lock.lock(); defer { lock.unlock() }; return state }
 
 	/// Feed a known-correct shape cost from an explicitly selected alternative.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=GlideAdaptation
+	// MIGRATION-SPLIT: CPP_CORE owns EWMA/statistical updates; SWIFT_IOS owns epoch checks, locks, persistence and publication of profile values.
 	func observeCorrect(cost: Double) {
 		guard cost.isFinite, cost >= 0 else { return }
 		let epoch = KBPersonalData.currentEpoch
@@ -2163,6 +2480,7 @@ final class GlideProfile {
 		persist(s)
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=GlideProfileStorage
 	func reset(to epoch: UInt64 = KBPersonalData.currentEpoch) {
 		lock.lock()
 		state = State(epoch: epoch)
@@ -2170,10 +2488,14 @@ final class GlideProfile {
 	}
 
 	/// 0 until the first sample, ramping to 1 at `warmup` — how much of the adapted value shows.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideAdaptation
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func blend(_ n: Int) -> Double { min(1.0, Double(n) / Self.warmup) }
 
 	/// Per-user rerank temperature. Larger for a sloppy hand (LM stays in play), smaller for a
 	/// precise one (shape dominates). Clamped so it can refine but never degenerate.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=GlideAdaptation
+	// MIGRATION-SPLIT: CPP_CORE calculates bounded adaptation values; SWIFT_IOS supplies the locked, epoch-tagged profile snapshot.
 	var sigma: Double {
 		let s = snapshot()
 		let adapted = Self.sigmaK * s.mean
@@ -2183,6 +2505,8 @@ final class GlideProfile {
 	/// Per-user commit gate = mean correct cost + ~2.7·std, i.e. leave the same headroom over
 	/// the user's own correct-cost spread that the offline p95/scribble midpoint left over the
 	/// synthetic one. Clamped to a safe band around the baked 0.43.
+	// MIGRATION: planned SPLIT | stage=policy-glide | target=GlideAdaptation
+	// MIGRATION-SPLIT: CPP_CORE calculates bounded adaptation values; SWIFT_IOS supplies the locked, epoch-tagged profile snapshot.
 	var gate: Double {
 		let s = snapshot()
 		let adapted = s.mean + Self.gateK * max(0, s.varc).squareRoot()

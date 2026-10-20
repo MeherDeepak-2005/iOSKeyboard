@@ -1,0 +1,254 @@
+{
+  "pack_sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4",
+  "strength": 8.0,
+  "status": "Exploratory fixed-candidate ranking audit, not full engine validation or promotion.",
+  "rows": [
+    {
+      "context": [],
+      "models": {
+        "witten_bell": [
+          {
+            "word": "correction",
+            "score": -16.8609010494006
+          },
+          {
+            "word": "coercion",
+            "score": -18.125812903367756
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -21.06737753982334
+          },
+          {
+            "word": "coediting",
+            "score": -26.12313902453547
+          }
+        ],
+        "modified_kneser_ney": [
+          {
+            "word": "coeevitjkn",
+            "score": -13.086522705470303
+          },
+          {
+            "word": "coercion",
+            "score": -15.179743823343253
+          },
+          {
+            "word": "correction",
+            "score": -16.601837991865096
+          },
+          {
+            "word": "coediting",
+            "score": -19.52857855130232
+          }
+        ],
+        "frequency_backoff": [
+          {
+            "word": "correction",
+            "score": -16.86090105010945
+          },
+          {
+            "word": "coercion",
+            "score": -18.125812904076604
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -21.067377540532192
+          },
+          {
+            "word": "coediting",
+            "score": -26.12313902524432
+          }
+        ]
+      }
+    },
+    {
+      "context": [
+        "possibly",
+        "receive"
+      ],
+      "models": {
+        "witten_bell": [
+          {
+            "word": "correction",
+            "score": -18.17765534339745
+          },
+          {
+            "word": "coercion",
+            "score": -19.442567197364607
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -22.38413183382019
+          },
+          {
+            "word": "coediting",
+            "score": -27.43989331853232
+          }
+        ],
+        "modified_kneser_ney": [
+          {
+            "word": "coeevitjkn",
+            "score": -13.33776483012629
+          },
+          {
+            "word": "coercion",
+            "score": -15.430985947999242
+          },
+          {
+            "word": "correction",
+            "score": -16.853080116521085
+          },
+          {
+            "word": "coediting",
+            "score": -19.779820675958305
+          }
+        ],
+        "frequency_backoff": [
+          {
+            "word": "correction",
+            "score": -17.708198910496655
+          },
+          {
+            "word": "coercion",
+            "score": -18.973110764463808
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -21.914675400919396
+          },
+          {
+            "word": "coediting",
+            "score": -26.97043688563152
+          }
+        ]
+      }
+    },
+    {
+      "context": [
+        "for",
+        "definitely",
+        "decided"
+      ],
+      "models": {
+        "witten_bell": [
+          {
+            "word": "correction",
+            "score": -18.78777018581955
+          },
+          {
+            "word": "coercion",
+            "score": -20.052682039786706
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -22.99424667624229
+          },
+          {
+            "word": "coediting",
+            "score": -28.05000816095442
+          }
+        ],
+        "modified_kneser_ney": [
+          {
+            "word": "coeevitjkn",
+            "score": -14.354799270586943
+          },
+          {
+            "word": "coercion",
+            "score": -16.448020388459895
+          },
+          {
+            "word": "correction",
+            "score": -17.870114556981736
+          },
+          {
+            "word": "coediting",
+            "score": -20.79685511641896
+          }
+        ],
+        "frequency_backoff": [
+          {
+            "word": "correction",
+            "score": -18.69711228190834
+          },
+          {
+            "word": "coercion",
+            "score": -19.962024135875495
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -22.90358877233108
+          },
+          {
+            "word": "coediting",
+            "score": -27.959350257043205
+          }
+        ]
+      }
+    },
+    {
+      "context": [
+        "could",
+        "definitely",
+        "receive"
+      ],
+      "models": {
+        "witten_bell": [
+          {
+            "word": "correction",
+            "score": -18.17765534339745
+          },
+          {
+            "word": "coercion",
+            "score": -19.442567197364607
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -22.38413183382019
+          },
+          {
+            "word": "coediting",
+            "score": -27.43989331853232
+          }
+        ],
+        "modified_kneser_ney": [
+          {
+            "word": "coeevitjkn",
+            "score": -13.33776483012629
+          },
+          {
+            "word": "coercion",
+            "score": -15.430985947999242
+          },
+          {
+            "word": "correction",
+            "score": -16.853080116521085
+          },
+          {
+            "word": "coediting",
+            "score": -19.779820675958305
+          }
+        ],
+        "frequency_backoff": [
+          {
+            "word": "correction",
+            "score": -17.708198910496655
+          },
+          {
+            "word": "coercion",
+            "score": -18.973110764463808
+          },
+          {
+            "word": "coeevitjkn",
+            "score": -21.914675400919396
+          },
+          {
+            "word": "coediting",
+            "score": -26.97043688563152
+          }
+        ]
+      }
+    }
+  ]
+}

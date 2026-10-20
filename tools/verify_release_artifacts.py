@@ -57,6 +57,7 @@ def main() -> None:
     parser.add_argument("appex", type=Path)
     parser.add_argument("--output", type=Path, default=Path("BuildArtifactManifest.json"))
     parser.add_argument("--allow-neural", action="store_true")
+    parser.add_argument("--corev4", action="store_true", help="use explicit full-vocabulary budgets: 20 MB language pack, 24 MB non-neural extension")
     args = parser.parse_args()
     if not args.appex.is_dir():
         raise SystemExit(f"extension bundle not found: {args.appex}")
@@ -71,10 +72,15 @@ def main() -> None:
     by_name = {Path(record["path"]).name: record for record in records}
     neural = [record for record in records if is_neural_artifact(record["path"])]
     cap = NEURAL_EXTENSION_CAP if args.allow_neural else NO_NEURAL_EXTENSION_CAP
+    if args.corev4 and not args.allow_neural:
+        cap = 24_000_000
     failures = []
     for name in sorted(REQUIRED_RELEASE_RESOURCES - set(by_name)):
         failures.append(f"{name} is missing")
-    for name, byte_cap in RESOURCE_CAPS.items():
+    resource_caps = dict(RESOURCE_CAPS)
+    if args.corev4:
+        resource_caps["langdata.bin"] = 20_000_000
+    for name, byte_cap in resource_caps.items():
         record = by_name.get(name)
         if record is not None and record["bytes"] > byte_cap:
             failures.append(f"{name} exceeds {byte_cap:,} bytes")
@@ -128,6 +134,7 @@ def main() -> None:
         "totalBytes": total,
         "gateBytes": cap,
         "neuralArtifactsAllowed": args.allow_neural,
+        "corev4FullVocabulary": args.corev4,
         "gatePassed": not failures,
         "failures": failures,
         "files": records,

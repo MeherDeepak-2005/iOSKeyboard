@@ -1,0 +1,54 @@
+{
+  "checksum" : 24511344,
+  "environment" : "Release iOS simulator on Mac; isolated initialization benchmark; not physical iPhone",
+  "rows" : [
+    {
+      "case" : "seed_preparation",
+      "native_mapped_p50_ms" : 0.74037499143742025,
+      "native_mapped_p95_ms" : 0.79737498890608549,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 2.184083336032927,
+      "swift_p95_ms" : 2.5004999770317227
+    },
+    {
+      "case" : "prepared_session_init",
+      "native_boxed_p50_ms" : 5.1311250135768205,
+      "native_boxed_p95_ms" : 6.2775416590739042,
+      "native_mapped_p50_ms" : 0.19279166008345783,
+      "native_mapped_p95_ms" : 0.22524999803863466,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 0.5084166768938303,
+      "swift_p95_ms" : 0.63133332878351212
+    },
+    {
+      "case" : "seed_selection_and_session_init",
+      "native_boxed_p50_ms" : 7.2670833324082196,
+      "native_boxed_p95_ms" : 7.9361666867043823,
+      "native_mapped_p50_ms" : 0.90012501459568739,
+      "native_mapped_p95_ms" : 1.0682916908990592,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 2.6076666545122862,
+      "swift_p95_ms" : 2.8014999988954514
+    },
+    {
+      "case" : "seed_selection_init_decode_and_candidates",
+      "native_boxed_p50_ms" : 22.234333329834044,
+      "native_boxed_p95_ms" : 24.608708336018026,
+      "native_mapped_p50_ms" : 15.736708330223337,
+      "native_mapped_p95_ms" : 20.900833333143964,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 27.768291649408638,
+      "swift_p95_ms" : 29.983875021571293
+    },
+    {
+      "case" : "resource_open_and_validation",
+      "native_mapped_p50_ms" : 5.5073333205655217,
+      "native_mapped_p95_ms" : 5.6559166696388274,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 0.13116665650159121,
+      "swift_p95_ms" : 0.21383335115388036
+    }
+  ],
+  "scope" : "warm filesystem mapping\/validation reported separately; seed preparation and creation included where named; no neural scorer or physical iPhone",
+  "seed_count" : 9228
+}

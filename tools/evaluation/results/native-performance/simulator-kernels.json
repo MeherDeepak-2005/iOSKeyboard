@@ -1,0 +1,74 @@
+{
+  "checksum" : 19742528,
+  "dp_cells" : 81241,
+  "environment" : "Release iOS simulator on Mac; isolated benchmark; not physical iPhone",
+  "optimization" : "Swift -O; C++ optimized; no shadow execution",
+  "rows" : [
+    {
+      "case" : "session_init",
+      "median_speedup" : 0.097140338816484997,
+      "native_bridge_p50_ms" : 5.3925416723359376,
+      "native_bridge_p95_ms" : 6.1097500147297978,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 0.52383332513272762,
+      "swift_p95_ms" : 0.57937498786486685
+    },
+    {
+      "case" : "session_init_decode_and_candidates",
+      "median_speedup" : 1.3710612446727937,
+      "native_bridge_p50_ms" : 20.333458320237696,
+      "native_bridge_p95_ms" : 21.315624995622784,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 27.878416673047468,
+      "swift_p95_ms" : 29.82287501799874
+    },
+    {
+      "case" : "append_one",
+      "median_speedup" : 1.5703479093504626,
+      "native_bridge_p50_ms" : 1.7460833478253335,
+      "native_bridge_p95_ms" : 1.8891666550189257,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 2.7419583348091692,
+      "swift_p95_ms" : 2.9773749993182719
+    },
+    {
+      "case" : "append_one_with_taps",
+      "median_speedup" : 1.6761635861599589,
+      "native_bridge_p50_ms" : 1.7125416779890656,
+      "native_bridge_p95_ms" : 1.8340833485126495,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 2.8705000004265457,
+      "swift_p95_ms" : 3.0582083272747695
+    },
+    {
+      "case" : "candidates_only",
+      "median_speedup" : 1.1673823130584065,
+      "native_bridge_p50_ms" : 0.029124988941475749,
+      "native_bridge_p95_ms" : 0.046166678657755256,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 0.033999996958300471,
+      "swift_p95_ms" : 0.046333327190950513
+    },
+    {
+      "case" : "fresh_word_and_candidates",
+      "median_speedup" : 1.8591146704246664,
+      "native_bridge_p50_ms" : 14.40237500355579,
+      "native_bridge_p95_ms" : 15.137125010369346,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 26.775666658068076,
+      "swift_p95_ms" : 27.592458325671032
+    },
+    {
+      "case" : "backspace_rebuild_and_candidates",
+      "median_speedup" : 1.8885137278828004,
+      "native_bridge_p50_ms" : 12.895833351649344,
+      "native_bridge_p95_ms" : 13.500500004738569,
+      "samples_per_backend" : 101,
+      "swift_p50_ms" : 24.35395831707865,
+      "swift_p95_ms" : 25.705875013954937
+    }
+  ],
+  "scope" : "retained English DP kernels with bridge; not whole decoder, NSS, neural inference or physical-device metrics",
+  "seed_count" : 9228,
+  "three_double_buffers_bytes_each_backend" : 1949784
+}

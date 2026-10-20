@@ -1,0 +1,46 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "262C5558-8BFE-4442-AAE2-A9B93B17A3B7",
+        "deviceName" : "iPhone 17 Pro",
+        "modelName" : "iPhone 17 Pro",
+        "osBuildNumber" : "23F77",
+        "osVersion" : "26.5",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 100,
+      "skippedTests" : 0,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "keyboard · Built with macOS 26.5.2",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1791308840.043,
+  "passedTests" : 100,
+  "result" : "Passed",
+  "skippedTests" : 0,
+  "startTime" : 1791308674.173,
+  "statistics" : [
+
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - keyboard",
+  "topInsights" : [
+    {
+      "category" : "Longest Test Runs",
+      "impact" : "2% of duration",
+      "text" : "1 longest test run with outlier durations exceeding 3.70s (three standard deviations)"
+    }
+  ],
+  "totalTestCount" : 100
+}

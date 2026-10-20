@@ -1,0 +1,14 @@
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 0.523s
+
+OK
+CoreV4: +2 forms; 1 existing contraction-policy exclusions; new prior=1
+wrote /var/folders/3j/cwnbhq8x7g10hv97vpwm7r2c0000gp/T/tmp3plvrx_4/v5.bin (0.0 MB): 2 words, 1 bigrams/1 ctx, 1 trigrams/1 ctx, 8 trie nodes, 1 starters [the ...]
+wrote /var/folders/3j/cwnbhq8x7g10hv97vpwm7r2c0000gp/T/tmp3plvrx_4/v6.bin (0.0 MB): 2 words, 1 bigrams/1 ctx, 1 trigrams/1 ctx, 8 trie nodes, 1 starters [the ...]
+wrote /var/folders/3j/cwnbhq8x7g10hv97vpwm7r2c0000gp/T/tmpx4vc8f2a/wide.bin (1.9 MB): 65538 words, 1 bigrams/1 ctx, 2 trigrams/2 ctx, 72823 trie nodes, 1 starters [w65537 ...]
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 1.393s
+
+OK

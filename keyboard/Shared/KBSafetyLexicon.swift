@@ -1,9 +1,17 @@
+// MIGRATION-FILE: planned SPLIT | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: SWIFT_IOS normalizes/loads; CPP_CORE receives an immutable normalized safety lookup view.
 import Foundation
 
 // Safety lexicon: mmap'd exact-match blocklist — extracted from Keyboard.swift.
 
+// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
+// MIGRATION-SPLIT: SWIFT_IOS preserves resource loading and Unicode normalization; CPP_CORE validates/queries a lifetime-safe immutable normalized lookup view.
 final class KBSafetyLexicon {
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=SafetyNormalization
+	// MIGRATION-NOTE: Preserve current Unicode normalization, case/width folding and every action/language rule.
 	enum Action: UInt8 { case allow = 0, demote = 1, suppressSuggest = 2, suppressAlways = 3 }
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=SafetyNormalization
+	// MIGRATION-NOTE: Preserve current Unicode normalization, case/width folding and every action/language rule.
 	enum Language: UInt8 { case english = 1, telugu = 2, tenglish = 3 }
 
 	private let data: Data
@@ -14,11 +22,15 @@ final class KBSafetyLexicon {
 	var entryCount: Int { count }
 
 	/// nil unless `safety.kbguard` is in the bundle (extension only ships it).
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=SafetyNormalization
+	// MIGRATION-NOTE: Preserve current Unicode normalization, case/width folding and every action/language rule.
 	static func bundled(name: String = "safety") -> KBSafetyLexicon? {
 		guard let url = Bundle.main.url(forResource: name, withExtension: "kbguard") else { return nil }
 		return KBSafetyLexicon(url: url)
 	}
 
+	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
+	// MIGRATION-SPLIT: SWIFT_IOS preserves resource loading and Unicode normalization; CPP_CORE validates/queries a lifetime-safe immutable normalized lookup view.
 	init?(url: URL) {
 		guard let d = try? Data(contentsOf: url, options: .alwaysMapped), d.count >= 24,
 			  Array(d[0..<8]) == Array("KBGUARD1".utf8) else { return nil }
@@ -40,6 +52,8 @@ final class KBSafetyLexicon {
 	}
 
 	/// FNV-1a 64 over normalized UTF-8 — must match the offline builder exactly.
+	// MIGRATION: planned CPP_CORE | stage=search | target=SafetyLookup
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private static func hash(_ s: String) -> UInt64 {
 		var h: UInt64 = 0xcbf29ce484222325
 		for b in s.utf8 { h ^= UInt64(b); h &*= 0x100000001b3 }
@@ -48,6 +62,8 @@ final class KBSafetyLexicon {
 
 	/// Normalization mirrors the manifest: Telugu present → NFC; otherwise casefold +
 	/// curly→ASCII apostrophes + width fold + whitespace collapse.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=SafetyNormalization
+	// MIGRATION-NOTE: Preserve current Unicode normalization, case/width folding and every action/language rule.
 	static func normalize(_ value: String) -> String {
 		if value.unicodeScalars.contains(where: { (0x0C00...0x0C7F).contains($0.value) }) {
 			return value.precomposedStringWithCanonicalMapping.split { $0.isWhitespace }.joined(separator: " ")
@@ -60,9 +76,13 @@ final class KBSafetyLexicon {
 		return folded.split { $0.isWhitespace }.joined(separator: " ")
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=search | target=SafetyLookup
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func entryHash(_ i: Int) -> UInt64 {
 		data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: Self.indexBase + i * Self.entrySize, as: UInt64.self) }
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=SafetyLookup
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func entryTerm(_ i: Int) -> String {
 		let base = Self.indexBase + i * Self.entrySize
 		let off = Int(UInt32(littleEndian: data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: base + 8, as: UInt32.self) }))
@@ -70,10 +90,14 @@ final class KBSafetyLexicon {
 		let a = blobBase + off
 		return String(decoding: data[a..<a + len], as: UTF8.self)
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=SafetyLookup
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func entryAction(_ i: Int) -> Action {
 		let raw = data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: Self.indexBase + i * Self.entrySize + 15, as: UInt8.self) }
 		return Action(rawValue: raw) ?? .allow
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=SafetyLookup
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func entryLanguage(_ i: Int) -> Language? {
 		let raw = data.withUnsafeBytes {
 			$0.loadUnaligned(fromByteOffset: Self.indexBase + i * Self.entrySize + 14,
@@ -82,6 +106,8 @@ final class KBSafetyLexicon {
 		return Language(rawValue: raw)
 	}
 
+	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
+	// MIGRATION-SPLIT: SWIFT_IOS preserves resource loading and Unicode normalization; CPP_CORE validates/queries a lifetime-safe immutable normalized lookup view.
 	private func matchingIndex(for word: String) -> Int? {
 		let norm = Self.normalize(word)
 		let h = Self.hash(norm)
@@ -105,15 +131,21 @@ final class KBSafetyLexicon {
 	}
 
 	/// The blocklist action for a single term (exact match, collision-checked).
+	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
+	// MIGRATION-SPLIT: SWIFT_IOS preserves resource loading and Unicode normalization; CPP_CORE validates/queries a lifetime-safe immutable normalized lookup view.
 	func action(for word: String) -> Action {
 		matchingIndex(for: word).map(entryAction) ?? .allow
 	}
 
+	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
+	// MIGRATION-SPLIT: SWIFT_IOS preserves resource loading and Unicode normalization; CPP_CORE validates/queries a lifetime-safe immutable normalized lookup view.
 	func language(for word: String) -> Language? {
 		matchingIndex(for: word).flatMap(entryLanguage)
 	}
 
 	/// True when the term should never be suggested or corrected TO.
+	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
+	// MIGRATION-SPLIT: SWIFT_IOS preserves resource loading and Unicode normalization; CPP_CORE validates/queries a lifetime-safe immutable normalized lookup view.
 	func isBlocked(_ word: String) -> Bool {
 		switch action(for: word) {
 		case .suppressSuggest, .suppressAlways: return true

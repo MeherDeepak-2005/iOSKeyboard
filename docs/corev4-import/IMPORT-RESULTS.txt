@@ -1,0 +1,194 @@
+COREV4 / XPLOREE ENGLISH VOCABULARY INTEGRATION
+Date: 2026-10-19
+Project: /Users/meherdeepak/iOSKeyboard
+Source: /Users/meherdeepak/Downloads/CoreV4
+
+RESULT
+The active keyboard/langdata.bin is KBLM v6, containing 114,283 stored forms.
+The previous expanded iOS pack contained 61,082 forms. All previous forms and
+unigram weights are preserved; 53,201 new forms have explicit frequency prior 1.
+New pack: 15,564,546 bytes (15.565 decimal MB / 14.844 MiB).
+Previous pack: 9,455,641 bytes. Increase: 6,108,905 bytes, approximately 64.6%.
+Pack SHA256: f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4
+
+SOURCE ASSETS AND INTEGRITY
+Seven distinct audited English dictionaries were decoded using CoreV4's own
+QuickLZ implementation in a temporary build. There are US, UK and Indian English
+variants, including distinct UK revisions. The copied source dictionaries and
+matching three context files per dictionary total 28 original assets. Their
+checksums match the audited source files. Originals in CoreV4 are unchanged.
+See tools/data/corev4/english/manifest.json for every source path, SHA256, size,
+variant and decoded word count. tools/vocabulary/verify_corev4_import.py checks
+all original copies, per-variant wordlists, union exports, and runtime membership.
+
+The extracted union has 108,202 unique stored spellings. The runtime includes
+108,198 of them. Four existing contraction-policy exclusions remain: cant, im,
+lets, wont. This avoids reintroducing these spellings where iOSKeyboard expects
+apostrophe restoration. All four remain intact in the copied source dictionaries
+and exported wordlists. Other existing iOS words complete the 114,283-form union.
+
+The manifest describes the initial transfer snapshot: active_runtime_modified
+is false for that transfer operation. It is not a claim about the subsequent
+integration. docs/corev4-import/validation.json and import-verification.json
+record the active v6 artifact. Initial baseline/addition exports remain fixed
+relative to the 61,082-word pre-import pack rather than being regenerated against
+v6. The merger reads the checksum-verified english-all.txt, not a mutable delta.
+
+WHAT IS ACTIVE VERSUS PRESERVED OFFLINE
+- Active: all admitted stored spellings in the KBLM vocabulary and UTF-8 trie,
+  available to the existing lexical/candidate/completion paths.
+- Preserved offline: the original .atd dictionaries, their capitalization/display
+  metadata, and .atc context triplets under tools/data/corev4/english/raw.
+- CoreV4 context IDs/scaled values are not treated as iOS empirical n-gram counts.
+  Original context files cannot be concatenated into KBLM. Importing those models
+  requires a separate decoder, word-ID mapping, scale interpretation and ranking
+  evaluation. This change imports the vocabulary, not CoreV4's ranking engine.
+- Only keyboard/langdata.bin is an app resource. The raw copies are not added to
+  the extension's resource phase.
+
+RANKING AND CONTEXT PRESERVATION
+Existing unigram weights are unchanged. A new form receives weight 1, an explicit
+conservative prior, not an observed usage frequency. Existing frequencies win on
+overlap. This admits words without assigning arbitrary large weights that could
+make rare terms override common corrections. Prior 1 is not optimized frequency
+calibration; rare new terms may rank low in fuzzy suggestions and completions.
+
+The builder first reconstructs the previous 61,082-word model and its contexts.
+Only then does it union the CoreV4 forms, sort by descending frequency and lexical
+tie break, and remap all old numeric IDs into the new ordering. Building contexts
+after vocabulary expansion would have changed formerly OOV corpus boundaries;
+that is deliberately avoided. Both context totals and ordered continuations are
+preserved exactly by surface form, as are sentence starters:
+  29,206 bigram contexts / 241,198 continuations
+  218,403 trigram contexts / 386,447 continuations
+  20 sentence starters
+New forms generally lack dedicated n-gram evidence; existing backoff and personal
+learning apply. The unigram normalization sum gains 53,201 units even though old
+word weights are fixed. There is no claim of bit-identical final decoder scores.
+The trie grows from 146,823 to 275,561 nodes.
+
+WHY KBLM V6
+V5 permits 65,534 vocabulary forms, below the requested full union. V6 uses
+32-bit word IDs and retains sorted context arrays with binary search. The C++
+reader and Swift comparison reader are updated together. Older v2-v5 packs stay
+readable; the v5 builder path remains available for reproducibility.
+All integers are little-endian; records are packed without native alignment:
+  header: nine u32 values, 36 bytes; magic, version=6, word count, bigram context
+    count, bigram entry count, trigram context count, trigram entry count, trie
+    node count, starter count
+  frequencies: u32 per word
+  offsets: u32 per word plus one final offset
+  bigram context: u32 contextID,total,start,count (16 bytes), sorted by contextID
+  bigram continuation: u32 wordID,count (8 bytes)
+  trigram context: u32 firstID,secondID,total,start,count (20 bytes), sorted by pair
+  trigram continuation: u32 wordID,count (8 bytes)
+  trie: u8 label,u8 childCount,u32 firstChild,u32 wordID,u32 maxFrequency (14 bytes)
+  starter: u32 wordID,count (8 bytes)
+  blob: concatenated UTF-8 spellings; offsets delimit each spelling
+Trigram comparison uses (uint64(firstID)<<32)|secondID, not v5's 16-bit packing.
+Nonterminal trie IDs are 0xffffffff. Runtime bridge IDs remain signed Int32;
+the builder limits word count accordingly. Ranges/counts and IDs are checked by
+the production native reader. High-ID tests cover context collisions, starters,
+trie terminals, malformed contexts and truncated records under ASan/UBSan.
+
+FILES TO START WITH
+ tools/vocabulary/import_corev4.py: original copying and dictionary extraction
+ tools/data/corev4/english/manifest.json: transfer provenance/checksums
+ tools/build_language_data.py: merge_corev4(), ID remapping, write_bin(), main()
+ native/DecoderCore/src/PackedLexicon.cpp: validation and production v6 reads
+ keyboard/Engine/LangData.swift: section layout and Swift reference v6 reads
+ native/tests/PackedLexiconTests.cpp: compatibility and malformed/high-ID tests
+ tools/vocabulary/test_corev4.py: writer, remapping and checksum regressions
+ tools/vocabulary/validate_pack.py: surface-form preservation and held-out coverage
+ tools/vocabulary/verify_corev4_import.py: source and active membership checks
+ keyboardTests/NativePackedLexiconTests.swift: complete reader parity and imports
+ tools/verify_release_artifacts.py: explicit --corev4 storage budgets
+ ARTIFACTS.json and THIRD_PARTY_NOTICES.md: active artifact and source attribution
+
+REPRODUCIBLE PROCEDURE (RUN FROM IOSKEYBOARD ROOT)
+1. Reproduce the previous expanded model when needed:
+   python3 tools/build_language_data.py --without-corev4 --output /tmp/pre-core-v5.bin
+   Its SHA256 must be:
+   ddbb25cb14d90bfb3e0097980aab68b8423f9e768b9bdfb8fbdbd55f163298d2
+   --baseline instead reproduces the older 60,450-word pre-expansion model.
+2. Re-extract original sources only when necessary:
+   python3 tools/vocabulary/import_corev4.py --source-core /Users/meherdeepak/Downloads/CoreV4 --baseline-pack /tmp/pre-core-v5.bin
+   This requires clang++ and CoreV4's dictionary integrity audit. It compiles the
+   codec into a temporary folder; it does not change the source checkout.
+3. Build a candidate, validate it, then install:
+   python3 tools/build_language_data.py --output /tmp/core-v6.bin
+   python3 tools/vocabulary/validate_pack.py /tmp/pre-core-v5.bin /tmp/core-v6.bin --output /tmp/core-validation.json
+   cp /tmp/core-v6.bin keyboard/langdata.bin
+   python3 tools/vocabulary/verify_corev4_import.py
+   The builder verifies pinned sources and the imported wordlist checksum, checks
+   the candidate byte cap before replacement, and replaces the output atomically.
+4. Run Python and native checks:
+   PYTHONPATH=tools python3 -m unittest discover -s tools/vocabulary -p 'test*.py'
+   PYTHONPATH=tools python3 -m unittest tools.test_build_language_data tools.test_verify_release_artifacts
+   sh native/tests/run.sh
+5. Run simulator checks (substitute an available device):
+   xcodebuild -project keyboard.xcodeproj -scheme keyboard -configuration Release ENABLE_TESTABILITY=YES -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:keyboardTests/KeyboardTests -only-testing:keyboardTests/NativePackedLexiconTests -only-testing:keyboardTests/NativeSearchParityTests -only-testing:keyboardTests/SevereTypoBenchmark test
+6. Build unsigned arm64 iPhone Release and inspect the complete extension:
+   xcodebuild -project keyboard.xcodeproj -scheme keyboard -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build
+   python3 tools/verify_release_artifacts.py /path/to/demo_keyboard.appex --corev4 --output /tmp/core-bundle-audit.json
+   --corev4 explicitly selects a 20,000,000-byte language-pack budget and a
+   24,000,000-byte non-neural extension budget. The legacy default gate retains
+   11,000,000 / 14,000,000 bytes. The full union cannot meet that old storage cap.
+   Check the distribution-signed archive again before shipping.
+
+LIMITS
+This is full stored-form admission with the four documented exceptions, including
+accented, hyphenated and other spellings outside the old ASCII admission filter.
+Exact UTF-8 membership is available; admission does not implement accent-insensitive
+matching, Unicode normalization, new keyboard keys, punctuation tokenization or
+new spatial costs for accented letters. The source union includes 106 non-ASCII
+forms, 846 forms containing hyphens and 718 containing digits (categories overlap),
+including some URL-like stored forms. Full admission retains these rather than
+claiming that every entry is a curated everyday English word. CoreV4 display/capitalization flags are
+preserved in raw assets but not applied by iOS. A CoreV4 stored spelling is not a
+promise that it is suitable as an automatic correction in every situation.
+
+Larger vocabulary and wider records increase mapped storage and search work.
+The pack is memory mapped, but touched pages and runtime indices consume RAM.
+No inference that it is faster or uses less RAM follows from having more words.
+Physical iPhone latency, memory pressure and keyboard jetsam remain device tests.
+An unsigned cross-compiled device bundle measures storage, not phone runtime.
+
+VERIFIED RESULTS
+- Original copies: 28/28 assets checksum-verified; all 108,198 admitted CoreV4
+  forms verified in the active pack. Four intentional exclusions listed above.
+- All 61,082 previous words/weights preserved; existing context distributions,
+  including totals, continuation ordering and starters, exactly preserved.
+- Rebuilding both old v5 and new v6 packs produces their exact recorded hashes.
+- Python: 13 vocabulary-pipeline tests and 7 source/release-verifier tests pass.
+  The release verifier tests include explicit v6 budgets and oversized rejection.
+- Native ASan/UBSan: v2-v6 fixtures, malformed/truncated records, wide IDs,
+  trigram collision regression and the complete production v6 pack pass.
+- Initial optimized iOS simulator regression run: 103 tests pass, zero fail, and
+  one optional tiny-GRU fixture test is skipped (104 total in four suites).
+  Full reader parity checks all 114,283 words, 114,283 bigram queries and 218,403
+  trigram contexts, confirming shared backing bytes.
+- Severe typo: coeevitjkn -> correction is suggestion #1 and the committed
+  correction in 31/31 replays for each of five context sequences (155/155 total).
+  Contexts are empty, [auto], [possibly, receive], [for, definitely, decided],
+  and [could, definitely, receive]. No touch offsets. No trained neural model
+  and matching tokenizer were available; this run uses the n-gram model.
+  Timings in severe-typo-simulator.json came from a concurrent regression suite;
+  they are diagnostic simulator timings, not isolated performance comparisons.
+- Held-out MASC supported-token membership: 63,304 / 65,244 (97.0265%) before,
+  63,863 / 65,244 (97.8833%) after; +559 covered tokens. This is a document-family
+  held-out split from the existing iOS pipeline; isolation from CoreV4's unknown
+  training data is not established. It measures membership, not correction recall.
+Evidence files in this directory contain the raw checks and source hashes.
+
+The follow-up NativePackedLexiconTests run also passes all four tests, including
+new exact-membership checks for accommodative, acetylcholine, café, naïve and
+wi-fi, preservation of the four exclusions, and a trie ID above 65,535.
+
+DEVICE-TARGET BUNDLE CHECK
+The unsigned arm64 iPhone Release build succeeds. The complete extension is
+19,903,135 / 24,000,000 bytes and passes the explicit --corev4 size gate.
+The bundled langdata.bin matches the installed source artifact byte-for-byte.
+No raw CoreV4 dictionaries/context files are packaged into the extension.
+This is a cross-compiled bundle check; physical-phone runtime has not been tested.
+See device-release-bundle-audit.json and bundle-validation.json.

@@ -1,3 +1,5 @@
+// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 
 // Letter-key path = insertText first. Decoding is asynchronous and publishes one
@@ -148,6 +150,16 @@ final class KeyboardViewController: UIInputViewController {
 				if self.hostConnectionReady { self.scheduleSuggestions() }
 			}
 		}
+
+		accessibilityObservers.append(NotificationCenter.default.addObserver(
+			forName: KeyboardEngine.searchPriorReadyNotification, object: engine, queue: .main) { [weak self] notice in
+				guard let self, self.hostConnectionReady, self.suggestionsAllowed,
+					self.activeLanguageMode == .english, self.activeGlideSessionID == nil,
+					let request = notice.userInfo?["request"] as? DecodeRequest,
+					request == self.makeDecodeRequest(currentWord: self.currentWordBuffer,
+						context: self.currentContextBuffer, generation: self.generation) else { return }
+				self.scheduleSuggestions()
+			})
 
 		// Follow the host app's light/dark appearance and rebuild on changes.
 		registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitPreferredContentSizeCategory.self]) { (self: Self, _) in

@@ -5,6 +5,26 @@ runtime, or neural scorer from this directory is included in the shipping app or
 keyboard extension. Production decoding currently uses the memory-mapped
 `langdata.bin` n-gram model.
 
+The production prior uses interpolated Witten–Bell with the original sparse-context
+floor of 8. Its unigram probability is `(frequency+1)/(sum(frequencies)+vocabularySize)`;
+unknown words use mass 0.5. At each available context, `weight=N/(N+T)*N/(N+8)`
+and `P=weight*count/N+(1-weight)*Pbackoff`, using the stored context total `N`
+and retained successor count `T`. Production uses the original correction gates;
+the MKN-specific calibration is available only through explicit experiments.
+The offline harness's `logprob` mirrors production Witten–Bell and supports KBLM v2–v6.
+
+Modified Kneser–Ney remains available as an explicit comparison (`mkn_logprob`
+in the harness). Its per-order discounts
+are `Dk = k - (k+1) Y n[k+1]/n[k]` for k=1,2,3 (the last covers counts >=3),
+with `Y = n1/(n1+2*n2)`. Missing frequency buckets use a bounded 0.75 discount.
+Unigrams count distinct bigram predecessors; lower-order bigrams count distinct
+trigram predecessors. Packs without trigrams use raw bigram counts at the highest
+order. Each context uses `max(c-D(c),0)/sum(c) + sum(D(c))/sum(c)*Pbackoff`.
+All statistics use retained pack entries, including denominators, since historical
+context totals may include pruned successors. A 0.5-mass unknown bucket keeps
+unobserved words finite; existing personal boosts are added separately in log space.
+These experimental rules are separate from the production default.
+
 The scripts preserve earlier PyTorch, tokenizer, probing, and Core ML experiments
 so a future model can be evaluated reproducibly. Their outputs are development
 artifacts, not production deliverables. In particular, do not add
@@ -87,3 +107,32 @@ Core ML stateful export are the natural follow-ups.
 The production comparison and confidence-interval harness lives in
 `tools/evaluation/`; use that task-level result, not token perplexity, to decide
 whether a model is eligible for promotion.
+
+## Decoder repair exports
+
+GRU scoring version 2 includes the probability that a word ends after its last
+SentencePiece token. Generate both exports from the same checkpoint and tokenizer:
+
+```bash
+python export_gru_coreml.py --checkpoint data/gru.pt --tokenizer data/qwen_spm.model --out data/gru.mlpackage
+python export_gru_score_coreml.py --checkpoint data/gru.pt --tokenizer data/qwen_spm.model --out data/gru_score.mlpackage
+```
+
+The streaming exporter requires Core ML runtime parity before saving. The batch
+exporter requires PyTorch reference parity; add `--verify-coreml` on a supported
+host to require Core ML parity too. A batch export without that check records
+`runtime_verified: false` and remains a research artifact. Each export writes a
+`.manifest.json` with source hashes and a `.goldens.json` with complete-word
+reference scores. The Swift internal parity tests consume these sidecars instead
+of the old piece-only constants. Legacy batch graphs fall back to streaming.
+
+`make_gru_test_fixture.py` creates a tiny random model and a pool exceeding 32
+candidates, including a word exceeding the batch time limit. Its scores test
+plumbing only; they cannot establish prediction quality. Core ML compilation must
+be available on the host. Failures stop fixture generation rather than producing
+an apparently verified package.
+
+The runtime neural route still conditions on English and uses English dictionary
+and ASCII word constraints. Mixed-language training outputs do not add product
+language support. New language/register modes require matching dictionaries,
+tokenizer tags, generation constraints, routing, and separate blind evaluations.

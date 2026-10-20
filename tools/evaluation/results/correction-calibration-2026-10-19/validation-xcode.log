@@ -1,0 +1,920 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project /Users/meherdeepak/iOSKeyboard/keyboard.xcodeproj -scheme keyboard -configuration Debug -destination "platform=iOS Simulator,id=262C5558-8BFE-4442-AAE2-A9B93B17A3B7" -derivedDataPath /tmp/ioskeyboard-mkn-derived CODE_SIGNING_ALLOWED=NO test "-only-testing:keyboardTests/CorrectionCalibrationTests/replayFrozenCalibrationRequests()"
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (4 targets)
+    Target 'keyboardUITests' in project 'keyboard'
+        ➜ Explicit dependency on target 'keyboard' in project 'keyboard'
+    Target 'keyboardTests' in project 'keyboard'
+        ➜ Explicit dependency on target 'keyboard' in project 'keyboard'
+    Target 'keyboard' in project 'keyboard'
+        ➜ Explicit dependency on target 'demo_keyboard' in project 'keyboard'
+    Target 'demo_keyboard' in project 'keyboard' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c++ -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -x objective-c++ -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/meherdeepak/iOSKeyboard/keyboard/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+Build description signature: 6d313fbbfa6cc2119f64c3e79d611876
+Build description path: /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/XCBuildData/6d313fbbfa6cc2119f64c3e79d611876.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache
+    cd /Users/meherdeepak/iOSKeyboard/keyboard.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -o /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache
+
+note: Run script build phase 'Install Internal Neural Model' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'demo_keyboard' from project 'keyboard')
+SwiftDriver demo_keyboard normal arm64 com.apple.xcode.tools.swift.compiler (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name demo_keyboard -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -application-extension -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard-Swift.h -import-objc-header /Users/meherdeepak/iOSKeyboard/native/iOS/Keyboard-Bridging-Header.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+SwiftGeneratePch normal arm64 Compiling\ bridging\ header (in target 'demo_keyboard' from project 'keyboard')
+
+SwiftDriverJobDiscovery normal arm64 Compiling bridging header (in target 'demo_keyboard' from project 'keyboard')
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ demo_keyboard (in target 'demo_keyboard' from project 'keyboard')
+
+EmitSwiftModule normal arm64 (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+
+SwiftCompile normal arm64 Compiling\ Keyboardengine.swift /Users/meherdeepak/iOSKeyboard/keyboard/Engine/Keyboardengine.swift (in target 'demo_keyboard' from project 'keyboard')
+SwiftCompile normal arm64 /Users/meherdeepak/iOSKeyboard/keyboard/Engine/Keyboardengine.swift (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for demo_keyboard (in target 'demo_keyboard' from project 'keyboard')
+
+SwiftDriver\ Compilation\ Requirements demo_keyboard normal arm64 com.apple.xcode.tools.swift.compiler (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name demo_keyboard -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -application-extension -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard-Swift.h -import-objc-header /Users/meherdeepak/iOSKeyboard/native/iOS/Keyboard-Bridging-Header.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Compiling Keyboardengine.swift (in target 'demo_keyboard' from project 'keyboard')
+
+SwiftDriver\ Compilation demo_keyboard normal arm64 com.apple.xcode.tools.swift.compiler (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name demo_keyboard -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -application-extension -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard-Swift.h -import-objc-header /Users/meherdeepak/iOSKeyboard/native/iOS/Keyboard-Bridging-Header.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/demo_keyboard.debug.dylib normal (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -Xlinker -reproducible -target arm64-apple-ios18.0-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -filelist /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.LinkFileList -install_name @rpath/demo_keyboard.debug.dylib -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/../../Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -debug_variant -Xlinker -dependency_info -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard_dependency_info.dat -fobjc-arc -fobjc-link-runtime -fapplication-extension -fprofile-instr-generate -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftmodule @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard-linker-args.resp -Xlinker -alias -Xlinker _NSExtensionMain -Xlinker ___debug_main_executable_dylib_entry_point -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/demo_keyboard.debug.dylib
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.swiftmodule/arm64-apple-ios-simulator.swiftmodule /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftmodule (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftmodule /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.abi.json (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.abi.json /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftsourceinfo (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.swiftsourceinfo /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+ConstructStubExecutorLinkFileList /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-ExecutorLinkFileList-normal-arm64.txt (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    construct-stub-executor-link-file-list /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/demo_keyboard.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library without Swift entry point. (in target 'demo_keyboard' from project 'keyboard')
+
+Ld /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/demo_keyboard normal (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -Xlinker -reproducible -target arm64-apple-ios18.0-simulator -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/../../Frameworks -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -debug_variant -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_entry -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-DebugEntryPoint-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-ExecutorLinkFileList-normal-arm64.txt /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/demo_keyboard.debug.dylib -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/demo_keyboard
+
+PhaseScriptExecution Install\ Internal\ Neural\ Model /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Script-A10000042FE821180014EA39.sh (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    export ACTION\=build
+    export AD_HOC_CODE_SIGNING_ALLOWED\=YES
+    export ALLOW_BUILD_REQUEST_OVERRIDES\=NO
+    export ALLOW_TARGET_PLATFORM_SPECIALIZATION\=NO
+    export ALTERNATE_GROUP\=staff
+    export ALTERNATE_MODE\=u+w,go-w,a+rX
+    export ALTERNATE_OWNER\=meherdeepak
+    export ALTERNATIVE_DISTRIBUTION_WEB\=NO
+    export ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES\=NO
+    export ALWAYS_SEARCH_USER_PATHS\=NO
+    export ALWAYS_USE_SEPARATE_HEADERMAPS\=NO
+    export APPLICATION_EXTENSION_API_ONLY\=YES
+    export APPLY_RULES_IN_COPY_FILES\=NO
+    export APPLY_RULES_IN_COPY_HEADERS\=NO
+    export APP_SHORTCUTS_ENABLE_FLEXIBLE_MATCHING\=YES
+    export ARCHS\=arm64
+    export ARCHS_BASE\=arm64
+    export ARCHS_STANDARD\=arm64\ x86_64
+    export ARCHS_STANDARD_32_64_BIT\=arm64\ x86_64
+    export ARCHS_STANDARD_64_BIT\=arm64\ x86_64
+    export ARCHS_STANDARD_INCLUDING_64_BIT\=arm64\ x86_64
+    export ARCHS_UNIVERSAL_IPHONE_OS\=arm64\ x86_64
+    export ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS\=YES
+    export ASSETCATALOG_COMPILER_STANDALONE_ICON_BEHAVIOR\=all
+    export ASSETCATALOG_FILTER_FOR_DEVICE_MODEL\=iPhone18,1
+    export ASSETCATALOG_FILTER_FOR_DEVICE_OS_VERSION\=26.5
+    export ASSETCATALOG_FILTER_FOR_THINNING_DEVICE_CONFIGURATION\=iPhone18,1
+    export AUTOMATICALLY_MERGE_DEPENDENCIES\=NO
+    export AUTOMATION_APPLE_EVENTS\=NO
+    export AVAILABLE_PLATFORMS\=android\ appletvos\ appletvsimulator\ driverkit\ freebsd\ iphoneos\ iphonesimulator\ linux\ macosx\ none\ openbsd\ qnx\ watchos\ watchsimulator\ webassembly\ xros\ xrsimulator
+    export BUILD_ACTIVE_RESOURCES_ONLY\=YES
+    export BUILD_COMPONENTS\=headers\ build
+    export BUILD_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Products
+    export BUILD_LIBRARY_FOR_DISTRIBUTION\=NO
+    export BUILD_ONLY_KNOWN_LOCALIZATIONS\=NO
+    export BUILD_ROOT\=/tmp/ioskeyboard-mkn-derived/Build/Products
+    export BUILD_STYLE\=
+    export BUILD_VARIANTS\=normal
+    export BUILT_PRODUCTS_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator
+    export BUNDLE_CONTENTS_FOLDER_PATH_deep\=Contents/
+    export BUNDLE_EXECUTABLE_FOLDER_NAME_deep\=MacOS
+    export BUNDLE_EXTENSIONS_FOLDER_PATH\=Extensions
+    export BUNDLE_FORMAT\=shallow
+    export BUNDLE_FRAMEWORKS_FOLDER_PATH\=Frameworks
+    export BUNDLE_PLUGINS_FOLDER_PATH\=PlugIns
+    export BUNDLE_PRIVATE_HEADERS_FOLDER_PATH\=PrivateHeaders
+    export BUNDLE_PUBLIC_HEADERS_FOLDER_PATH\=Headers
+    export CACHE_ROOT\=/var/folders/3j/cwnbhq8x7g10hv97vpwm7r2c0000gp/C/com.apple.DeveloperTools/26.6-17F113/Xcode
+    export CCHROOT\=/var/folders/3j/cwnbhq8x7g10hv97vpwm7r2c0000gp/C/com.apple.DeveloperTools/26.6-17F113/Xcode
+    export CHMOD\=/bin/chmod
+    export CHOWN\=chown
+    export CLANG_ANALYZER_NONNULL\=YES
+    export CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION\=YES_AGGRESSIVE
+    export CLANG_CACHE_FINE_GRAINED_OUTPUTS\=YES
+    export CLANG_COVERAGE_MAPPING\=YES
+    export CLANG_CXX_LANGUAGE_STANDARD\=gnu++20
+    export CLANG_ENABLE_EXPLICIT_MODULES\=YES
+    export CLANG_ENABLE_MODULES\=YES
+    export CLANG_ENABLE_OBJC_ARC\=YES
+    export CLANG_ENABLE_OBJC_WEAK\=YES
+    export CLANG_MODULES_BUILD_SESSION_FILE\=/tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation
+    export CLANG_PROFILE_DATA_DIRECTORY\=/tmp/ioskeyboard-mkn-derived/Build/ProfileData
+    export CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING\=YES
+    export CLANG_WARN_BOOL_CONVERSION\=YES
+    export CLANG_WARN_COMMA\=YES
+    export CLANG_WARN_CONSTANT_CONVERSION\=YES
+    export CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS\=YES
+    export CLANG_WARN_DIRECT_OBJC_ISA_USAGE\=YES_ERROR
+    export CLANG_WARN_DOCUMENTATION_COMMENTS\=YES
+    export CLANG_WARN_EMPTY_BODY\=YES
+    export CLANG_WARN_ENUM_CONVERSION\=YES
+    export CLANG_WARN_INFINITE_RECURSION\=YES
+    export CLANG_WARN_INT_CONVERSION\=YES
+    export CLANG_WARN_NON_LITERAL_NULL_CONVERSION\=YES
+    export CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF\=YES
+    export CLANG_WARN_OBJC_LITERAL_CONVERSION\=YES
+    export CLANG_WARN_OBJC_ROOT_CLASS\=YES_ERROR
+    export CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER\=YES
+    export CLANG_WARN_RANGE_LOOP_ANALYSIS\=YES
+    export CLANG_WARN_STRICT_PROTOTYPES\=YES
+    export CLANG_WARN_SUSPICIOUS_MOVE\=YES
+    export CLANG_WARN_UNGUARDED_AVAILABILITY\=YES_AGGRESSIVE
+    export CLANG_WARN_UNREACHABLE_CODE\=YES
+    export CLANG_WARN__DUPLICATE_METHOD_MATCH\=YES
+    export CLASS_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/JavaClasses
+    export CLEAN_PRECOMPS\=YES
+    export CLONE_HEADERS\=NO
+    export CODESIGNING_FOLDER_PATH\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex
+    export CODE_SIGNING_ALLOWED\=NO
+    export CODE_SIGNING_REQUIRED\=YES
+    export CODE_SIGN_CONTEXT_CLASS\=XCiPhoneSimulatorCodeSignContext
+    export CODE_SIGN_ENTITLEMENTS\=demo_keyboard/demo_keyboard.entitlements
+    export CODE_SIGN_IDENTITY\=-
+    export CODE_SIGN_INJECT_BASE_ENTITLEMENTS\=YES
+    export CODE_SIGN_STYLE\=Automatic
+    export COLOR_DIAGNOSTICS\=NO
+    export COMBINE_HIDPI_IMAGES\=NO
+    export COMPILATION_CACHE_CAS_PATH\=/tmp/ioskeyboard-mkn-derived/CompilationCache.noindex
+    export COMPILATION_CACHE_KEEP_CAS_DIRECTORY\=YES
+    export COMPILER_INDEX_STORE_ENABLE\=Default
+    export COMPOSITE_SDK_DIRS\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/CompositeSDKs
+    export COMPRESS_PNG_FILES\=YES
+    export CONFIGURATION\=Debug
+    export CONFIGURATION_BUILD_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator
+    export CONFIGURATION_TEMP_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator
+    export CONTENTS_FOLDER_PATH\=demo_keyboard.appex
+    export CONTENTS_FOLDER_PATH_SHALLOW_BUNDLE_NO\=demo_keyboard.appex/Contents
+    export CONTENTS_FOLDER_PATH_SHALLOW_BUNDLE_YES\=demo_keyboard.appex
+    export COPYING_PRESERVES_HFS_DATA\=NO
+    export COPY_HEADERS_RUN_UNIFDEF\=NO
+    export COPY_PHASE_STRIP\=NO
+    export CORRESPONDING_DEVICE_PLATFORM_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform
+    export CORRESPONDING_DEVICE_PLATFORM_NAME\=iphoneos
+    export CORRESPONDING_DEVICE_SDK_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk
+    export CORRESPONDING_DEVICE_SDK_NAME\=iphoneos26.5
+    export CP\=/bin/cp
+    export CREATE_INFOPLIST_SECTION_IN_BINARY\=NO
+    export CURRENT_ARCH\=undefined_arch
+    export CURRENT_PROJECT_VERSION\=1
+    export CURRENT_VARIANT\=normal
+    export DEAD_CODE_STRIPPING\=YES
+    export DEBUGGING_SYMBOLS\=YES
+    export DEBUG_INFORMATION_FORMAT\=dwarf
+    export DEBUG_INFORMATION_VERSION\=compiler-default
+    export DEFAULT_COMPILER\=com.apple.compilers.llvm.clang.1_0
+    export DEFAULT_DEXT_INSTALL_PATH\=/System/Library/DriverExtensions
+    export DEFAULT_KEXT_INSTALL_PATH\=/System/Library/Extensions
+    export DEFINES_MODULE\=NO
+    export DEPLOYMENT_LOCATION\=NO
+    export DEPLOYMENT_POSTPROCESSING\=NO
+    export DEPLOYMENT_TARGET_SETTING_NAME\=IPHONEOS_DEPLOYMENT_TARGET
+    export DEPLOYMENT_TARGET_SUGGESTED_VALUES\=12.0\ 12.1\ 12.2\ 12.3\ 12.4\ 13.0\ 13.1\ 13.2\ 13.3\ 13.4\ 13.5\ 13.6\ 14.0\ 14.1\ 14.2\ 14.3\ 14.4\ 14.5\ 14.6\ 14.7\ 15.0\ 15.1\ 15.2\ 15.3\ 15.4\ 15.5\ 15.6\ 16.0\ 16.1\ 16.2\ 16.3\ 16.4\ 16.5\ 16.6\ 17.0\ 17.1\ 17.2\ 17.3\ 17.4\ 17.5\ 17.6\ 18.0\ 18.1\ 18.2\ 18.3\ 18.4\ 18.5\ 18.6\ 26.0\ 26.2\ 26.3\ 26.4\ 26.5
+    export DERIVED_FILES_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources
+    export DERIVED_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources
+    export DERIVED_SOURCES_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/DerivedSources
+    export DEVELOPER_APPLICATIONS_DIR\=/Applications/Xcode.app/Contents/Developer/Applications
+    export DEVELOPER_BIN_DIR\=/Applications/Xcode.app/Contents/Developer/usr/bin
+    export DEVELOPER_DIR\=/Applications/Xcode.app/Contents/Developer
+    export DEVELOPER_FRAMEWORKS_DIR\=/Applications/Xcode.app/Contents/Developer/Library/Frameworks
+    export DEVELOPER_FRAMEWORKS_DIR_QUOTED\=/Applications/Xcode.app/Contents/Developer/Library/Frameworks
+    export DEVELOPER_LIBRARY_DIR\=/Applications/Xcode.app/Contents/Developer/Library
+    export DEVELOPER_SDK_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs
+    export DEVELOPER_TOOLS_DIR\=/Applications/Xcode.app/Contents/Developer/Tools
+    export DEVELOPER_USR_DIR\=/Applications/Xcode.app/Contents/Developer/usr
+    export DEVELOPMENT_LANGUAGE\=en
+    export DEVELOPMENT_TEAM\=U66M5N8GCZ
+    export DIAGNOSE_MISSING_TARGET_DEPENDENCIES\=YES
+    export DIFF\=/usr/bin/diff
+    export DOCUMENTATION_FOLDER_PATH\=demo_keyboard.appex/en.lproj/Documentation
+    export DONT_GENERATE_INFOPLIST_FILE\=NO
+    export DSTROOT\=/tmp/keyboard.dst
+    export DT_TOOLCHAIN_DIR\=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain
+    export DUMP_DEPENDENCIES\=NO
+    export DUMP_DEPENDENCIES_OUTPUT_PATH\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-BuildDependencyInfo.json
+    export DWARF_DSYM_FILE_NAME\=demo_keyboard.appex.dSYM
+    export DWARF_DSYM_FILE_SHOULD_ACCOMPANY_PRODUCT\=NO
+    export DWARF_DSYM_FOLDER_PATH\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator
+    export DYNAMIC_LIBRARY_EXTENSION\=dylib
+    export EAGER_COMPILATION_ALLOW_SCRIPTS\=NO
+    export EAGER_LINKING\=NO
+    export EFFECTIVE_PLATFORM_NAME\=-iphonesimulator
+    export EFFECTIVE_SWIFT_VERSION\=5
+    export EMBEDDED_CONTENT_CONTAINS_SWIFT\=NO
+    export EMBED_ASSET_PACKS_IN_PRODUCT_BUNDLE\=NO
+    export ENABLE_APP_SANDBOX\=NO
+    export ENABLE_CODE_COVERAGE\=YES
+    export ENABLE_COHORT_ARCHS\=NO
+    export ENABLE_CPLUSPLUS_BOUNDS_SAFE_BUFFERS\=NO
+    export ENABLE_C_BOUNDS_SAFETY\=NO
+    export ENABLE_DEBUG_DYLIB\=YES
+    export ENABLE_DEFAULT_HEADER_SEARCH_PATHS\=YES
+    export ENABLE_DEFAULT_SEARCH_PATHS\=YES
+    export ENABLE_ENHANCED_SECURITY\=NO
+    export ENABLE_HARDENED_RUNTIME\=NO
+    export ENABLE_HEADER_DEPENDENCIES\=YES
+    export ENABLE_INCOMING_NETWORK_CONNECTIONS\=NO
+    export ENABLE_ON_DEMAND_RESOURCES\=NO
+    export ENABLE_OUTGOING_NETWORK_CONNECTIONS\=NO
+    export ENABLE_POINTER_AUTHENTICATION\=NO
+    export ENABLE_PREVIEWS\=NO
+    export ENABLE_RESOURCE_ACCESS_AUDIO_INPUT\=NO
+    export ENABLE_RESOURCE_ACCESS_BLUETOOTH\=NO
+    export ENABLE_RESOURCE_ACCESS_CALENDARS\=NO
+    export ENABLE_RESOURCE_ACCESS_CAMERA\=NO
+    export ENABLE_RESOURCE_ACCESS_CONTACTS\=NO
+    export ENABLE_RESOURCE_ACCESS_LOCATION\=NO
+    export ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY\=NO
+    export ENABLE_RESOURCE_ACCESS_PRINTING\=NO
+    export ENABLE_RESOURCE_ACCESS_USB\=NO
+    export ENABLE_SDK_IMPORTS\=NO
+    export ENABLE_SECURITY_COMPILER_WARNINGS\=NO
+    export ENABLE_STRICT_OBJC_MSGSEND\=YES
+    export ENABLE_TESTABILITY\=YES
+    export ENABLE_TESTING_SEARCH_PATHS\=NO
+    export ENABLE_USER_SCRIPT_SANDBOXING\=NO
+    export ENABLE_XOJIT_PREVIEWS\=YES
+    export ENFORCE_VALID_ARCHS\=YES
+    export ENTITLEMENTS_DESTINATION\=__entitlements
+    export ENTITLEMENTS_REQUIRED\=NO
+    export EXCLUDED_INSTALLSRC_SUBDIRECTORY_PATTERNS\=.DS_Store\ .svn\ .git\ .hg\ CVS
+    export EXCLUDED_RECURSIVE_SEARCH_PATH_SUBDIRECTORIES\=\*.nib\ \*.lproj\ \*.framework\ \*.gch\ \*.xcode\*\ \*.xcassets\ \*.icon\ \(\*\)\ .DS_Store\ CVS\ .svn\ .git\ .hg\ \*.pbproj\ \*.pbxproj
+    export EXECUTABLES_FOLDER_PATH\=demo_keyboard.appex/Executables
+    export EXECUTABLE_BLANK_INJECTION_DYLIB_PATH\=demo_keyboard.appex/__preview.dylib
+    export EXECUTABLE_DEBUG_DYLIB_INSTALL_NAME\=@rpath/demo_keyboard.debug.dylib
+    export EXECUTABLE_DEBUG_DYLIB_PATH\=demo_keyboard.appex/demo_keyboard.debug.dylib
+    export EXECUTABLE_FOLDER_PATH\=demo_keyboard.appex
+    export EXECUTABLE_FOLDER_PATH_SHALLOW_BUNDLE_NO\=demo_keyboard.appex/MacOS
+    export EXECUTABLE_FOLDER_PATH_SHALLOW_BUNDLE_YES\=demo_keyboard.appex
+    export EXECUTABLE_NAME\=demo_keyboard
+    export EXECUTABLE_PATH\=demo_keyboard.appex/demo_keyboard
+    export EXTENSIONS_FOLDER_PATH\=demo_keyboard.appex/Extensions
+    export FILE_LIST\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects/LinkFileList
+    export FIXED_FILES_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/FixedFiles
+    export FRAMEWORKS_FOLDER_PATH\=demo_keyboard.appex/Frameworks
+    export FRAMEWORK_FLAG_PREFIX\=-framework
+    export FRAMEWORK_SEARCH_PATHS\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator\ 
+    export FRAMEWORK_VERSION\=A
+    export FULL_PRODUCT_NAME\=demo_keyboard.appex
+    export FUSE_BUILD_PHASES\=YES
+    export FUSE_BUILD_SCRIPT_PHASES\=NO
+    export GCC3_VERSION\=3.3
+    export GCC_C_LANGUAGE_STANDARD\=gnu17
+    export GCC_DYNAMIC_NO_PIC\=NO
+    export GCC_INLINES_ARE_PRIVATE_EXTERN\=YES
+    export GCC_NO_COMMON_BLOCKS\=YES
+    export GCC_OBJC_LEGACY_DISPATCH\=YES
+    export GCC_OPTIMIZATION_LEVEL\=0
+    export GCC_PFE_FILE_C_DIALECTS\=c\ objective-c\ c++\ objective-c++
+    export GCC_PREPROCESSOR_DEFINITIONS\=DEBUG\=1\ 
+    export GCC_TREAT_WARNINGS_AS_ERRORS\=NO
+    export GCC_VERSION\=com.apple.compilers.llvm.clang.1_0
+    export GCC_VERSION_IDENTIFIER\=com_apple_compilers_llvm_clang_1_0
+    export GCC_WARN_64_TO_32_BIT_CONVERSION\=YES
+    export GCC_WARN_ABOUT_RETURN_TYPE\=YES_ERROR
+    export GCC_WARN_UNDECLARED_SELECTOR\=YES
+    export GCC_WARN_UNINITIALIZED_AUTOS\=YES_AGGRESSIVE
+    export GCC_WARN_UNUSED_FUNCTION\=YES
+    export GCC_WARN_UNUSED_VARIABLE\=YES
+    export GENERATED_MODULEMAP_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator
+    export GENERATE_INFOPLIST_FILE\=YES
+    export GENERATE_INTERMEDIATE_TEXT_BASED_STUBS\=YES
+    export GENERATE_PKGINFO_FILE\=NO
+    export GENERATE_PRELINK_OBJECT_FILE\=NO
+    export GENERATE_PROFILING_CODE\=NO
+    export GENERATE_TEXT_BASED_STUBS\=NO
+    export GID\=20
+    export GROUP\=staff
+    export HEADERMAP_INCLUDES_FLAT_ENTRIES_FOR_TARGET_BEING_BUILT\=YES
+    export HEADERMAP_INCLUDES_FRAMEWORK_ENTRIES_FOR_ALL_PRODUCT_TYPES\=YES
+    export HEADERMAP_INCLUDES_FRAMEWORK_ENTRIES_FOR_TARGETS_NOT_BEING_BUILT\=YES
+    export HEADERMAP_INCLUDES_NONPUBLIC_NONPRIVATE_HEADERS\=YES
+    export HEADERMAP_INCLUDES_PROJECT_HEADERS\=YES
+    export HEADERMAP_USES_FRAMEWORK_PREFIX_ENTRIES\=YES
+    export HEADERMAP_USES_VFS\=NO
+    export HEADER_SEARCH_PATHS\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include\ 
+    export HOME\=/Users/meherdeepak
+    export HOST_ARCH\=arm64
+    export HOST_PLATFORM\=macosx
+    export ICONV\=/usr/bin/iconv
+    export IMPLICIT_DEPENDENCY_DOMAIN\=default
+    export INDEX_STORE_COMPRESS\=NO
+    export INDEX_STORE_ONLY_PROJECT_FILES\=NO
+    export INFOPLIST_ENABLE_CFBUNDLEICONS_MERGE\=YES
+    export INFOPLIST_EXPAND_BUILD_SETTINGS\=YES
+    export INFOPLIST_FILE\=demo_keyboard/Info.plist
+    export INFOPLIST_KEY_CFBundleDisplayName\=Glyph
+    export INFOPLIST_OUTPUT_FORMAT\=binary
+    export INFOPLIST_PATH\=demo_keyboard.appex/Info.plist
+    export INFOPLIST_PREPROCESS\=NO
+    export INFOSTRINGS_PATH\=demo_keyboard.appex/en.lproj/InfoPlist.strings
+    export INLINE_PRIVATE_FRAMEWORKS\=NO
+    export INSTALLAPI_IGNORE_SKIP_INSTALL\=YES
+    export INSTALLHDRS_COPY_PHASE\=NO
+    export INSTALLHDRS_SCRIPT_PHASE\=NO
+    export INSTALL_DIR\=/tmp/keyboard.dst
+    export INSTALL_GROUP\=staff
+    export INSTALL_MODE_FLAG\=u+w,go-w,a+rX
+    export INSTALL_OWNER\=meherdeepak
+    export INSTALL_ROOT\=/tmp/keyboard.dst
+    export INTERNAL_GRU_ENABLED\=NO
+    export INTERNAL_NEURAL_ENABLED\=NO
+    export IPHONEOS_DEPLOYMENT_TARGET\=18.0
+    export IS_UNOPTIMIZED_BUILD\=YES
+    export JAVAC_DEFAULT_FLAGS\=-J-Xms64m\ -J-XX:NewSize\=4M\ -J-Dfile.encoding\=UTF8
+    export JAVA_APP_STUB\=/System/Library/Frameworks/JavaVM.framework/Resources/MacOS/JavaApplicationStub
+    export JAVA_ARCHIVE_CLASSES\=YES
+    export JAVA_ARCHIVE_TYPE\=JAR
+    export JAVA_COMPILER\=/usr/bin/javac
+    export JAVA_FOLDER_PATH\=demo_keyboard.appex/Java
+    export JAVA_FRAMEWORK_RESOURCES_DIRS\=Resources
+    export JAVA_JAR_FLAGS\=cv
+    export JAVA_SOURCE_SUBDIR\=.
+    export JAVA_USE_DEPENDENCIES\=YES
+    export JAVA_ZIP_FLAGS\=-urg
+    export JIKES_DEFAULT_FLAGS\=+E\ +OLDCSO
+    export KEEP_PRIVATE_EXTERNS\=NO
+    export KLIPY_CONTENT_FILTER_APPROVED\=NO
+    export KLIPY_MEDIA_ENABLED\=NO
+    export LD_DEPENDENCY_INFO_FILE\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/undefined_arch/demo_keyboard_dependency_info.dat
+    export LD_ENTRY_POINT\=_NSExtensionMain
+    export LD_EXPORT_SYMBOLS\=YES
+    export LD_GENERATE_MAP_FILE\=NO
+    export LD_MAP_FILE_PATH\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard-LinkMap-normal-undefined_arch.txt
+    export LD_NO_PIE\=NO
+    export LD_QUOTE_LINKER_ARGUMENTS_FOR_COMPILER_DRIVER\=YES
+    export LD_RUNPATH_SEARCH_PATHS\=\ @executable_path/Frameworks\ @executable_path/../../Frameworks
+    export LD_RUNPATH_SEARCH_PATHS_YES_NO\=@loader_path/../Frameworks
+    export LD_RUNPATH_SEARCH_PATHS_YES_YES\=@loader_path/../Frameworks\ @loader_path/../../../../Frameworks
+    export LD_SHARED_CACHE_ELIGIBLE\=Automatic
+    export LD_WARN_DUPLICATE_LIBRARIES\=NO
+    export LD_WARN_UNUSED_DYLIBS\=NO
+    export LEGACY_DEVELOPER_DIR\=/Applications/Xcode.app/Contents/PlugIns/Xcode3Core.ideplugin/Contents/SharedSupport/Developer
+    export LEX\=lex
+    export LIBRARY_DEXT_INSTALL_PATH\=/Library/DriverExtensions
+    export LIBRARY_FLAG_NOSPACE\=YES
+    export LIBRARY_FLAG_PREFIX\=-l
+    export LIBRARY_KEXT_INSTALL_PATH\=/Library/Extensions
+    export LIBRARY_SEARCH_PATHS\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator\ 
+    export LINKER_DISPLAYS_MANGLED_NAMES\=NO
+    export LINK_FILE_LIST_normal_arm64\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.LinkFileList
+    export LINK_OBJC_RUNTIME\=YES
+    export LINK_WITH_STANDARD_LIBRARIES\=YES
+    export LLVM_TARGET_TRIPLE_OS_VERSION\=ios18.0
+    export LLVM_TARGET_TRIPLE_SUFFIX\=-simulator
+    export LLVM_TARGET_TRIPLE_VENDOR\=apple
+    export LM_AUX_CONST_METADATA_LIST_PATH_normal_arm64\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.SwiftConstValuesFileList
+    export LOCALIZATION_EXPORT_SUPPORTED\=YES
+    export LOCALIZATION_PREFERS_STRING_CATALOGS\=YES
+    export LOCALIZED_RESOURCES_FOLDER_PATH\=demo_keyboard.appex/en.lproj
+    export LOCALIZED_STRING_CODE_COMMENTS\=NO
+    export LOCALIZED_STRING_MACRO_NAMES\=NSLocalizedString\ CFCopyLocalizedString
+    export LOCALIZED_STRING_SWIFTUI_SUPPORT\=YES
+    export LOCAL_ADMIN_APPS_DIR\=/Applications/Utilities
+    export LOCAL_APPS_DIR\=/Applications
+    export LOCAL_DEVELOPER_DIR\=/Library/Developer
+    export LOCAL_LIBRARY_DIR\=/Library
+    export LOCROOT\=/Users/meherdeepak/iOSKeyboard
+    export LOCSYMROOT\=/Users/meherdeepak/iOSKeyboard
+    export MACH_O_TYPE\=mh_execute
+    export MAC_OS_X_PRODUCT_BUILD_VERSION\=25F84
+    export MAC_OS_X_VERSION_ACTUAL\=260502
+    export MAC_OS_X_VERSION_MAJOR\=260000
+    export MAC_OS_X_VERSION_MINOR\=260500
+    export MAKE_MERGEABLE\=NO
+    export MARKETING_VERSION\=1.0
+    export MERGEABLE_LIBRARY\=NO
+    export MERGED_BINARY_TYPE\=none
+    export MERGE_LINKED_LIBRARIES\=NO
+    export METAL_LIBRARY_FILE_BASE\=default
+    export METAL_LIBRARY_OUTPUT_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex
+    export MODULES_FOLDER_PATH\=demo_keyboard.appex/Modules
+    export MODULE_CACHE_DIR\=/tmp/ioskeyboard-mkn-derived/ModuleCache.noindex
+    export MTL_ENABLE_DEBUG_INFO\=INCLUDE_SOURCE
+    export MTL_FAST_MATH\=YES
+    export NATIVE_ARCH\=arm64
+    export NATIVE_ARCH_32_BIT\=arm
+    export NATIVE_ARCH_64_BIT\=arm64
+    export NATIVE_ARCH_ACTUAL\=arm64
+    export NO_COMMON\=YES
+    export OBJC_ABI_VERSION\=2
+    export OBJECT_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects
+    export OBJECT_FILE_DIR_normal\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal
+    export OBJROOT\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex
+    export ONLY_ACTIVE_ARCH\=YES
+    export OS\=MACOS
+    export OSAC\=/usr/bin/osacompile
+    export PACKAGE_TYPE\=com.apple.package-type.app-extension
+    export PASCAL_STRINGS\=YES
+    export PATH\=/Applications/Xcode.app/Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/PlugIns/SWBBuildService.bundle/Contents/PlugIns/SWBUniversalPlatformPlugin.bundle/Contents/Frameworks/SWBUniversalPlatform.framework/Resources:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/libexec:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/usr/local/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/local/bin:/Applications/Xcode.app/Contents/Developer/usr/bin:/Applications/Xcode.app/Contents/Developer/usr/local/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/Library/Apple/usr/bin:/opt/homebrew/bin:/Applications/ChatGPT.app/Contents/Resources/codex-cli/codex-path:/Users/meherdeepak/.codex/tmp/arg0-macos/codex-arg0EAki2R:/Users/meherdeepak/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/override:/Users/meherdeepak/.cache/codex-runtimes/codex-primary-runtime/dependencies/bin/fallback:/Applications/ChatGPT.app/Contents/Resources:/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS
+    export PATH_PREFIXES_EXCLUDED_FROM_HEADER_DEPENDENCIES\=/usr/include\ /usr/local/include\ /System/Library/Frameworks\ /System/Library/PrivateFrameworks\ /Applications/Xcode.app/Contents/Developer/Headers\ /Applications/Xcode.app/Contents/Developer/SDKs\ /Applications/Xcode.app/Contents/Developer/Platforms
+    export PBDEVELOPMENTPLIST_PATH\=demo_keyboard.appex/pbdevelopment.plist
+    export PER_ARCH_MODULE_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/undefined_arch
+    export PER_ARCH_OBJECT_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/undefined_arch
+    export PER_VARIANT_OBJECT_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal
+    export PKGINFO_FILE_PATH\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/PkgInfo
+    export PKGINFO_PATH\=demo_keyboard.appex/PkgInfo
+    export PLATFORM_DEVELOPER_APPLICATIONS_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Applications
+    export PLATFORM_DEVELOPER_BIN_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/bin
+    export PLATFORM_DEVELOPER_LIBRARY_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library
+    export PLATFORM_DEVELOPER_SDK_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs
+    export PLATFORM_DEVELOPER_TOOLS_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Tools
+    export PLATFORM_DEVELOPER_USR_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr
+    export PLATFORM_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform
+    export PLATFORM_DISPLAY_NAME\=iOS\ Simulator
+    export PLATFORM_FAMILY_NAME\=iOS
+    export PLATFORM_NAME\=iphonesimulator
+    export PLATFORM_PREFERRED_ARCH\=x86_64
+    export PLATFORM_PRODUCT_BUILD_VERSION\=23F81a
+    export PLATFORM_REQUIRES_SWIFT_AUTOLINK_EXTRACT\=NO
+    export PLATFORM_REQUIRES_SWIFT_MODULEWRAP\=NO
+    export PLATFORM_USES_DSYMS\=YES
+    export PLIST_FILE_OUTPUT_FORMAT\=binary
+    export PLUGINS_FOLDER_PATH\=demo_keyboard.appex/PlugIns
+    export PRECOMPS_INCLUDE_HEADERS_FROM_BUILT_PRODUCTS_DIR\=YES
+    export PRECOMP_DESTINATION_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/PrefixHeaders
+    export PRIVATE_HEADERS_FOLDER_PATH\=demo_keyboard.appex/PrivateHeaders
+    export PROCESSED_INFOPLIST_PATH\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/undefined_arch/Processed-Info.plist
+    export PRODUCT_BUNDLE_IDENTIFIER\=com.swiftuimasterclass.keyboard.demo-keyboard
+    export PRODUCT_BUNDLE_PACKAGE_TYPE\=XPC\!
+    export PRODUCT_MODULE_NAME\=demo_keyboard
+    export PRODUCT_NAME\=demo_keyboard
+    export PRODUCT_SETTINGS_PATH\=/Users/meherdeepak/iOSKeyboard/demo_keyboard/Info.plist
+    export PRODUCT_TYPE\=com.apple.product-type.app-extension
+    export PROFILING_CODE\=NO
+    export PROJECT\=keyboard
+    export PROJECT_DERIVED_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/DerivedSources
+    export PROJECT_DIR\=/Users/meherdeepak/iOSKeyboard
+    export PROJECT_FILE_PATH\=/Users/meherdeepak/iOSKeyboard/keyboard.xcodeproj
+    export PROJECT_GUID\=08627c1acaf0dda5ee6d4638202c2a30
+    export PROJECT_NAME\=keyboard
+    export PROJECT_TEMP_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build
+    export PROJECT_TEMP_ROOT\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex
+    export PROVISIONING_PROFILE_REQUIRED\=YES
+    export PROVISIONING_PROFILE_SUPPORTED\=YES
+    export PUBLIC_HEADERS_FOLDER_PATH\=demo_keyboard.appex/Headers
+    export RECOMMENDED_IPHONEOS_DEPLOYMENT_TARGET\=15.0
+    export RECURSIVE_SEARCH_PATHS_FOLLOW_SYMLINKS\=YES
+    export REMOVE_CVS_FROM_RESOURCES\=YES
+    export REMOVE_GIT_FROM_RESOURCES\=YES
+    export REMOVE_HEADERS_FROM_EMBEDDED_BUNDLES\=YES
+    export REMOVE_HG_FROM_RESOURCES\=YES
+    export REMOVE_STATIC_EXECUTABLES_FROM_EMBEDDED_BUNDLES\=YES
+    export REMOVE_SVN_FROM_RESOURCES\=YES
+    export RESCHEDULE_INDEPENDENT_HEADERS_PHASES\=YES
+    export REZ_COLLECTOR_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/ResourceManagerResources
+    export REZ_OBJECTS_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/ResourceManagerResources/Objects
+    export REZ_SEARCH_PATHS\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator\ 
+    export RPATH_ORIGIN\=@loader_path
+    export RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES\=NO
+    export RUNTIME_EXCEPTION_ALLOW_JIT\=NO
+    export RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY\=NO
+    export RUNTIME_EXCEPTION_DEBUGGING_TOOL\=NO
+    export RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION\=NO
+    export RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION\=NO
+    export SCANNING_PCM_KEEP_CACHE_DIRECTORY\=YES
+    export SCAN_ALL_SOURCE_FILES_FOR_INCLUDES\=NO
+    export SCRIPTS_FOLDER_PATH\=demo_keyboard.appex/Scripts
+    export SCRIPT_INPUT_FILE_0\=/Users/meherdeepak/iOSKeyboard/tools/lm/install_internal_coreml.sh
+    export SCRIPT_INPUT_FILE_1\=/Users/meherdeepak/iOSKeyboard/tools/lm/install_internal_gru.sh
+    export SCRIPT_INPUT_FILE_COUNT\=2
+    export SCRIPT_INPUT_FILE_LIST_COUNT\=0
+    export SCRIPT_OUTPUT_FILE_COUNT\=0
+    export SCRIPT_OUTPUT_FILE_LIST_COUNT\=0
+    export SDKROOT\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk
+    export SDK_DIR\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk
+    export SDK_DIR_iphonesimulator\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk
+    export SDK_DIR_iphonesimulator26_5\=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk
+    export SDK_NAME\=iphonesimulator26.5
+    export SDK_NAMES\=iphonesimulator26.5
+    export SDK_PRODUCT_BUILD_VERSION\=23F81a
+    export SDK_STAT_CACHE_DIR\=/tmp/ioskeyboard-mkn-derived
+    export SDK_STAT_CACHE_ENABLE\=YES
+    export SDK_STAT_CACHE_PATH\=/tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache
+    export SDK_VERSION\=26.5
+    export SDK_VERSION_ACTUAL\=260500
+    export SDK_VERSION_MAJOR\=260000
+    export SDK_VERSION_MINOR\=260500
+    export SED\=/usr/bin/sed
+    export SEPARATE_STRIP\=NO
+    export SEPARATE_SYMBOL_EDIT\=NO
+    export SET_DIR_MODE_OWNER_GROUP\=YES
+    export SET_FILE_MODE_OWNER_GROUP\=NO
+    export SHALLOW_BUNDLE\=YES
+    export SHALLOW_BUNDLE_TRIPLE\=ios-simulator
+    export SHALLOW_BUNDLE_ios_macabi\=NO
+    export SHALLOW_BUNDLE_macos\=NO
+    export SHARED_DERIVED_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/DerivedSources
+    export SHARED_FRAMEWORKS_FOLDER_PATH\=demo_keyboard.appex/SharedFrameworks
+    export SHARED_PRECOMPS_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/PrecompiledHeaders
+    export SHARED_SUPPORT_FOLDER_PATH\=demo_keyboard.appex/SharedSupport
+    export SKIP_INSTALL\=YES
+    export SKIP_MERGEABLE_LIBRARY_BUNDLE_HOOK\=NO
+    export SOURCE_ROOT\=/Users/meherdeepak/iOSKeyboard
+    export SRCROOT\=/Users/meherdeepak/iOSKeyboard
+    export STRINGSDATA_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/undefined_arch
+    export STRINGSDATA_ROOT\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build
+    export STRINGS_FILE_INFOPLIST_RENAME\=YES
+    export STRINGS_FILE_OUTPUT_ENCODING\=binary
+    export STRING_CATALOG_GENERATE_SYMBOLS\=YES
+    export STRIP_BITCODE_FROM_COPIED_FILES\=NO
+    export STRIP_INSTALLED_PRODUCT\=NO
+    export STRIP_STYLE\=non-global
+    export STRIP_SWIFT_SYMBOLS\=YES
+    export SUPPORTED_DEVICE_FAMILIES\=1,2
+    export SUPPORTED_PLATFORMS\=iphoneos\ iphonesimulator
+    export SUPPORTS_MACCATALYST\=NO
+    export SUPPORTS_TEXT_BASED_API\=NO
+    export SUPPRESS_WARNINGS\=NO
+    export SWIFT_ACTIVE_COMPILATION_CONDITIONS\=DEBUG\ \ KB_REFERENCE_DECODER_YES
+    export SWIFT_APPROACHABLE_CONCURRENCY\=YES
+    export SWIFT_EMIT_CONST_VALUE_PROTOCOLS\=AnyResolverProviding\ AppEntity\ AppEnum\ AppExtension\ AppIntent\ AppIntentsPackage\ AppShortcutProviding\ AppShortcutsProvider\ AppUnionValue\ AppUnionValueCasesProviding\ DynamicOptionsProvider\ EntityQuery\ ExtensionPointDefining\ IntentValueQuery\ Resolver\ TransientEntity\ _AssistantIntentsProvider\ _GenerativeFunctionExtractable\ _IntentValueRepresentable
+    export SWIFT_EMIT_LOC_STRINGS\=YES
+    export SWIFT_ENABLE_EXPLICIT_MODULES\=YES
+    export SWIFT_OBJC_BRIDGING_HEADER\=/Users/meherdeepak/iOSKeyboard/native/iOS/Keyboard-Bridging-Header.h
+    export SWIFT_OPTIMIZATION_LEVEL\=-Onone
+    export SWIFT_PLATFORM_TARGET_PREFIX\=ios
+    export SWIFT_RESPONSE_FILE_PATH_normal_arm64\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.SwiftFileList
+    export SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY\=YES
+    export SWIFT_VERSION\=5.0
+    export SYMROOT\=/tmp/ioskeyboard-mkn-derived/Build/Products
+    export SYSTEM_ADMIN_APPS_DIR\=/Applications/Utilities
+    export SYSTEM_APPS_DIR\=/Applications
+    export SYSTEM_CORE_SERVICES_DIR\=/System/Library/CoreServices
+    export SYSTEM_DEMOS_DIR\=/Applications/Extras
+    export SYSTEM_DEVELOPER_APPS_DIR\=/Applications/Xcode.app/Contents/Developer/Applications
+    export SYSTEM_DEVELOPER_BIN_DIR\=/Applications/Xcode.app/Contents/Developer/usr/bin
+    export SYSTEM_DEVELOPER_DEMOS_DIR\=/Applications/Xcode.app/Contents/Developer/Applications/Utilities/Built\ Examples
+    export SYSTEM_DEVELOPER_DIR\=/Applications/Xcode.app/Contents/Developer
+    export SYSTEM_DEVELOPER_DOC_DIR\=/Applications/Xcode.app/Contents/Developer/ADC\ Reference\ Library
+    export SYSTEM_DEVELOPER_GRAPHICS_TOOLS_DIR\=/Applications/Xcode.app/Contents/Developer/Applications/Graphics\ Tools
+    export SYSTEM_DEVELOPER_JAVA_TOOLS_DIR\=/Applications/Xcode.app/Contents/Developer/Applications/Java\ Tools
+    export SYSTEM_DEVELOPER_PERFORMANCE_TOOLS_DIR\=/Applications/Xcode.app/Contents/Developer/Applications/Performance\ Tools
+    export SYSTEM_DEVELOPER_RELEASENOTES_DIR\=/Applications/Xcode.app/Contents/Developer/ADC\ Reference\ Library/releasenotes
+    export SYSTEM_DEVELOPER_TOOLS\=/Applications/Xcode.app/Contents/Developer/Tools
+    export SYSTEM_DEVELOPER_TOOLS_DOC_DIR\=/Applications/Xcode.app/Contents/Developer/ADC\ Reference\ Library/documentation/DeveloperTools
+    export SYSTEM_DEVELOPER_TOOLS_RELEASENOTES_DIR\=/Applications/Xcode.app/Contents/Developer/ADC\ Reference\ Library/releasenotes/DeveloperTools
+    export SYSTEM_DEVELOPER_USR_DIR\=/Applications/Xcode.app/Contents/Developer/usr
+    export SYSTEM_DEVELOPER_UTILITIES_DIR\=/Applications/Xcode.app/Contents/Developer/Applications/Utilities
+    export SYSTEM_DEXT_INSTALL_PATH\=/System/Library/DriverExtensions
+    export SYSTEM_DOCUMENTATION_DIR\=/Library/Documentation
+    export SYSTEM_EXTENSIONS_FOLDER_PATH\=demo_keyboard.appex/SystemExtensions
+    export SYSTEM_EXTENSIONS_FOLDER_PATH_SHALLOW_BUNDLE_NO\=demo_keyboard.appex/Library/SystemExtensions
+    export SYSTEM_EXTENSIONS_FOLDER_PATH_SHALLOW_BUNDLE_YES\=demo_keyboard.appex/SystemExtensions
+    export SYSTEM_KEXT_INSTALL_PATH\=/System/Library/Extensions
+    export SYSTEM_LIBRARY_DIR\=/System/Library
+    export TAPI_DEMANGLE\=YES
+    export TAPI_ENABLE_PROJECT_HEADERS\=NO
+    export TAPI_LANGUAGE\=objective-c
+    export TAPI_LANGUAGE_STANDARD\=compiler-default
+    export TAPI_USE_SRCROOT\=YES
+    export TAPI_VERIFY_MODE\=Pedantic
+    export TARGETED_DEVICE_FAMILY\=1,2
+    export TARGETNAME\=demo_keyboard
+    export TARGET_BUILD_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator
+    export TARGET_DEVICE_IDENTIFIER\=262C5558-8BFE-4442-AAE2-A9B93B17A3B7
+    export TARGET_DEVICE_MODEL\=iPhone18,1
+    export TARGET_DEVICE_OS_VERSION\=26.5
+    export TARGET_DEVICE_PLATFORM_NAME\=iphonesimulator
+    export TARGET_NAME\=demo_keyboard
+    export TARGET_TEMP_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build
+    export TEMP_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build
+    export TEMP_FILES_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build
+    export TEMP_FILE_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build
+    export TEMP_ROOT\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex
+    export TEMP_SANDBOX_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/TemporaryTaskSandboxes
+    export TEST_FRAMEWORK_SEARCH_PATHS\=\ /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks\ /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks
+    export TEST_LIBRARY_SEARCH_PATHS\=\ /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib
+    export TOOLCHAINS\=com.apple.dt.toolchain.XcodeDefault
+    export TOOLCHAIN_DIR\=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain
+    export TREAT_MISSING_BASELINES_AS_TEST_FAILURES\=NO
+    export TREAT_MISSING_SCRIPT_PHASE_OUTPUTS_AS_ERRORS\=NO
+    export UID\=502
+    export UNINSTALLED_PRODUCTS_DIR\=/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/UninstalledProducts
+    export UNLOCALIZED_RESOURCES_FOLDER_PATH\=demo_keyboard.appex
+    export UNLOCALIZED_RESOURCES_FOLDER_PATH_SHALLOW_BUNDLE_NO\=demo_keyboard.appex/Resources
+    export UNLOCALIZED_RESOURCES_FOLDER_PATH_SHALLOW_BUNDLE_YES\=demo_keyboard.appex
+    export UNSTRIPPED_PRODUCT\=NO
+    export USER\=meherdeepak
+    export USER_APPS_DIR\=/Users/meherdeepak/Applications
+    export USER_LIBRARY_DIR\=/Users/meherdeepak/Library
+    export USE_DYNAMIC_NO_PIC\=YES
+    export USE_HEADERMAP\=YES
+    export USE_HEADER_SYMLINKS\=NO
+    export VALIDATE_DEVELOPMENT_ASSET_PATHS\=YES_ERROR
+    export VALIDATE_PRODUCT\=NO
+    export VALID_ARCHS\=arm64\ x86_64
+    export VERBOSE_PBXCP\=NO
+    export VERSIONPLIST_PATH\=demo_keyboard.appex/version.plist
+    export VERSION_INFO_BUILDER\=meherdeepak
+    export VERSION_INFO_FILE\=demo_keyboard_vers.c
+    export VERSION_INFO_STRING\=\"@\(\#\)PROGRAM:demo_keyboard\ \ PROJECT:keyboard-1\"
+    export WORKSPACE_DIR\=/Users/meherdeepak/iOSKeyboard/keyboard.xcodeproj
+    export WRAPPER_EXTENSION\=appex
+    export WRAPPER_NAME\=demo_keyboard.appex
+    export WRAPPER_SUFFIX\=.appex
+    export WRAP_ASSET_PACKS_IN_SEPARATE_DIRECTORIES\=NO
+    export XCODE_APP_SUPPORT_DIR\=/Applications/Xcode.app/Contents/Developer/Library/Xcode
+    export XCODE_PRODUCT_BUILD_VERSION\=17F113
+    export XCODE_VERSION_ACTUAL\=2660
+    export XCODE_VERSION_MAJOR\=2600
+    export XCODE_VERSION_MINOR\=2660
+    export XPCSERVICES_FOLDER_PATH\=demo_keyboard.appex/XPCServices
+    export YACC\=yacc
+    export _DISCOVER_COMMAND_LINE_LINKER_INPUTS\=YES
+    export _DISCOVER_COMMAND_LINE_LINKER_INPUTS_INCLUDE_WL\=YES
+    export _LD_MULTIARCH\=YES
+    export _WRAPPER_CONTENTS_DIR_SHALLOW_BUNDLE_NO\=/Contents
+    export _WRAPPER_PARENT_PATH_SHALLOW_BUNDLE_NO\=/..
+    export _WRAPPER_RESOURCES_DIR_SHALLOW_BUNDLE_NO\=/Resources
+    export __DIAGNOSE_DEPRECATED_ARCHS\=YES
+    export __IS_NOT_MACOS\=YES
+    export __IS_NOT_MACOS_macosx\=NO
+    export __ORIGINAL_SDK_DEFINED_LLVM_TARGET_TRIPLE_SYS\=ios
+    export arch\=undefined_arch
+    export variant\=normal
+    /bin/sh -c /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Script-A10000042FE821180014EA39.sh
+note: neural rescorer retired for this edition (set INTERNAL_NEURAL_ENABLED=YES to bundle)
+note: GRU search prior not enabled (set INTERNAL_GRU_ENABLED=YES to bundle)
+
+ExtractAppIntentsMetadata (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name demo_keyboard --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 18.0 --bundle-identifier com.swiftuimasterclass.keyboard.demo-keyboard --output /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex --target-triple arm64-apple-ios18.0-simulator --binary-file /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/demo_keyboard --dependency-file /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard_dependency_info.dat --stringsdata-file /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.SwiftFileList --metadata-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard.DependencyMetadataFileList --static-metadata-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/demo_keyboard.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/demo_keyboard.build/Objects-normal/arm64/demo_keyboard.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-19 21:48:42.415 appintentsmetadataprocessor[65042:1629459] Starting appintentsmetadataprocessor export
+2026-10-19 21:48:42.420 appintentsmetadataprocessor[65042:1629459] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+ProcessInfoPlistFile /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/Info.plist /Users/meherdeepak/iOSKeyboard/demo_keyboard/Info.plist (in target 'demo_keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-infoPlistUtility /Users/meherdeepak/iOSKeyboard/demo_keyboard/Info.plist -producttype com.apple.product-type.app-extension -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex/Info.plist
+
+SwiftDriver keyboard normal arm64 com.apple.xcode.tools.swift.compiler (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name keyboard -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard-Swift.h -import-objc-header /Users/meherdeepak/iOSKeyboard/native/iOS/Keyboard-Bridging-Header.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+SwiftGeneratePch normal arm64 Compiling\ bridging\ header (in target 'keyboard' from project 'keyboard')
+
+SwiftDriverJobDiscovery normal arm64 Compiling bridging header (in target 'keyboard' from project 'keyboard')
+
+SwiftCompile normal arm64 Compiling\ Keyboardengine.swift /Users/meherdeepak/iOSKeyboard/keyboard/Engine/Keyboardengine.swift (in target 'keyboard' from project 'keyboard')
+
+SwiftCompile normal arm64 /Users/meherdeepak/iOSKeyboard/keyboard/Engine/Keyboardengine.swift (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+/Users/meherdeepak/iOSKeyboard/keyboard/Engine/Keyboardengine.swift:308:19: warning: main actor-isolated conformance of 'SearchPrefix' to 'Equatable' cannot be used in nonisolated context; this is an error in the Swift 6 language mode
+                                        query.prefix == nil || query.prefix?.text == latest.request.currentWord.lowercased()
+                                                     ^
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ keyboard (in target 'keyboard' from project 'keyboard')
+
+EmitSwiftModule normal arm64 (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for keyboard (in target 'keyboard' from project 'keyboard')
+
+SwiftDriver\ Compilation\ Requirements keyboard normal arm64 com.apple.xcode.tools.swift.compiler (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name keyboard -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard-Swift.h -import-objc-header /Users/meherdeepak/iOSKeyboard/native/iOS/Keyboard-Bridging-Header.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftsourceinfo (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftsourceinfo /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.swiftmodule/arm64-apple-ios-simulator.swiftmodule /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftmodule (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftmodule /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.swiftmodule/arm64-apple-ios-simulator.swiftmodule
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.abi.json (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.abi.json /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+SwiftDriver keyboardTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name keyboardTests -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests-Swift.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ keyboardTests (in target 'keyboardTests' from project 'keyboard')
+EmitSwiftModule normal arm64 (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+
+SwiftCompile normal arm64 Compiling\ SevereTypoBenchmark.swift /Users/meherdeepak/iOSKeyboard/keyboardTests/SevereTypoBenchmark.swift (in target 'keyboardTests' from project 'keyboard')
+
+SwiftCompile normal arm64 /Users/meherdeepak/iOSKeyboard/keyboardTests/SevereTypoBenchmark.swift (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+
+SwiftCompile normal arm64 Compiling\ CorrectionCalibrationTests.swift /Users/meherdeepak/iOSKeyboard/keyboardTests/CorrectionCalibrationTests.swift (in target 'keyboardTests' from project 'keyboard')
+
+SwiftCompile normal arm64 /Users/meherdeepak/iOSKeyboard/keyboardTests/CorrectionCalibrationTests.swift (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+
+SwiftCompile normal arm64 Compiling\ keyboardTests.swift /Users/meherdeepak/iOSKeyboard/keyboardTests/keyboardTests.swift (in target 'keyboardTests' from project 'keyboard')
+SwiftCompile normal arm64 /Users/meherdeepak/iOSKeyboard/keyboardTests/keyboardTests.swift (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling Keyboardengine.swift (in target 'keyboard' from project 'keyboard')
+
+SwiftDriver\ Compilation keyboard normal arm64 com.apple.xcode.tools.swift.compiler (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name keyboard -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -default-isolation\=MainActor -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -emit-localized-strings -emit-localized-strings-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64 -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard-Swift.h -import-objc-header /Users/meherdeepak/iOSKeyboard/native/iOS/Keyboard-Bridging-Header.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+Ld /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard.debug.dylib normal (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -Xlinker -reproducible -target arm64-apple-ios18.0-simulator -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -filelist /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.LinkFileList -install_name @rpath/keyboard.debug.dylib -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -debug_variant -Xlinker -dependency_info -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard_dependency_info.dat -fobjc-arc -fobjc-link-runtime -fprofile-instr-generate -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.swiftmodule @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard-linker-args.resp -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard.debug.dylib
+
+ConstructStubExecutorLinkFileList /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-ExecutorLinkFileList-normal-arm64.txt (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    construct-stub-executor-link-file-list /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'keyboard' from project 'keyboard')
+
+Ld /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard normal (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -Xlinker -reproducible -target arm64-apple-ios18.0-simulator -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker @executable_path/Frameworks -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -debug_variant -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard-ExecutorLinkFileList-normal-arm64.txt /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard.debug.dylib -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/demo_keyboard.appex /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks -remove-static-executable /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/demo_keyboard.appex /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns
+
+SwiftDriverJobDiscovery normal arm64 Compiling SevereTypoBenchmark.swift (in target 'keyboardTests' from project 'keyboard')
+
+SwiftDriverJobDiscovery normal arm64 Compiling CorrectionCalibrationTests.swift (in target 'keyboardTests' from project 'keyboard')
+
+ProcessInfoPlistFile /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/Info.plist /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/empty-keyboard.plist (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-infoPlistUtility /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/empty-keyboard.plist -producttype com.apple.product-type.application -genpkginfo /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/assetcatalog_generated_info.plist -scanforprivacyfile /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/demo_keyboard.appex -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/Info.plist
+
+ExtractAppIntentsMetadata (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name keyboard --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 18.0 --bundle-identifier com.swiftuimasterclass.keyboard --output /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app --target-triple arm64-apple-ios18.0-simulator --binary-file /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard --dependency-file /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard_dependency_info.dat --stringsdata-file /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.SwiftFileList --metadata-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard.DependencyMetadataFileList --static-metadata-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/keyboard.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/Objects-normal/arm64/keyboard.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-19 21:48:45.302 appintentsmetadataprocessor[65055:1629573] Starting appintentsmetadataprocessor export
+2026-10-19 21:48:45.304 appintentsmetadataprocessor[65055:1629573] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+CopySwiftLibs /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard.debug.dylib --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/Frameworks --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/SystemExtensions --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboard.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for keyboardTests (in target 'keyboardTests' from project 'keyboard')
+
+SwiftDriver\ Compilation\ Requirements keyboardTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name keyboardTests -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests-Swift.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+Copy /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardTests.swiftmodule/arm64-apple-ios-simulator.abi.json /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.abi.json (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.abi.json /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardTests.swiftmodule/arm64-apple-ios-simulator.abi.json
+
+SwiftDriverJobDiscovery normal arm64 Compiling keyboardTests.swift (in target 'keyboardTests' from project 'keyboard')
+
+SwiftDriver\ Compilation keyboardTests normal arm64 com.apple.xcode.tools.swift.compiler (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name keyboardTests -Onone @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.SwiftFileList -DDEBUG -DKB_REFERENCE_DECODER_YES -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-bare-slash-regex -enable-upcoming-feature DisableOutwardActorInference -enable-upcoming-feature InferSendableFromCaptures -enable-upcoming-feature GlobalActorIsolatedTypesUsability -enable-upcoming-feature MemberImportVisibility -enable-upcoming-feature InferIsolatedConformances -enable-upcoming-feature NonisolatedNonsendingByDefault -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -Xfrontend -serialize-debugging-options -profile-coverage-mapping -profile-generate -enable-testing -index-store-path /tmp/ioskeyboard-mkn-derived/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -c -j8 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /tmp/ioskeyboard-mkn-derived/SDKStatCaches.noindex/iphonesimulator26.5-23F81a-6cfe768891a92b912361537c460fe42b.sdkstatcache -output-file-map /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -sdk-module-cache-path /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.swiftmodule -validate-clang-modules-once -clang-build-session-file /tmp/ioskeyboard-mkn-derived/ModuleCache.noindex/Session.modulevalidation -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests_const_extract_protocols.json -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-generated-files.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-own-target-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-all-target-headers.hmap -Xcc -iquote -Xcc /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests-project-headers.hmap -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/include -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources-normal/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources/arm64 -Xcc -I/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests-Swift.h -working-directory /Users/meherdeepak/iOSKeyboard -experimental-emit-module-separately -disable-cmo
+
+ProcessInfoPlistFile /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/Info.plist /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/empty-keyboardTests.plist (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-infoPlistUtility /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/empty-keyboardTests.plist -producttype com.apple.product-type.bundle.unit-test -expandbuildsettings -format binary -platform iphonesimulator -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/Info.plist
+
+Ld /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/keyboardTests normal (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios18.0-simulator -bundle -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -O0 -L/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -L/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -L/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator -F/tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -iframework /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/Developer/Library/Frameworks -filelist /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.LinkFileList -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker @loader_path/Frameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -bundle_loader /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard -Xlinker -object_path_lto -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -objc_abi_version -Xlinker 2 -Xlinker -debug_variant -Xlinker -dependency_info -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests_dependency_info.dat -fobjc-link-runtime -fprofile-instr-generate -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphonesimulator -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.swiftmodule @/tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests-linker-args.resp -Xlinker -needed_framework -Xlinker XCTest -framework XCTest -Xlinker -needed-lXCTestSwiftSupport -lXCTestSwiftSupport /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/keyboard.debug.dylib -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/keyboardTests
+
+CopySwiftLibs /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/keyboardTests --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/Frameworks --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/PlugIns --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/SystemExtensions --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+ExtractAppIntentsMetadata (in target 'keyboardTests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name keyboardTests --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk --xcode-version 17F113 --platform-family iOS --deployment-target 18.0 --bundle-identifier com.swiftuimasterclass.keyboardTests --output /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest --target-triple arm64-apple-ios18.0-simulator --binary-file /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/keyboardTests.xctest/keyboardTests --dependency-file /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests_dependency_info.dat --stringsdata-file /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.SwiftFileList --metadata-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests.DependencyMetadataFileList --static-metadata-file-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/keyboardTests.DependencyStaticMetadataFileList --swift-const-vals-list /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardTests.build/Objects-normal/arm64/keyboardTests.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-10-19 21:48:52.442 appintentsmetadataprocessor[65058:1629718] Starting appintentsmetadataprocessor export
+2026-10-19 21:48:52.444 appintentsmetadataprocessor[65058:1629718] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+ValidateEmbeddedBinary /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/demo_keyboard.appex (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    /Applications/Xcode.app/Contents/Developer/usr/bin/embeddedBinaryValidationUtility /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/PlugIns/demo_keyboard.appex -info-plist-path /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app/Info.plist
+
+Validate /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app (in target 'keyboard' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-validationUtility /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboard.app -shallow-bundle -infoplist-subpath Info.plist
+
+ProcessInfoPlistFile /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/Info.plist /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardUITests.build/empty-keyboardUITests.plist (in target 'keyboardUITests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-infoPlistUtility /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardUITests.build/empty-keyboardUITests.plist -producttype com.apple.product-type.bundle.ui-testing -expandbuildsettings -format binary -platform iphonesimulator -additionalcontentfile /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardUITests.build/ProductTypeInfoPlistAdditions.plist -o /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/Info.plist
+
+CopySwiftLibs /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest (in target 'keyboardUITests' from project 'keyboard')
+    cd /Users/meherdeepak/iOSKeyboard
+    builtin-swiftStdLibTool --copy --verbose --scan-executable /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/keyboardUITests --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/Frameworks --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/PlugIns --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/SystemExtensions --scan-folder /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/Extensions --platform iphonesimulator --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /tmp/ioskeyboard-mkn-derived/Build/Products/Debug-iphonesimulator/keyboardUITests-Runner.app/PlugIns/keyboardUITests.xctest/Frameworks --strip-bitcode --scan-executable /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib/libXCTestSwiftSupport.dylib --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /tmp/ioskeyboard-mkn-derived/Build/Intermediates.noindex/keyboard.build/Debug-iphonesimulator/keyboardUITests.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+Ignoring --strip-bitcode because --sign was not passed
+
+2026-10-19 21:49:21.977549+0530 keyboard[65273:1632576] [unspecified] container_create_or_lookup_app_group_path_by_app_group_identifier: client is not entitled
+Test Suite 'Selected tests' started at 2026-10-19 21:49:23.441.
+Test Suite 'keyboardTests.xctest' started at 2026-10-19 21:49:23.443.
+Test Suite 'keyboardTests.xctest' passed at 2026-10-19 21:49:23.443.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-19 21:49:23.444.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.003) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64-apple-ios13.0-simulator
+◇ Suite CorrectionCalibrationTests started.
+◇ Test replayFrozenCalibrationRequests() started.
+CORRECTION_REPLAY 250/3099
+CORRECTION_REPLAY 500/3099
+CORRECTION_REPLAY 750/3099
+CORRECTION_REPLAY 1000/3099
+CORRECTION_REPLAY 1250/3099
+CORRECTION_REPLAY 1500/3099
+CORRECTION_REPLAY 1750/3099
+CORRECTION_REPLAY 2000/3099
+CORRECTION_REPLAY 2250/3099
+CORRECTION_REPLAY 2500/3099
+CORRECTION_REPLAY 2750/3099
+CORRECTION_REPLAY 3000/3099
+CORRECTION_REPLAY_COMPLETE 3099 output=/Users/meherdeepak/iOSKeyboard/tools/evaluation/results/correction-calibration-2026-10-19/selected-validation-engine.jsonl
+✔ Test replayFrozenCalibrationRequests() passed after 85.388 seconds.
+✔ Suite CorrectionCalibrationTests passed after 85.389 seconds.
+✔ Test run with 1 test in 1 suite passed after 85.390 seconds.
+2026-10-19 21:50:49.288 xcodebuild[65006:1629125] [MT] IDETestOperationsObserverDebug: 115.959 elapsed -- Testing started completed.
+2026-10-19 21:50:49.288 xcodebuild[65006:1629125] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-19 21:50:49.288 xcodebuild[65006:1629125] [MT] IDETestOperationsObserverDebug: 115.959 sec, +115.959 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/ioskeyboard-mkn-derived/Logs/Test/Test-keyboard-2026.10.19_21-48-33-+0530.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started

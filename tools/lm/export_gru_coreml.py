@@ -13,12 +13,14 @@ within fp16 tolerance before saving. `--benchmark` needs no coremltools — it t
 PyTorch forward_step so you can size the in-trie beam against the latency budget.
 """
 import argparse
+from dataclasses import asdict
 import time
 
 import numpy as np
 import torch
 
 from model import load_inference_checkpoint
+from export_validation import require_parity, steps_per_budget, write_manifest, write_score_goldens
 
 
 class GRUStep(torch.nn.Module):
@@ -44,7 +46,7 @@ def benchmark(step, layers, hidden, vocab, iters=2000):
             _, state = step(token, state)
         per = (time.perf_counter() - start) / iters * 1e6
     print(f"PyTorch forward_step (CPU): {per:.1f} us/step  "
-          f"-> a {int(1000/max(per/1000,1e-9))}-step beam fits in ~1 ms")
+          f"-> a {steps_per_budget(per)}-step beam fits in 1 ms of CPU compute (not device latency)")
 
 
 def main():
@@ -52,6 +54,7 @@ def main():
     ap.add_argument("--checkpoint", default="data/gru.pt")
     ap.add_argument("--out", default="data/gru.mlpackage")
     ap.add_argument("--precision", default="fp16", choices=["fp16", "fp32"])
+    ap.add_argument("--tokenizer", default=None, help="optional tokenizer for provenance hashing")
     ap.add_argument("--benchmark", action="store_true",
                     help="time PyTorch forward_step and exit (no coremltools needed)")
     args = ap.parse_args()
@@ -72,7 +75,8 @@ def main():
             logit, state = model.forward_step(ids[:, pos], state)
             streamed.append(logit[0])
         drift = float((full - torch.stack(streamed)).abs().max())
-    print(f"streaming parity drift: {drift:.2e}  ({'OK' if drift < 1e-3 else 'FAIL'})")
+    require_parity(drift, 1e-3, "PyTorch streaming parity")
+    print(f"streaming parity drift: {drift:.2e}")
 
     if args.benchmark:
         benchmark(step, layers, hidden, vocab)
@@ -105,20 +109,41 @@ def main():
         compute_units=ct.ComputeUnit.ALL,
     )
 
-    # Core ML vs PyTorch on random tokens/states.
-    max_err = 0.0
-    for _ in range(16):
-        t = torch.randint(0, vocab, (1, 1), dtype=torch.int32)
-        s = torch.randn(layers, 1, hidden)
-        with torch.no_grad():
-            ref, _ = step(t, s)
-        out = mlmodel.predict({"token": t.numpy(), "state_in": s.numpy().astype(np.float32)})
-        max_err = max(max_err, float(np.abs(out["logits"] - ref.numpy()).max()))
-    tol = 0.5 if args.precision == "fp16" else 1e-2
-    print(f"Core ML vs PyTorch max logit error: {max_err:.4e}  "
-          f"({'OK' if max_err < tol else 'HIGH — inspect'})")
+    # Random states plus recurrent rollout and independent branches validate BOTH outputs.
+    tolerance = 0.5 if args.precision == "fp16" else 1e-2
+    state_tolerance = 0.05 if args.precision == "fp16" else 1e-3
+    max_err = max_state_err = 0.0
+    for _ in range(8):
+        reference_state = torch.randn(layers, 1, hidden)
+        exported_state = reference_state.numpy().astype(np.float32)
+        for _ in range(24):
+            token_value = torch.randint(0, vocab, (1, 1), dtype=torch.int32)
+            with torch.no_grad():
+                ref, reference_state = step(token_value, reference_state)
+            out = mlmodel.predict({"token": token_value.numpy(), "state_in": exported_state})
+            exported_state = out["state_out"].astype(np.float32)
+            max_err = max(max_err, float(np.abs(out["logits"] - ref.numpy()).max()))
+            max_state_err = max(max_state_err, float(np.abs(exported_state - reference_state.numpy()).max()))
+            require_parity(max_err, tolerance, "Core ML rollout logits")
+            require_parity(max_state_err, state_tolerance, "Core ML rollout state")
+        # Fork both implementations from the SAME state, with two different next tokens.
+        for value in [0, vocab - 1]:
+            branch_token = torch.tensor([[value]], dtype=torch.int32)
+            with torch.no_grad():
+                ref_logits, ref_state = step(branch_token, reference_state)
+            out = mlmodel.predict({"token": branch_token.numpy(), "state_in": exported_state})
+            require_parity(float(np.abs(out["logits"] - ref_logits.numpy()).max()), tolerance, "branch logits")
+            require_parity(float(np.abs(out["state_out"] - ref_state.numpy()).max()), state_tolerance, "branch state")
+    print(f"Core ML rollout errors: logits={max_err:.4e}, state={max_state_err:.4e}")
+    mlmodel.user_defined_metadata["keyboard_step_version"] = "1"
 
     mlmodel.save(args.out)
+    write_manifest(args.out, args.checkpoint, asdict(cfg), {
+        "coreml_runtime_verified": True, "streaming_error": drift,
+        "rollout_logit_error": max_err, "rollout_state_error": max_state_err,
+        "precision": args.precision}, tokenizer=args.tokenizer)
+    if args.tokenizer:
+        write_score_goldens(args.out, model, args.checkpoint, args.tokenizer)
     print("saved", args.out)
 
 

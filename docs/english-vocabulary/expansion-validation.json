@@ -1,0 +1,149 @@
+{
+  "all_baseline_ngram_counts_retained_or_increased": true,
+  "all_baseline_words_and_frequencies_preserved": true,
+  "baseline": {
+    "bytes": 9391297,
+    "sha256": "a5accdb6100bf782637b91b522a33af20d199e7c85cc39e9a0da21ff4cbfc0d8",
+    "words": 60450
+  },
+  "diagnostic_probes": {
+    "baseline_present": 239,
+    "categories": {
+      "common_controls": {
+        "baseline_present": 33,
+        "expanded_present": 33,
+        "remaining_missing": [],
+        "tested": 33
+      },
+      "everyday_inflections": {
+        "baseline_present": 12,
+        "expanded_present": 44,
+        "remaining_missing": [],
+        "tested": 44
+      },
+      "formal_academic": {
+        "baseline_present": 36,
+        "expanded_present": 57,
+        "remaining_missing": [
+          "meta-analysis"
+        ],
+        "tested": 58
+      },
+      "international_english": {
+        "baseline_present": 21,
+        "expanded_present": 41,
+        "remaining_missing": [
+          "buka",
+          "matric",
+          "updation"
+        ],
+        "tested": 44
+      },
+      "international_names_places": {
+        "baseline_present": 28,
+        "expanded_present": 45,
+        "remaining_missing": [],
+        "tested": 45
+      },
+      "literary": {
+        "baseline_present": 21,
+        "expanded_present": 29,
+        "remaining_missing": [
+          "d\u00e9nouement"
+        ],
+        "tested": 30
+      },
+      "modern_technical": {
+        "baseline_present": 15,
+        "expanded_present": 52,
+        "remaining_missing": [],
+        "tested": 52
+      },
+      "orthography_and_contractions": {
+        "baseline_present": 30,
+        "expanded_present": 30,
+        "remaining_missing": [
+          "caf\u00e9",
+          "cant",
+          "co-operate",
+          "dont",
+          "e-mail",
+          "fa\u00e7ade",
+          "fianc\u00e9e",
+          "im",
+          "jalape\u00f1o",
+          "na\u00efve",
+          "r\u00e9sum\u00e9",
+          "wi-fi",
+          "youre"
+        ],
+        "tested": 43
+      },
+      "regional_spelling": {
+        "baseline_present": 5,
+        "expanded_present": 54,
+        "remaining_missing": [
+          "prioritised"
+        ],
+        "tested": 55
+      },
+      "texting_and_slang": {
+        "baseline_present": 40,
+        "expanded_present": 71,
+        "remaining_missing": [
+          "2day",
+          "b4",
+          "gr8",
+          "r",
+          "u"
+        ],
+        "tested": 76
+      }
+    },
+    "expanded_present": 454,
+    "limitation": "Targeted admission-influenced probes measure membership, not independent decoder recall.",
+    "unique_keys": 478
+  },
+  "expanded": {
+    "bigram_contexts": 29206,
+    "bigram_entries": 241198,
+    "bytes": 9455641,
+    "sentence_starters": 20,
+    "sha256": "ddbb25cb14d90bfb3e0097980aab68b8423f9e768b9bdfb8fbdbd55f163298d2",
+    "trie_nodes": 146823,
+    "trigram_contexts": 218403,
+    "trigram_entries": 386447,
+    "words": 61082
+  },
+  "masc_heldout": {
+    "coverage": {
+      "baseline": {
+        "known_tokens": 63294,
+        "supported_tokens": 65244,
+        "token_coverage_pct": 97.01121942247563,
+        "unsupported_spans": 2323
+      },
+      "expanded": {
+        "known_tokens": 63304,
+        "supported_tokens": 65244,
+        "token_coverage_pct": 97.02654650236038,
+        "unsupported_spans": 2323
+      }
+    },
+    "limitation": "Document-family held-out split; author isolation unavailable. Supported lexical tokens only; not decoder recall.",
+    "sentences": 7078
+  },
+  "ngram_entries": {
+    "2": {
+      "additional": 1911,
+      "baseline": 239287,
+      "expanded": 241198
+    },
+    "3": {
+      "additional": 1756,
+      "baseline": 384691,
+      "expanded": 386447
+    }
+  },
+  "schema_version": 1
+}

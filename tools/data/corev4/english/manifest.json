@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "source_project": "Xploree / CoreV4 (user-provided local checkout)",
+  "scope": "Seven distinct audited English lexical variants plus their original matching context triplets",
+  "active_runtime_modified": false,
+  "counts": {
+    "dictionary_variants": 7,
+    "original_assets": 28,
+    "core_unique_stored_forms": 108202,
+    "core_ascii_eligible_forms": 106199,
+    "current_ios_forms": 61082,
+    "new_stored_forms": 53205,
+    "new_ascii_eligible_forms": 51204,
+    "merged_stored_forms": 114287,
+    "merged_ascii_with_existing": 112286,
+    "current_pack_capacity": 65534,
+    "current_pack_free_slots": 4452
+  },
+  "baseline": {
+    "path": "keyboard/langdata.bin",
+    "sha256": "ddbb25cb14d90bfb3e0097980aab68b8423f9e768b9bdfb8fbdbd55f163298d2",
+    "format": "KBLM v5"
+  },
+  "dictionaries": [
+    {
+      "id": "en-US-47692-cf252666",
+      "region": "en-US",
+      "source": "api/build/Linux/uitest/kptapiuitest/Dictionaries/engus.atd",
+      "dictionary": "raw/en-US-47692-cf252666/engus.atd",
+      "dictionary_sha256": "cf252666efd5bf444802d49517b4230300c6fc027b3954460c4492c8f586e044",
+      "stored_forms": 47692,
+      "decoded_payloads": 462,
+      "wordlist": "wordlists/en-US-47692-cf252666.txt",
+      "wordlist_sha256": "738409c4f09d7ea3caa6ed9207c4d82f4176325ffe5f5e439715426f6aab79b1"
+    },
+    {
+      "id": "en-IN-95359-da2687ef",
+      "region": "en-IN",
+      "source": "api/build/windows/desktop/win32/DemoApp/debug/Dictionaries/english_in.atd",
+      "dictionary": "raw/en-IN-95359-da2687ef/english_in.atd",
+      "dictionary_sha256": "da2687ef64d3411888aa0567b0476aef2ca00241489ceb7253c18c08caccda73",
+      "stored_forms": 95359,
+      "decoded_payloads": 590,
+      "wordlist": "wordlists/en-IN-95359-da2687ef.txt",
+      "wordlist_sha256": "70ad3e5aeab3dcb86537918d196ca1294672944fbbaa58472986d7b4b70e5a6a"
+    },
+    {
+      "id": "en-US-74343-2d3216fb",
+      "region": "en-US",
+      "source": "api/data/profile/engus/ATXProfile/Dictionaries/engus.atd",
+      "dictionary": "raw/en-US-74343-2d3216fb/engus.atd",
+      "dictionary_sha256": "2d3216fb3c77422ac1300a9b22ba107bf38a0e5872af4fea9e6456225f1a81ef",
+      "stored_forms": 74343,
+      "decoded_payloads": 507,
+      "wordlist": "wordlists/en-US-74343-2d3216fb.txt",
+      "wordlist_sha256": "5c98dd806a4355d4dde9aecd2889aad84b4db88344e55ad8815436d9c636077a"
+    },
+    {
+      "id": "en-GB-71639-72c832bf",
+      "region": "en-GB",
+      "source": "api/data/test/kptapimemspeed/d1/appdata/Dictionaries/enggb.atd",
+      "dictionary": "raw/en-GB-71639-72c832bf/enggb.atd",
+      "dictionary_sha256": "72c832bfaf1ee91723df4b714c2965546d7e543bba88cb17599253bca0007560",
+      "stored_forms": 71639,
+      "decoded_payloads": 545,
+      "wordlist": "wordlists/en-GB-71639-72c832bf.txt",
+      "wordlist_sha256": "758b87792a5fc90a616a1c06a002b7df6c49b02c4199a28aef93302478c602d9"
+    },
+    {
+      "id": "en-GB-49048-5c95d3e9",
+      "region": "en-GB",
+      "source": "api/data/test/kptapimemspeed/d2/appdata/Dictionaries/enggb.atd",
+      "dictionary": "raw/en-GB-49048-5c95d3e9/enggb.atd",
+      "dictionary_sha256": "5c95d3e9e2d1b0093be3afa9318d7a2099634ee95a383212f4971846fc880117",
+      "stored_forms": 49048,
+      "decoded_payloads": 465,
+      "wordlist": "wordlists/en-GB-49048-5c95d3e9.txt",
+      "wordlist_sha256": "cffbbbc8fd232fa544f2f79515e1cc21f13a5a8a0ca15be8b1c26666017ecea0"
+    },
+    {
+      "id": "en-GB-71227-cf93f1e8",
+      "region": "en-GB",
+      "source": "v2core/tools/CoreRegression/data/ATXProfile/Dictionaries/enggb.atd",
+      "dictionary": "raw/en-GB-71227-cf93f1e8/enggb.atd",
+      "dictionary_sha256": "cf93f1e811f2a5a8fc54186d8dddbca1f3bd1c311953abb80dd1354de21c096b",
+      "stored_forms": 71227,
+      "decoded_payloads": 541,
+      "wordlist": "wordlists/en-GB-71227-cf93f1e8.txt",
+      "wordlist_sha256": "7b46187d7c92b8a655c9efc6ed6820405471095889e86062e27f22ae7d25465e"
+    },
+    {
+      "id": "en-GB-71227-3e52a1d2",
+      "region": "en-GB",
+      "source": "v2core/tools/atxcoretest/data/profiles/enggb/ATXProfile/Dictionaries/enggb.atd",
+      "dictionary": "raw/en-GB-71227-3e52a1d2/enggb.atd",
+      "dictionary_sha256": "3e52a1d2e19dcee33037a60244f908e1a297fd5cb681c36fc3d5c1c28b7d6ad5",
+      "stored_forms": 71227,
+      "decoded_payloads": 541,
+      "wordlist": "wordlists/en-GB-71227-3e52a1d2.txt",
+      "wordlist_sha256": "7b46187d7c92b8a655c9efc6ed6820405471095889e86062e27f22ae7d25465e"
+    }
+  ],
+  "assets": [
+    {
+      "path": "raw/en-US-47692-cf252666/engus.atd",
+      "source": "api/build/Linux/uitest/kptapiuitest/Dictionaries/engus.atd",
+      "bytes": 282478,
+      "sha256": "cf252666efd5bf444802d49517b4230300c6fc027b3954460c4492c8f586e044"
+    },
+    {
+      "path": "raw/en-US-47692-cf252666/engus_0.atc",
+      "source": "api/build/Linux/uitest/kptapiuitest/Context/engus_0.atc",
+      "bytes": 190792,
+      "sha256": "8092702cb866ac826495a6e5a5bdcc27c699ae978f802b6706874a502f7a6276"
+    },
+    {
+      "path": "raw/en-US-47692-cf252666/engus_1.atc",
+      "source": "api/build/Linux/uitest/kptapiuitest/Context/engus_1.atc",
+      "bytes": 41275,
+      "sha256": "ee3995afb801e2d60a423e5ccf02d1d94ee63e51c12d8c790917a2b7d0e727d6"
+    },
+    {
+      "path": "raw/en-US-47692-cf252666/engus_2.atc",
+      "source": "api/build/Linux/uitest/kptapiuitest/Context/engus_2.atc",
+      "bytes": 14547,
+      "sha256": "8aab22e93ac3ec3a2a21be182a5f3966a91ecc3dafdef3a6fefba1fbf0e9fc89"
+    },
+    {
+      "path": "raw/en-IN-95359-da2687ef/english_in.atd",
+      "source": "api/build/windows/desktop/win32/DemoApp/debug/Dictionaries/english_in.atd",
+      "bytes": 546151,
+      "sha256": "da2687ef64d3411888aa0567b0476aef2ca00241489ceb7253c18c08caccda73"
+    },
+    {
+      "path": "raw/en-IN-95359-da2687ef/english_in_0.atc",
+      "source": "api/build/windows/desktop/win32/DemoApp/debug/Context/english_in_0.atc",
+      "bytes": 191025,
+      "sha256": "e2cb97160e8686c8f76c8365835caf5707c2b810c503f926e5183b4e7fac7a13"
+    },
+    {
+      "path": "raw/en-IN-95359-da2687ef/english_in_1.atc",
+      "source": "api/build/windows/desktop/win32/DemoApp/debug/Context/english_in_1.atc",
+      "bytes": 358188,
+      "sha256": "4ad0182c2f20c7c03b3097e6309f76f8b97de742e7136a2dad1784e96c155b7a"
+    },
+    {
+      "path": "raw/en-IN-95359-da2687ef/english_in_2.atc",
+      "source": "api/build/windows/desktop/win32/DemoApp/debug/Context/english_in_2.atc",
+      "bytes": 2358108,
+      "sha256": "a0486315f37f92f4f66152c5cdc73308ad1dd518ebc9d038cf19a7ee62a1cfa5"
+    },
+    {
+      "path": "raw/en-US-74343-2d3216fb/engus.atd",
+      "source": "api/data/profile/engus/ATXProfile/Dictionaries/engus.atd",
+      "bytes": 424023,
+      "sha256": "2d3216fb3c77422ac1300a9b22ba107bf38a0e5872af4fea9e6456225f1a81ef"
+    },
+    {
+      "path": "raw/en-US-74343-2d3216fb/engus_0.atc",
+      "source": "api/data/profile/engus/ATXProfile/Context/engus_0.atc",
+      "bytes": 297396,
+      "sha256": "d6ed23d6cae7b03fcb3f02ddf127f05bc0c3d671e897453197c5f719eac5a318"
+    },
+    {
+      "path": "raw/en-US-74343-2d3216fb/engus_1.atc",
+      "source": "api/data/profile/engus/ATXProfile/Context/engus_1.atc",
+      "bytes": 163106,
+      "sha256": "78acea0eb9b9d5996627255ddedf6bac7be783d473d71f37295278ad5a33e8b2"
+    },
+    {
+      "path": "raw/en-US-74343-2d3216fb/engus_2.atc",
+      "source": "api/data/profile/engus/ATXProfile/Context/engus_2.atc",
+      "bytes": 105653,
+      "sha256": "b46dd351110980c152a36e3822ef0d5ab1f0443acc4f39c24a2a55f53803fdb8"
+    },
+    {
+      "path": "raw/en-GB-71639-72c832bf/enggb.atd",
+      "source": "api/data/test/kptapimemspeed/d1/appdata/Dictionaries/enggb.atd",
+      "bytes": 413820,
+      "sha256": "72c832bfaf1ee91723df4b714c2965546d7e543bba88cb17599253bca0007560"
+    },
+    {
+      "path": "raw/en-GB-71639-72c832bf/enggb_0.atc",
+      "source": "api/data/test/kptapimemspeed/d1/appdata/Context/enggb_0.atc",
+      "bytes": 286581,
+      "sha256": "bee00d2e5c39bf6b9c2c75ab9c26eb2d9d7ea8c3a523719f047b43928ea853df"
+    },
+    {
+      "path": "raw/en-GB-71639-72c832bf/enggb_1.atc",
+      "source": "api/data/test/kptapimemspeed/d1/appdata/Context/enggb_1.atc",
+      "bytes": 208512,
+      "sha256": "e96726db2859299c85627293ad3f3bfb229a06cfbbce9a75d8d70828dbd41f90"
+    },
+    {
+      "path": "raw/en-GB-71639-72c832bf/enggb_2.atc",
+      "source": "api/data/test/kptapimemspeed/d1/appdata/Context/enggb_2.atc",
+      "bytes": 98443,
+      "sha256": "83eeede7cc59718528641c58e0736d958b14bac9ceda8236c6a402cfb9b5ec99"
+    },
+    {
+      "path": "raw/en-GB-49048-5c95d3e9/enggb.atd",
+      "source": "api/data/test/kptapimemspeed/d2/appdata/Dictionaries/enggb.atd",
+      "bytes": 290008,
+      "sha256": "5c95d3e9e2d1b0093be3afa9318d7a2099634ee95a383212f4971846fc880117"
+    },
+    {
+      "path": "raw/en-GB-49048-5c95d3e9/enggb_0.atc",
+      "source": "api/data/test/kptapimemspeed/d2/appdata/Context/enggb_0.atc",
+      "bytes": 196216,
+      "sha256": "61eda87d1e18931bd2ca108579a89b0e7e1f58950b80c9d1d6b3f5d704e27582"
+    },
+    {
+      "path": "raw/en-GB-49048-5c95d3e9/enggb_1.atc",
+      "source": "api/data/test/kptapimemspeed/d2/appdata/Context/enggb_1.atc",
+      "bytes": 36872,
+      "sha256": "88a9c65ee95b6f958b5ebc6eceb9ccea9fee39c96d1eff283c13c21401a402fd"
+    },
+    {
+      "path": "raw/en-GB-49048-5c95d3e9/enggb_2.atc",
+      "source": "api/data/test/kptapimemspeed/d2/appdata/Context/enggb_2.atc",
+      "bytes": 9557,
+      "sha256": "759d9b4087d45a0bc18a9d267a551604ff7f9d8c347ae94dc5567a9abec98f10"
+    },
+    {
+      "path": "raw/en-GB-71227-cf93f1e8/enggb.atd",
+      "source": "v2core/tools/CoreRegression/data/ATXProfile/Dictionaries/enggb.atd",
+      "bytes": 411871,
+      "sha256": "cf93f1e811f2a5a8fc54186d8dddbca1f3bd1c311953abb80dd1354de21c096b"
+    },
+    {
+      "path": "raw/en-GB-71227-cf93f1e8/enggb_0.atc",
+      "source": "v2core/tools/CoreRegression/data/ATXProfile/Context/enggb_0.atc",
+      "bytes": 284933,
+      "sha256": "9a3caf30efb233d217d4cf69b133ceb5e80a0d7ab27a299589a53265e8c2ead1"
+    },
+    {
+      "path": "raw/en-GB-71227-cf93f1e8/enggb_1.atc",
+      "source": "v2core/tools/CoreRegression/data/ATXProfile/Context/enggb_1.atc",
+      "bytes": 149961,
+      "sha256": "fef9f304d89d7f27933d448f4e1a3e96e6da07f9db2c30308fb2cff7cb0432dc"
+    },
+    {
+      "path": "raw/en-GB-71227-cf93f1e8/enggb_2.atc",
+      "source": "v2core/tools/CoreRegression/data/ATXProfile/Context/enggb_2.atc",
+      "bytes": 97114,
+      "sha256": "6dc279a643d24078dbe666e0e1e3a6d26223e5e891a8783784bee8a06314a006"
+    },
+    {
+      "path": "raw/en-GB-71227-3e52a1d2/enggb.atd",
+      "source": "v2core/tools/atxcoretest/data/profiles/enggb/ATXProfile/Dictionaries/enggb.atd",
+      "bytes": 411871,
+      "sha256": "3e52a1d2e19dcee33037a60244f908e1a297fd5cb681c36fc3d5c1c28b7d6ad5"
+    },
+    {
+      "path": "raw/en-GB-71227-3e52a1d2/enggb_0.atc",
+      "source": "v2core/tools/atxcoretest/data/profiles/enggb/ATXProfile/Context/enggb_0.atc",
+      "bytes": 284933,
+      "sha256": "349721652a1866f8e7d37a8bc06a640a993b74d5a3696221586d0f889ff7969a"
+    },
+    {
+      "path": "raw/en-GB-71227-3e52a1d2/enggb_1.atc",
+      "source": "v2core/tools/atxcoretest/data/profiles/enggb/ATXProfile/Context/enggb_1.atc",
+      "bytes": 149887,
+      "sha256": "63d2de87f5ef73b66acb5ed771c58f9d2c9398627de5dc62fa810e4edcb143c8"
+    },
+    {
+      "path": "raw/en-GB-71227-3e52a1d2/enggb_2.atc",
+      "source": "v2core/tools/atxcoretest/data/profiles/enggb/ATXProfile/Context/enggb_2.atc",
+      "bytes": 97069,
+      "sha256": "86a778370093ef663d5b6ce98a05bd25730c4c83fac2ad716178253998ba5d65"
+    }
+  ],
+  "exports": [
+    {
+      "path": "english-all.txt",
+      "forms": 108202,
+      "sha256": "64085e863a726407c3eb0c7a077bf78b560cfd28ae4987a49115a2580a5dbd5f"
+    },
+    {
+      "path": "english-ascii.txt",
+      "forms": 106199,
+      "sha256": "55de17de4df68c6de8d27a064940e2d0197efaf716651423b250d65cc2a00b88"
+    },
+    {
+      "path": "english-additions.txt",
+      "forms": 53205,
+      "sha256": "e2bd9b13fbaed9b262b567071d3ea4c85766d8f4a5e2cbb107296ecfda6b654a"
+    },
+    {
+      "path": "english-ascii-additions.txt",
+      "forms": 51204,
+      "sha256": "ee220491eac14e012c7819985b43fdc2c808a87fdd6997de9ec129dc4d310261"
+    },
+    {
+      "path": "english-merged-with-ios.txt",
+      "forms": 114287,
+      "sha256": "9600696acbc343c449d96ea637a5f98b05862b0db667b722464ef567f8449ca9"
+    }
+  ],
+  "interpretation": [
+    "Wordlists preserve stored spellings; CoreV4 capitalization/display flags and special-character expansion rules are not applied. Original binary files retain all such data.",
+    "No unigram frequencies are fabricated. Original .atc data is copied losslessly but is not interpreted as iOSKeyboard counts or IDs.",
+    "All seven versions remain separate; two UK variants with equal entry counts can differ in bytes/context and must not be collapsed by count.",
+    "ASCII eligibility follows current lexical character/exclusion/length policy only; it is not a quality/admission or licensing approval.",
+    "Raw CoreV4 files are not KBLM format and are offline source assets, not added to the app resource build."
+  ]
+}

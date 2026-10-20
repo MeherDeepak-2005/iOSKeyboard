@@ -111,8 +111,8 @@ class GRUGenerator:
         return bool(piece) and piece[0] in first_letters
 
     @torch.no_grad()
-    def generate(self, context_words, k=24, beam=16, branch=8, max_pieces=6,
-                 first_letters=None):
+    def generate(self, context_words, k=24, beam=12, branch=8, max_pieces=6,
+                 first_letters=None, lexicon=None):
         """Return up to `k` (word, logprob) next-word candidates, best first.
 
         beam    : partial word hypotheses carried between depths
@@ -131,7 +131,7 @@ class GRUGenerator:
         frontier = [Hyp([], 0.0, ctx_state, last)]
         completed = {}   # word -> best logprob
 
-        for depth in range(max_pieces):
+        for depth in range(max_pieces + 1):
             scored = []
             for pids, lp, state, prev in frontier:
                 logits, nstate = self._step(prev, state)
@@ -139,12 +139,21 @@ class GRUGenerator:
                 # Record the word ending HERE, weighted by the probability it ends here.
                 if pids:
                     word = self.decode_word(pids)
-                    if word:
+                    if word and (lexicon is None or word in lexicon):
                         boundary = torch.logsumexp(lps[self._boundary_mask], dim=0).item()
                         completed[word] = max(completed.get(word, -math.inf), lp + boundary)
                 # Extend the beam only along continuation pieces (word-start / punctuation /
                 # byte / EOS are boundaries — they end the word, handled above).
-                top = torch.topk(lps, branch)
+                if depth == max_pieces:
+                    continue
+                legal = ([i for i in range(self.vocab)
+                          if self.is_start_content[i] and self._start_letter_ok(i, first_letters)]
+                         if not pids else [i for i in range(self.vocab) if self.is_cont_content[i]])
+                if not legal:
+                    continue
+                indices = torch.tensor(legal, dtype=torch.long)
+                top_values, positions = torch.topk(lps[indices], min(branch, len(legal)))
+                top = type("Top", (), {"values": top_values, "indices": indices[positions]})
                 for score, tok in zip(top.values.tolist(), top.indices.tolist()):
                     if not pids:
                         if self.is_start_content[tok] and self._start_letter_ok(tok, first_letters):
@@ -191,7 +200,7 @@ def main():
             continue
         seen.add(ctx)
         words = ctx.split()
-        out = gen.generate(words, k=args.k, first_letters=first_letters)
+        out = gen.generate(words, k=args.k, first_letters=first_letters, lexicon=lexicon)
         tail = ""
         if lexicon is not None:
             hit = sum(1 for w, _ in out if w in lexicon)

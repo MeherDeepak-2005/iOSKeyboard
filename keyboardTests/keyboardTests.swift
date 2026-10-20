@@ -66,13 +66,13 @@ struct KeyboardTests {
 			.appendingPathComponent("keyboard/\(name)")
 	}
 
-	@Test func bundledLanguageDataUsesCompactV5() throws {
+	@Test func bundledLanguageDataUsesWideV6() throws {
 		let url = langdataURL()
 		let data = try #require(LangData(url: url))
 		let bytes = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
-		#expect(data.formatVersion == 5)
-		#expect(bytes <= 11_000_000)
-		#expect(data.wordCount == 60_450)
+		#expect(data.formatVersion == 6)
+		#expect(bytes <= 20_000_000)
+		#expect(data.wordCount == 114_283)
 	}
 
 	@Test func languagePackHealthReportsConcreteFailureReasons() throws {
@@ -662,10 +662,98 @@ struct KeyboardTests {
 		#expect(!snapshot.candidates.isEmpty)
 		#expect(snapshot.candidates.allSatisfy { $0.neuralLogProbability != nil })
 		#expect(prior.preparedSessions == [7])
-		#expect(prior.scoredSessions == [7])
+		#expect(!prior.scoredSessions.isEmpty)
+		#expect(prior.scoredSessions.allSatisfy { $0 == 7 })
+	}
+
+	@Test func multiwordSearchPreservesThreeWordPathsAndBoundarySubstitutions() {
+		let dictionary = Set(["i", "am", "here", "hello", "world"])
+		func paths(_ text: String) -> [MultiwordSearch.Hypothesis] {
+			let search = MultiwordSearch(typed: text, taps: nil) { segment, _ in
+				dictionary.contains(segment) ? [Candidate(word: segment, cost: 0, logFreq: 1)] : []
+			}
+			var frontier = [search.root], completed: [MultiwordSearch.Hypothesis] = []
+			for _ in 0..<MultiwordSearch.maximumWords {
+				let expanded = search.expand(frontier, shouldCancel: { false })
+				completed += expanded.filter { $0.offset == search.inputCount }
+				frontier = expanded.filter { $0.offset < search.inputCount }
+			}
+			return completed
+		}
+		#expect(paths("iamhere").contains { $0.words == ["i", "am", "here"] && abs($0.cost - 2.2) < 0.001 })
+		#expect(paths("hellovworld").contains { $0.words == ["hello", "world"] && abs($0.cost - 0.72) < 0.001 })
+		let cancelled = MultiwordSearch(typed: "helloworld", taps: nil) { _, _ in
+			Issue.record("cancelled search must not request lexicon candidates"); return []
+		}
+		#expect(cancelled.expand([cancelled.root], shouldCancel: { true }).isEmpty)
+	}
+
+	// Optional generated plumbing fixture, intentionally outside release resources.
+	nonisolated private static let gruFixtureDirectory = URL(fileURLWithPath:
+		ProcessInfo.processInfo.environment["GRU_TEST_FIXTURE_DIR"] ?? "/tmp/ioskeyboard-gru-test-fixture")
+	@Test(.enabled(if: FileManager.default.fileExists(atPath:
+		gruFixtureDirectory.appendingPathComponent("fixture.json").path)))
+	func tinyGRUStreamingAndBatchCoverWholePoolAndPressureReset() async throws {
+		struct Fixture: Decodable { let context: [String]; let scores: [String: Double] }
+		let directory = Self.gruFixtureDirectory
+		let reference = try JSONDecoder().decode(Fixture.self,
+			from: Data(contentsOf: directory.appendingPathComponent("fixture.json")))
+		try #require(reference.scores.count > 32)
+		for batched in [false, true] {
+			let prior = GRULanguagePrior(compiledURL: nil,
+				packageURL: directory.appendingPathComponent("gru.mlpackage"),
+				tokenizerURL: directory.appendingPathComponent("gru_tokenizer.bin"),
+				scorePackageURL: batched ? directory.appendingPathComponent("gru_score.mlpackage") : nil,
+				layers: 2, hidden: 8)
+			var waited = 0.0
+			while !prior.isReady, waited < 60 {
+				try await Task.sleep(nanoseconds: 200_000_000); waited += 0.2
+			}
+			try #require(prior.isReady)
+			#expect(prior.usesBatchedScorer == batched)
+			prior.prepareContext(reference.context, wordSessionID: 101)
+			let scores: [String: Double] = try await withCheckedThrowingContinuation { continuation in
+				prior.score(candidates: Array(reference.scores.keys), wordSessionID: 101) {
+					continuation.resume(with: $0)
+				}
+			}
+			#expect(Set(scores.keys) == Set(reference.scores.keys))
+			for (word, expected) in reference.scores {
+				let actual = try #require(scores[word])
+				#expect(actual.isFinite && abs(actual - expected) < 0.02,
+					"\(word): batch=\(batched), actual=\(actual), reference=\(expected)")
+			}
+			prior.handleMemoryPressure()
+			#expect(!prior.isReady)
+			prior.prepareForSelection()
+			#expect(!prior.isReady, "pressure cooldown must prevent immediate reloading")
+			#expect(prior.searchPriorWords(SearchPriorQuery(context: reference.context, prefix: nil, pool: [])) == nil)
+		}
 	}
 
 	#if INTERNAL_GRU
+	private struct GRUReference: Decodable {
+		let score_version: Int
+		let checkpoint_sha256: String
+		let tokenizer_sha256: String
+		let context: [String]
+		let scores: [String: Double]
+	}
+	private struct GRUManifest: Decodable {
+		let checkpoint_sha256: String
+		let tokenizer_sha256: String
+	}
+	private func loadGRUReference(dataDir: URL, name: String) throws -> GRUReference {
+		let decoder = JSONDecoder()
+		let reference = try decoder.decode(GRUReference.self,
+			from: Data(contentsOf: dataDir.appendingPathComponent(name + ".goldens.json")))
+		let manifest = try decoder.decode(GRUManifest.self,
+			from: Data(contentsOf: dataDir.appendingPathComponent(name + ".manifest.json")))
+		try #require(reference.score_version == 2, "reference must include word-boundary probability")
+		try #require(reference.checkpoint_sha256 == manifest.checkpoint_sha256)
+		try #require(reference.tokenizer_sha256 == manifest.tokenizer_sha256)
+		return reference
+	}
 	// End-to-end PLUMBING parity: the REAL Core ML GRU (compiled from gru.mlpackage) scored through
 	// the Swift GRULanguagePrior must match the PyTorch reference (tools/lm) within fp16 tolerance.
 	// This is exactly what the mock wiring test above CANNOT check — MLMultiArray shapes, the
@@ -692,11 +780,9 @@ struct KeyboardTests {
 		}
 		try #require(prior.isReady, "GRU model did not become ready within 60s")
 
-		prior.prepareContext(["i", "am", "going", "to"], wordSessionID: 1)
-		let goldens: [String: Double] = [                  // PyTorch fp32 log P(word | context)
-			"the": -3.3015, "work": -3.6788, "school": -4.9112,
-			"onboarding": -19.8549, "uncomfortable": -12.5023, "encyclopedia": -21.8720,
-		]
+		let reference = try loadGRUReference(dataDir: dataDir, name: "gru")
+		prior.prepareContext(reference.context, wordSessionID: 1)
+		let goldens = reference.scores
 		let scores: [String: Double] = try await withCheckedThrowingContinuation { continuation in
 			prior.score(candidates: Array(goldens.keys), wordSessionID: 1) { result in
 				continuation.resume(with: result)
@@ -735,11 +821,9 @@ struct KeyboardTests {
 		try #require(prior.isReady, "GRU model did not become ready within 60s")
 		try #require(prior.usesBatchedScorer, "batched scorer did not load; test would not exercise it")
 
-		prior.prepareContext(["i", "am", "going", "to"], wordSessionID: 2)
-		let goldens: [String: Double] = [
-			"the": -3.3015, "work": -3.6788, "school": -4.9112,
-			"onboarding": -19.8549, "uncomfortable": -12.5023, "encyclopedia": -21.8720,
-		]
+		let reference = try loadGRUReference(dataDir: dataDir, name: "gru_score")
+		prior.prepareContext(reference.context, wordSessionID: 2)
+		let goldens = reference.scores
 		let scores: [String: Double] = try await withCheckedThrowingContinuation { continuation in
 			prior.score(candidates: Array(goldens.keys), wordSessionID: 2) { result in
 				continuation.resume(with: result)
@@ -1186,6 +1270,34 @@ struct KeyboardTests {
 		}
 	}
 
+	@Test func expandedEnglishFormsReachTrieAndGlideAnchors() throws {
+		let data = try #require(LangData(url: langdataURL()))
+		for word in ["colour", "favourite", "organise", "travelling", "cancelled",
+			"reproducibility", "epistemology", "hermeneutics", "unsubscribed",
+			"screenshots", "livestreaming", "brb", "ttyl", "tysm", "covid",
+			"passkeys", "prepone", "bengaluru"] {
+			#expect(data.trieContains(word), "expanded vocabulary missing: \(word)")
+			let completions = data.trieCompletions(prefix: word, limit: 100)
+			#expect(completions.contains { $0.word == word })
+			let anchors = data.glideAnchorWords(first: [word.first!], last: [word.last!], perBucket: data.wordCount)
+			#expect(anchors.contains(word), "Glide anchor omitted: \(word)")
+		}
+		for word in ["dont", "im", "youre", "cant"] {
+			#expect(!data.trieContains(word))
+		}
+	}
+
+	@Test func expandedEnglishLiteralWordsAreNotDestructivelyCorrected() async {
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		for word in ["colour", "favourite", "organise", "brb", "ttyl", "tysm",
+			"screenshots", "passkeys", "epistemology", "bengaluru"] {
+			let snapshot = await decode(engine, word: word, context: [])
+			#expect(snapshot.correction == nil || snapshot.correction == word,
+				"\(word) replaced by \(snapshot.correction ?? "nil")")
+			#expect(snapshot.suggestions.contains(word), "literal missing: \(word)")
+		}
+	}
+
 	@Test func coldStartDoesNotSurfaceCorpusCharacterNames() async {
 		let engine = KeyboardEngine(languageDataURL: langdataURL())
 		let snapshot = await decode(engine, word: "", context: [])
@@ -1533,6 +1645,84 @@ struct KeyboardTests {
 			"an unsure context funds its top candidates broadly")
 	}
 
+	@Test func neuralFundingRetainsAbsoluteProbabilityAndTerminalIdentity() {
+		let trie = Trie()
+		trie.insert("got", freq: 10)
+		let high = trie.search("go", maxCost: 1,
+			prior: TrieSearchPrior(scoredWords: [("got", -0.1)]))
+		let low = trie.search("go", maxCost: 1,
+			prior: TrieSearchPrior(scoredWords: [("got", -100)]))
+		#expect(high.contains { $0.word == "got" })
+		#expect(low.isEmpty)
+		let singleton = TrieSearchPrior(scoredWords: [("got", -6)])
+		let shortlist = TrieSearchPrior(scoredWords: [("got", -6), ("xyz", -9)])
+		#expect(singleton.rootChild(UInt8(ascii: "g"))?.bonus
+			== shortlist.rootChild(UInt8(ascii: "g"))?.bonus)
+		let shifted = TrieSearchPrior(scoredWords: [("got", -9)])
+		#expect((shifted.rootChild(UInt8(ascii: "g"))?.bonus ?? 0)
+			< (singleton.rootChild(UInt8(ascii: "g"))?.bonus ?? 0))
+		trie.insert("car", freq: 10)
+		trie.insert("cart", freq: 10)
+		let funded = trie.search("ca", maxCost: 1,
+			prior: TrieSearchPrior(likelyWords: ["cart"]))
+		#expect(!funded.contains { $0.word == "car" })
+	}
+
+	@Test func broadRecoveryUsesFullRadiusDespiteRetainedNormalSearch() async throws {
+		let data = try #require(LangData(url: langdataURL()))
+		let seeds = try #require(data.incrementalSeeds(typedFirst: UInt8(ascii: "q"), firstTap: nil))
+		let retained = IncrementalDecodeSession(seeds: seeds)
+		#expect(retained.advance(to: "qorrection"))
+		#expect(!retained.candidates(maxCost: 7.2).contains { $0.word == "correction" })
+		#expect(data.trieSearch("qorrection", maxCost: 7.2).contains { $0.word == "correction" })
+		let engine = KeyboardEngine(languageDataURL: langdataURL())
+		let result = await decode(engine, word: "qorrection", context: [])
+		#expect(result.candidates.contains { $0.word == "correction" && $0.source == .broadRecovery })
+	}
+
+	@Test func readySearchPriorGeneratesAndScoresWithoutTransformer() async throws {
+		// Six input characters have a 2.8 narrow / 5.6 broad budget.
+		// Four missing q characters cost 6.4; retain the final w to avoid
+		// putting the path exactly on the maximum-funded radius.
+		let target = "qqqqqqqqqw"
+		let prior = TestSearchPrior(words: [SearchPriorWord(word: target, logProbability: -0.1)])
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), searchPrior: prior)
+		engine.importSupplementaryLexicon([target])
+		#expect(engine.preferredModelTier(for: .english) == .neuralGRU)
+		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
+		let snapshot = await decode(engine, word: "qqqqqw", context: ["fixture"], tier: .neuralGRU)
+		let candidate = try #require(snapshot.candidates.first { $0.word == target })
+		#expect(candidate.neuralLogProbability == -0.1)
+		#expect(candidate.spatialCost > 5.6 && candidate.spatialCost <= 7.2)
+		#expect(snapshot.modelTier == .neuralGRU)
+		#expect(snapshot.correction == target)
+		#expect(snapshot.suggestions.first == target)
+		for available in [false, true] {
+			let empty = TestSearchPrior(words: [], ready: available)
+			let fallback = KeyboardEngine(languageDataURL: langdataURL(), searchPrior: empty)
+			fallback.importSupplementaryLexicon([target])
+			let result = await decode(fallback, word: "qqqqqw", context: ["fixture"])
+			#expect(!result.candidates.contains { $0.word == target })
+		}
+	}
+
+	@Test func searchCacheIdentityIncludesConstraintsSeedsAndVocabularyEpoch() {
+		let base = SearchPriorQuery(context: ["On", "MY"],
+			prefix: SearchPrefix(text: "wa", firstLetters: ["w"]), pool: ["way", "way"])
+		#expect(base == SearchPriorQuery(context: ["on", "my"],
+			prefix: SearchPrefix(text: "wa", firstLetters: ["w"]), pool: ["way"]))
+		#expect(base != SearchPriorQuery(context: base.context,
+			prefix: SearchPrefix(text: "wa", firstLetters: ["e"]), pool: ["way"]))
+		#expect(base != SearchPriorQuery(context: base.context, prefix: base.prefix, pool: ["work"]))
+		#expect(base != SearchPriorQuery(context: base.context, prefix: base.prefix,
+			pool: base.pool, vocabularyRevision: 1))
+	}
+
+	@Test func beamFiltersLegalTokensBeforeTakingTopK() {
+		let values = (0..<12).map { -Float($0) }
+		#expect(GRULanguagePrior.topIndices(values, count: 8, allowed: { $0 >= 9 }) == [9, 10, 11])
+	}
+
 	@Test func contractionCorrectionsPreserveTypedForms() async {
 		let engine = KeyboardEngine(languageDataURL: langdataURL())
 		// Typo + missing apostrophe: exact restoration fails, but the typed trailing 's'
@@ -1555,11 +1745,12 @@ struct KeyboardTests {
 	}
 
 	private func decode(_ engine: KeyboardEngine, word: String,
-						context: [String], language: KBLanguageMode = .english)
+						context: [String], language: KBLanguageMode = .english,
+						tier: DecodeModelTier = .ngram)
 		async -> DecodeSnapshot {
 		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
 			wordSessionID: 1, generation: 1, layoutRevision: 1,
-			currentWord: word, context: context, taps: nil, languageMode: language)
+			currentWord: word, context: context, taps: nil, languageMode: language, requestedModelTier: tier)
 		return await withCheckedContinuation { continuation in
 			engine.decode(request) { continuation.resume(returning: $0) }
 		}
@@ -1707,4 +1898,21 @@ private final class TestNeuralPrior: NeuralLanguagePrior {
 	}
 
 	func discardSession(_ wordSessionID: UInt64) {}
+}
+
+private final class TestSearchPrior: NeuralSearchPrior {
+    let modelTier: DecodeModelTier = .neuralGRU
+    let isReady: Bool
+    let words: [SearchPriorWord]
+    var onSearchPriorReady: ((SearchPriorQuery) -> Void)?
+    init(words: [SearchPriorWord], ready: Bool = true) { self.words = words; isReady = ready }
+    func warmSearchPrior(_ query: SearchPriorQuery, isKnownWord: @escaping (String) -> Bool) {}
+    func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]? { isReady ? words : nil }
+    func prepareContext(_ words: [String], wordSessionID: UInt64) {}
+    func discardSession(_ wordSessionID: UInt64) {}
+    func score(candidates: [String], wordSessionID: UInt64,
+        completion: @escaping (Result<[String: Double], Error>) -> Void) {
+        let expected = Dictionary(uniqueKeysWithValues: words.map { ($0.word, $0.logProbability) })
+        completion(.success(Dictionary(uniqueKeysWithValues: candidates.map { ($0, expected[$0] ?? -25) })))
+    }
 }

@@ -1,3 +1,5 @@
+// MIGRATION-FILE: planned SPLIT | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: CPP_CORE owns numerical Glide algorithms; SWIFT_IOS extracts UIKit geometry into portable buffers.
 import Foundation
 import CoreGraphics
 
@@ -9,6 +11,8 @@ import CoreGraphics
 /// A snapshot of the letter-key layout at the moment a swipe lifts, so the decoder
 /// can map the swipe's VIEW-space points into grid space. Built by KeyboardView
 /// (which knows the on-screen frames); consumed by the engine (which knows KB.pos).
+// MIGRATION: planned SPLIT | stage=policy-glide | target=LayoutSnapshot
+// MIGRATION-SPLIT: SWIFT_IOS extracts UIKit geometry; CPP_CORE receives owned numeric centers/pitches without CGPoint or CGFloat dependencies.
 nonisolated struct GlideLayout {
 	let centers: [(letter: Character, point: CGPoint)]   // view-space key centers
 	let xPitch: CGFloat                                  // key column pitch (view units)
@@ -16,6 +20,8 @@ nonisolated struct GlideLayout {
 }
 
 /// A preprocessed swipe in grid space.
+// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 nonisolated struct ProcessedGlide {
 	let points: [CGPoint]        // evenly spaced, grid coordinates
 	let pivots: [Int]            // indices into `points` at direction turns AND velocity minima
@@ -29,14 +35,20 @@ nonisolated struct ProcessedGlide {
 /// Arc-length resampler that consumes only points appended since the previous
 /// gesture update. It is intentionally independent of UIKit touch objects so the
 /// engine can retain it for one Glide session on its serial preview queue.
+// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 nonisolated struct IncrementalGlideResampler {
 	let spacing: CGFloat
 	private(set) var samples: [CGPoint] = []
 	private var lastPoint: CGPoint?
 	private var distanceSinceSample: CGFloat = 0
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	init(spacing: CGFloat = 0.5) { self.spacing = spacing }
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	mutating func append(_ points: ArraySlice<CGPoint>) -> [CGPoint] {
 		guard spacing > 0 else { return [] }
 		var emitted: [CGPoint] = []
@@ -68,12 +80,16 @@ nonisolated struct IncrementalGlideResampler {
 /// One online DTW row per lexical candidate. Updating a preview costs O(M) for
 /// each newly resampled point, where M is the fixed ideal-path length; prior path
 /// samples are never rescored.
+// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 nonisolated struct OnlineGlideCandidate {
 	let word: String
 	let ideal: [CGPoint]
 	private var previous: [Double]
 	private(set) var sampleCount = 0
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	init?(word: String, idealPointCount: Int = 24) {
 		guard let path = GlideDecoder.idealPath(for: word, pointCount: idealPointCount),
 			!path.isEmpty else { return nil }
@@ -82,6 +98,8 @@ nonisolated struct OnlineGlideCandidate {
 		self.previous = [0] + Array(repeating: .infinity, count: path.count)
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	mutating func consume(_ samples: [CGPoint]) {
 		guard !samples.isEmpty else { return }
 		for sample in samples {
@@ -111,12 +129,16 @@ nonisolated struct OnlineGlideCandidate {
 	}
 }
 
+// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 nonisolated enum GlidePreprocess {
 
 	/// View-space raw trajectory → grid space, resampled, with pivots marked. When per-sample
 	/// `times` are supplied, velocity minima add pivots and feed dwell (double-letter) detection;
 	/// without them the result is identical to the geometry-only pipeline (harness path).
 	/// `spacing` is in grid units (fraction of a key pitch between resampled points).
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func run(_ raw: [CGPoint], layout: GlideLayout, spacing: CGFloat = 0.5,
 					times: [TimeInterval]? = nil) -> ProcessedGlide? {
 		guard raw.count >= 2, !layout.centers.isEmpty, layout.xPitch > 0, layout.yPitch > 0
@@ -138,6 +160,8 @@ nonisolated enum GlidePreprocess {
 	/// (resampling to even arc-length erases it), then each slow sample is mapped to the nearest
 	/// resampled index for the pivot list. A slow sample sitting near a key center, with the
 	/// slowdown sustained over `dwellTime`, marks that key as dwelled (double-letter evidence).
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func velocityFeatures(grid: [CGPoint], times: [TimeInterval], resampled: [CGPoint],
 										 dwellTime: TimeInterval = 0.09)
 			-> (pivots: [Int], dwellKeys: [Character]) {
@@ -174,6 +198,8 @@ nonisolated enum GlidePreprocess {
 		return (pivotIdx.sorted(), dwellKeys)
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func nearestIndex(to p: CGPoint, in pts: [CGPoint]) -> Int {
 		var best = 0, bestD = Double.greatestFiniteMagnitude
 		for (k, q) in pts.enumerated() {
@@ -183,6 +209,8 @@ nonisolated enum GlidePreprocess {
 		return best
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func mergeSortedUnique(_ a: [Int], _ b: [Int]) -> [Int] {
 		Array(Set(a).union(b)).sorted()
 	}
@@ -192,6 +220,8 @@ nonisolated enum GlidePreprocess {
 	/// visual/model offset therefore became a discontinuity in an otherwise smooth
 	/// stroke. With renderer and model sharing row offsets, every key yields the same
 	/// affine transform, so one stable reference is both cheaper and continuous.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func toGrid(_ p: CGPoint, layout: GlideLayout) -> CGPoint {
 		let reference = layout.centers.first(where: { $0.letter == "q" }) ?? layout.centers[0]
 		let g = KB.grid(for: reference.letter) ?? (0, 0)
@@ -202,6 +232,8 @@ nonisolated enum GlidePreprocess {
 
 	/// Even arc-length resampling (the $1-recognizer step): the raw touch stream bunches
 	/// at corners and thins on fast strokes, which would bias any shape comparison.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func resample(_ pts: [CGPoint], spacing: CGFloat) -> [CGPoint] {
 		guard pts.count >= 2, spacing > 0 else { return pts }
 		var out = [pts[0]]
@@ -232,6 +264,8 @@ nonisolated enum GlidePreprocess {
 	/// Pivots = the start, the end, and interior points where the path turns sharply.
 	/// Because the input is evenly spaced, speed is ~constant, so a direction change is
 	/// the signal a letter sits here (the finger rounds a corner at an intended key).
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func pivots(_ pts: [CGPoint], cosThreshold: CGFloat = 0.5) -> [Int] {
 		guard pts.count >= 3 else { return Array(pts.indices) }
 		var out = [0]
@@ -251,6 +285,8 @@ nonisolated enum GlidePreprocess {
 	/// The letters whose key centers are nearest a grid point, within `radius` (grid units),
 	/// capped at `maxN` and always at least the single nearest. Drives Phase 2 endpoint anchoring:
 	/// the first/last letters a swipe's start/end could plausibly be.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func lettersNear(_ p: CGPoint, radius: CGFloat, maxN: Int) -> [Character] {
 		var ds: [(Character, Double)] = []
 		for (r, row) in KB.rows.enumerated() {
@@ -266,6 +302,8 @@ nonisolated enum GlidePreprocess {
 
 	/// The nearest letter to a grid point — for logging/debugging which keys the pivots
 	/// land on before the full decoder exists.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func nearestLetter(toGrid p: CGPoint) -> Character? {
 		var best: Character?
 		var bestD = Double.greatestFiniteMagnitude
@@ -292,6 +330,8 @@ nonisolated enum GlidePreprocess {
 // real words emit (trie constraint); doubles cost nothing (path needn't move); the ' is a
 // geometry-free letter so contractions ride their apostrophe-less swipe.
 
+// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 nonisolated enum GlideDecoder {
 
 	private static let N = 32                        // both paths resampled to this many points
@@ -343,6 +383,8 @@ nonisolated enum GlideDecoder {
 	/// genuinely skipped middle letter falls outside the window): 10→78.8, 8→69.7. 16 leaves margin.
 	static let defaultPruneWindow = 16
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func decode(_ g: ProcessedGlide, lang: LangData,
 					   beamWidth: Int = defaultBeamWidth, limit: Int = 6,
 					   band: Int = defaultBand, freqLambda: Double = defaultFreqLambda,
@@ -356,6 +398,8 @@ nonisolated enum GlideDecoder {
 		guard obs.count == N else { return [] }
 		let obsTan = dirWeight > 0 ? tangents(obs) : []
 
+		// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+		// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 		struct PathNode { let point: CGPoint; let parent: Int }
 		var pathArena: [PathNode] = []
 		pathArena.reserveCapacity(max(256, beamWidth * 20))
@@ -385,6 +429,8 @@ nonisolated enum GlideDecoder {
 		// letter, keeps letters-in-swipe-order) MINUS a frequency pull, so frequent prefixes
 		// survive even when a letter was under-reached. `prune` holds the raw shape sum;
 		// `key` is what we rank/prune by.
+		// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+		// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 		struct Hyp { let node: Int; let j: Int; let prune: Double; let key: Double; let pathIndex: Int }
 		func better(_ lhs: Hyp, than rhs: Hyp) -> Bool {
 			lhs.key == rhs.key ? lhs.node < rhs.node : lhs.key < rhs.key
@@ -485,6 +531,8 @@ nonisolated enum GlideDecoder {
 	/// Shape cost of a SPECIFIC word against this swipe — the same band-DTW the beam pays at
 	/// emit, exposed so the engine can score a context-predicted word the beam never surfaced
 	/// (#4 context-recall augmentation). Returns nil for a word with a non-deck letter.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func shapeCost(of word: String, _ g: ProcessedGlide,
 						  band: Int = defaultBand, dirWeight: Double = defaultDirWeight) -> Double? {
 		guard g.points.count >= 2 else { return nil }
@@ -501,6 +549,8 @@ nonisolated enum GlideDecoder {
 		return shapeCost(obs, obsTan, letters, band: band, dirWeight: dirWeight)
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	static func idealPath(for word: String, pointCount: Int) -> [CGPoint]? {
 		guard pointCount >= 2 else { return nil }
 		var letters: [CGPoint] = []
@@ -519,6 +569,8 @@ nonisolated enum GlideDecoder {
 	/// distortions — a cut corner, a letter under-reached — cost locally, not globally.
 	/// When `dirWeight > 0` each cell also pays for a heading mismatch between the two
 	/// paths at the aligned points (the direction channel), passed pre-computed `obsTan`.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func shapeCost(_ obs: [CGPoint], _ obsTan: [CGPoint],
 								  _ letters: [CGPoint], band: Int, dirWeight: Double) -> Double {
 		let ideal = letters.count == 1 ? [CGPoint](repeating: letters[0], count: N) : resampleN(letters, N)
@@ -547,6 +599,8 @@ nonisolated enum GlideDecoder {
 	/// Unit heading at each point: the normalized direction from the previous to the next
 	/// point (central difference), zero where a segment has no length. Endpoints use the one
 	/// neighbour they have. Consumed by the direction channel of `shapeCost`.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func tangents(_ pts: [CGPoint]) -> [CGPoint] {
 		let n = pts.count
 		guard n >= 2 else { return [CGPoint](repeating: .zero, count: n) }
@@ -561,6 +615,8 @@ nonisolated enum GlideDecoder {
 	}
 
 	/// Resample a polyline to exactly `n` points evenly spaced along its arc length.
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func resampleN(_ pts: [CGPoint], _ n: Int) -> [CGPoint] {
 		guard pts.count >= 2, n >= 2 else { return pts }
 		var length = 0.0
@@ -582,10 +638,16 @@ nonisolated enum GlideDecoder {
 		return out
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func gridCenter(_ label: UInt8) -> CGPoint? { gridCenter(Character(Unicode.Scalar(label))) }
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func gridCenter(_ ch: Character) -> CGPoint? {
 		guard let g = KB.grid(for: ch) else { return nil }
 		return CGPoint(x: g.0, y: g.1)
 	}
+	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=GlideSearch
+	// MIGRATION-NOTE: Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering.
 	private static func dist(_ a: CGPoint, _ b: CGPoint) -> Double { Double(hypot(a.x - b.x, a.y - b.y)) }
 }

@@ -1,12 +1,21 @@
+// MIGRATION-FILE: planned CPP_CORE | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 
 // Trie: weighted fuzzy search (Damerau + touch taps) + Candidate — extracted from Keyboardengine.swift.
 
+// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
+// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated struct Candidate { let word: String; let cost: Double; let logFreq: Double }
 
+// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
+// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated final class PriorNode {
 	fileprivate var children: [(UInt8, PriorNode)] = []
 	fileprivate(set) var bonus: Double = 0
+	fileprivate(set) var terminalBonus: Double = 0
+	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func child(_ ch: UInt8) -> PriorNode? {
 		for (c, n) in children where c == ch { return n }
 		return nil
@@ -22,6 +31,8 @@ nonisolated final class PriorNode {
 /// Core ML model is bundled — the search is identical, only the prior improves. Budget only
 /// ever RELAXES (bonus ≥ 0, capped ≈ one edit), so a nil prior reproduces today's exact
 /// pure-channel search and this can never drop a candidate the fixed radius already found.
+// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
+// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated final class TrieSearchPrior {
 	fileprivate let root = PriorNode()
 	/// The LM widens the search but can never turn a spatially-absurd word into a hit.
@@ -37,35 +48,25 @@ nonisolated final class TrieSearchPrior {
 		})
 	}
 
-	/// PROBABILITY-derived funding — the neural path, which computes real log P(word | context)
-	/// (the beam's numbers, previously discarded). Softmax the supplied log-probs into a funding
-	/// distribution and hand each word `maxBonus · p`: a PEAKED distribution (the LM is confident)
-	/// drives its leader's bonus to ≈`maxBonus` and starves the rest — the search widens narrowly
-	/// but deeply toward one word; a FLAT distribution spreads a shallow bonus across many words —
-	/// broad but shallow. So the search relaxes exactly as much as the LM is sure. `temperature`
-	/// (<1) sharpens so a mildly-peaked context still funds its leader; the top word is floored so
-	/// the single most-likely continuation always widens the search even when the field is broad.
-	/// `scored` is assumed best-first (the `SearchPriorProvider` contract). Hand-set defaults —
-	/// the eventual source is the on-device tuner, same as the ranking blend.
+	/// Absolute log-probability budget heuristic, independent of shortlist size/order.
+	/// A word at or below the floor receives no extra budget. This bounded linear ramp
+	/// is a tunable search policy, not a calibrated confidence estimate. Removing other
+	/// words must never increase this word's funding.
 	convenience init(scoredWords scored: [(word: String, logProbability: Double)],
-		 temperature: Double = 0.66, topFloorFraction: Double = 0.4) {
-		guard !scored.isEmpty else { self.init(funded: []); return }
-		let scaled = scored.map { $0.logProbability / max(temperature, 1e-3) }
-		let maximum = scaled.max() ?? 0
-		let exps = scaled.map { Foundation.exp($0 - maximum) }
-		let total = max(exps.reduce(0, +), 1e-9)
-		let topFloor = Self.maxBonus * topFloorFraction
-		self.init(funded: scored.enumerated().map { index, entry in
-			let probability = exps[index] / total
-			let floored = index == 0 ? max(Self.maxBonus * probability, topFloor)
-				: Self.maxBonus * probability
-			return (entry.word, min(Self.maxBonus, floored))
+		 logProbabilityFloor: Double = -12) {
+		let floor = min(logProbabilityFloor, -1e-3)
+		self.init(funded: scored.map { entry in
+			let bonus = entry.logProbability.isFinite && entry.logProbability <= 0
+				? Self.maxBonus * max(0, 1 - entry.logProbability / floor) : 0
+			return (entry.word, bonus)
 		})
 	}
 
 	/// Lay each `(word, bonus)` along the word's whole prefix path; a shared prefix keeps the MAX
 	/// bonus over the words through it, so common word-starts stay well-funded. Budget only ever
 	/// RELAXES (bonus ≥ 0), so an empty list reproduces the exact pure-channel search.
+	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private init(funded: [(word: String, bonus: Double)]) {
 		for (word, bonus) in funded {
 			guard bonus > 0 else { continue }
@@ -77,14 +78,36 @@ nonisolated final class TrieSearchPrior {
 				next.bonus = max(next.bonus, bonus)
 				node = next
 			}
+			node.terminalBonus = max(node.terminalBonus, bonus)
 		}
 	}
 
+    /// Batched terminal funding for the neutral core. Prefix maxima are rebuilt
+    /// there; terminal identity never borrows a descendant's traversal budget.
+    func nativeFundingSnapshot() -> (words: [String], bonuses: [NSNumber]) {
+        var words: [String] = [], bonuses: [NSNumber] = []
+        func collect(_ node: PriorNode, _ prefix: [UInt8]) {
+            if node.terminalBonus > 0 {
+                words.append(String(decoding: prefix, as: UTF8.self))
+                bonuses.append(NSNumber(value: node.terminalBonus))
+            }
+            for (byte, child) in node.children { collect(child, prefix + [byte]) }
+        }
+        collect(root, [])
+        return (words, bonuses)
+    }
+
 	var isEmpty: Bool { root.children.isEmpty }
+	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func rootChild(_ ch: UInt8) -> PriorNode? { root.child(ch) }
 }
 
+// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated final class Trie {
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private final class Node {
 		// Compact child storage: a tiny inline-sorted array beats a Dictionary here —
 		// ≤27 children means linear scan wins, and it saves ~100B of hashed-storage
@@ -108,6 +131,8 @@ nonisolated final class Trie {
 	/// One cheap operation (OSA / restricted Damerau) instead of two full edits.
 	static let transCost = 0.8
 	static let firstLetterPenalty = 2.5
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	static func firstLetterPenaltyPolicy(
 		typedLength: Int,
 		candidateFirst: UInt8,
@@ -127,6 +152,8 @@ nonisolated final class Trie {
 		}
 	}
 	
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func insert(_ word: String, freq: Int, id: Int32 = -1) {
 		var node = root
 		for ch in word.utf8 {
@@ -137,26 +164,40 @@ nonisolated final class Trie {
 		node.wordID = id
 		node.logFreq = log(Double(max(freq, 1)) + 1)
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func node(for word: String) -> Node? {
 		var node = root
 		for ch in word.utf8 { guard let next = node.child(ch) else { return nil }; node = next }
 		return node
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func contains(_ word: String) -> Bool { node(for: word)?.word != nil }
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func hasPrefix(_ prefix: String) -> Bool { node(for: prefix) != nil }
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func wordID(_ word: String) -> Int32? {
 		guard let n = node(for: word), n.word != nil, n.wordID >= 0 else { return nil }
 		return n.wordID
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func bump(_ word: String) {
 		guard let n = node(for: word), n.word != nil else { return }
 		n.logFreq = log(exp(n.logFreq) + 1)
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func logFreq(_ word: String) -> Double? {
 		guard let n = node(for: word), n.word != nil else { return nil }
 		return n.logFreq
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func search(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil,
 				prior: TrieSearchPrior? = nil) -> [Candidate] {
 		let chars = Array(typed.utf8)
@@ -186,6 +227,8 @@ nonisolated final class Trie {
 		return out
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private static func recurse(_ node: Node, _ letter: UInt8, _ prevLetter: UInt8,
 								_ depth: Int, _ firstPenalty: Double,
 								_ typed: [UInt8], _ taps: [KeyTap?]?,
@@ -218,7 +261,7 @@ nonisolated final class Trie {
 		// stays the pure channel cost — ranking still owns the LM/frequency decision).
 		let bonus = priorNode?.bonus ?? 0
 		let finalCost = dp[base + n] + firstPenalty
-		if let w = node.word, finalCost - bonus <= maxCost {
+		if let w = node.word, finalCost - (priorNode?.terminalBonus ?? 0) <= maxCost {
 			out.append(Candidate(word: w, cost: finalCost, logFreq: node.logFreq))
 		}
 		if rowMin + firstPenalty - bonus <= maxCost {
@@ -229,12 +272,16 @@ nonisolated final class Trie {
 		}
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func completions(prefix: String, limit: Int) -> [Candidate] {
 		guard let node = node(for: prefix) else { return [] }
 		var out: [Candidate] = []
 		collect(node, &out, cap: 256)
 		return Array(out.sorted { $0.logFreq > $1.logFreq }.prefix(limit))
 	}
+	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func collect(_ node: Node, _ out: inout [Candidate], cap: Int) {
 		if out.count >= cap { return }
 		if let w = node.word { out.append(Candidate(word: w, cost: 0, logFreq: node.logFreq)) }

@@ -1,0 +1,17 @@
+{
+  "tests": 25,
+  "failed_tests": [
+    "looseCandidatesCannotBeatCloseChannelMatches()",
+    "multiwordAndSevereGoldensUseOneAuthoritativeRanking()",
+    "singletonContextCannotHijackSevereRecovery()"
+  ],
+  "issues": 8,
+  "underlying_issue": "Existing severe coeevitjkn -> correction golden fails with MKN ranking; baseline attribution audit is separate.",
+  "log": "/tmp/ioskeyboard-calibration-regressions-xcode.log",
+  "policy_tests_passed": true,
+  "native_parity_suite_passed": true,
+  "engine_sha256": "d27d51a17c4128cb84c19c483c422ef91d7d40be04c0f273bef9de500cba526c",
+  "new_default": "CorrectionPolicy.calibrated (ngram only; internal neural models retain baseline gates)",
+  "baseline_attribution_confirmed": true,
+  "attribution_tests_passed": 4
+}

@@ -1,0 +1,15 @@
+{
+  "keyboard/Engine/LangData.swift": "24dfb6b4cf3bb08e9bb13bd14127a8fc860201c8e5be74f2194eeae5862af401",
+  "native/DecoderCore/src/PackedLexicon.cpp": "d46b984712bd65ca6a995f5e5b53a753717e5f55309c8ea31a5c71b9af425ff1",
+  "tools/build_language_data.py": "c0b0e45cb56e7a7680ec8dd3040fb25fb348f6ac5f5058214c1498453642ffee",
+  "tools/verify_language_data.py": "bb5a1ecb7fed0cc7ef45e09b1ca085397f0f342749de8477e4495af8a367113b",
+  "native/tests/PackedLexiconTests.cpp": "91ca8b26e4db94e2e25e642e98c51502b5c696d5063f49523ae59aa07b3625f1",
+  "keyboardTests/keyboardTests.swift": "fcc9e3857bd843426d271cc5f4085f21e00188199ed186a0087157c5ce4a0740",
+  "ARTIFACTS.json": "a65766b68889c2069628ffc1a8440f2a8a29e4a2365772a19d9ef4f74a17e819",
+  "THIRD_PARTY_NOTICES.md": "f56540d7ed49705f09a54f2601b04332d81b71438b93c0006af19319fe457172",
+  "keyboard/ThirdPartyNotices.txt": "c6fd7fffe54f45a47098d7ebd1579cb1db7e73aa9808dd8828ae7b7ba02afb30",
+  "tools/verify_release_artifacts.py": "f629ff701ea5de28d25b0117a6b68d380bde92fb9c079c0043b5193814680cdc",
+  "tools/vocabulary/validate_pack.py": "7d47f0d6a783ea67a8eeaaf2fb2241c5f4c3616adf65afa618043cfed2c16e80",
+  "tools/evaluation/audit_english_coverage.py": "69d73d4344a9918d3f6af4a772b88f3f08c3a453e842e589144dceadcdc25118",
+  "keyboard/langdata.bin": "ddbb25cb14d90bfb3e0097980aab68b8423f9e768b9bdfb8fbdbd55f163298d2"
+}

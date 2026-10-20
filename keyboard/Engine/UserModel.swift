@@ -1,7 +1,12 @@
+// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 
 // UserModel: on-device personalization — extracted from Keyboardengine.swift.
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+// MIGRATION-NOTE: Planned immutable PersonalizationView exports unigram/bigram/trigram counts, totals, adopted words, spelling confirmations and reset epoch; Swift remains the only mutable personal-data owner.
 final class UserModel {
 	private let storageURLOverride: URL?
 	private var tri: [String: [String: Int]] = [:], triTot: [String: Int] = [:]
@@ -13,6 +18,8 @@ final class UserModel {
 	/// not become indistinguishable from a word the user deliberately defended.
 	private var spellingConfirmations: [String: Int] = [:]
 	private var modelEpoch = KBPersonalData.currentEpoch
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private struct LearnEvent { let context: [String]; let word: String }
 	private var recentLearnEvents: [LearnEvent] = []
 
@@ -21,47 +28,67 @@ final class UserModel {
 	/// always happen after a snapshot has been taken and never while the lock is held.
 	private let lock = NSLock()
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	init(storageURL: URL? = nil) {
 		storageURLOverride = storageURL
 	}
 
 	// MARK: Locked read API (safe from any thread)
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func uniCount(_ w: String) -> Int {
 		lock.lock(); defer { lock.unlock() }
 		return unigrams[w] ?? 0
 	}
 	/// The unigram-backoff inputs, read atomically: (count, total, distinct).
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func uniBackoff(_ w: String) -> (count: Int, total: Int, distinct: Int) {
 		lock.lock(); defer { lock.unlock() }
 		return (unigrams[w] ?? 0, unigramTotal, unigrams.count)
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func biLookup(_ p: String, _ w: String) -> (count: Int, total: Int) {
 		lock.lock(); defer { lock.unlock() }
 		return (bi[p]?[w] ?? 0, biTot[p] ?? 0)
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func triLookup(_ key: String, _ w: String) -> (count: Int, total: Int) {
 		lock.lock(); defer { lock.unlock() }
 		return (tri[key]?[w] ?? 0, triTot[key] ?? 0)
 	}
 	/// Copies are tiny: maxWordsPerContext caps each at 8 entries.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func biDist(_ p: String) -> [String: Int] {
 		lock.lock(); defer { lock.unlock() }
 		return bi[p] ?? [:]
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func triDist(_ key: String) -> [String: Int] {
 		lock.lock(); defer { lock.unlock() }
 		return tri[key] ?? [:]
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func topUnigrams(_ limit: Int) -> [String] {
 		lock.lock(); defer { lock.unlock() }
 		return Array(unigrams.sorted { $0.value > $1.value }.prefix(limit).map(\.key))
 	}
 	/// COW snapshot for iteration off the lock (engine init's applyLearned).
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func unigramsSnapshot() -> [String: Int] {
 		lock.lock(); defer { lock.unlock() }
 		return unigrams
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func spellingConfirmationCount(_ word: String) -> Int {
 		lock.lock(); defer { lock.unlock() }
 		return spellingConfirmations[word] ?? 0
@@ -69,6 +96,8 @@ final class UserModel {
 	/// Number of distinct preceding words with which this spelling was actually used.
 	/// This is queried only at the rare OOV-adoption threshold, so the bounded scan is
 	/// preferable to maintaining another persistent index on every key boundary.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func contextDiversity(for word: String, stoppingAt limit: Int = 2) -> Int {
 		lock.lock(); defer { lock.unlock() }
 		var count = 0
@@ -79,6 +108,8 @@ final class UserModel {
 		return count
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func confirmSpelling(_ word: String) {
 		lock.lock(); defer { lock.unlock() }
 		let current = KBPersonalData.currentEpoch
@@ -101,10 +132,14 @@ final class UserModel {
 	/// Enforce the caps. Cheap when under them (four count checks). Returns whether
 	/// anything was pruned so callers can persist the shrunk model.
 	@discardableResult
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func pruneIfNeeded() -> Bool {
 		lock.lock(); defer { lock.unlock() }
 		return pruneLocked()
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func pruneLocked() -> Bool {
 		var pruned = false
 		if unigrams.count > Self.maxUnigrams {
@@ -121,6 +156,8 @@ final class UserModel {
 		return pruned
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func prune(_ table: inout [String: [String: Int]], totals: inout [String: Int]) {
 		var next: [String: [String: Int]] = [:]
 		next.reserveCapacity(table.count / 2)
@@ -141,6 +178,8 @@ final class UserModel {
 		totals = table.mapValues { $0.values.reduce(0, +) }
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func storeURL(for epoch: UInt64) -> URL? {
 		storageURLOverride ?? KBPersonalData.modelURL(for: epoch)
 	}
@@ -153,6 +192,8 @@ final class UserModel {
 	private let ioQueue = DispatchQueue(label: "keyboard.usermodel.io", qos: .utility)
 
 	/// `context` and `word` must already be lowercased.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func learn(context ctx: [String], word lw: String) {
 		lock.lock(); defer { lock.unlock() }
 		let current = KBPersonalData.currentEpoch
@@ -171,6 +212,8 @@ final class UserModel {
 
 	/// Walk back the exact recent context contribution when possible. The old model
 	/// decremented only the unigram, leaving the same mistake reinforced in bi/trigrams.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func demote(_ lw: String) {
 		lock.lock(); defer { lock.unlock() }
 		let current = KBPersonalData.currentEpoch
@@ -190,12 +233,16 @@ final class UserModel {
 	}
 
 	@discardableResult
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func decrement(_ table: inout [String: Int], key: String) -> Bool {
 		guard let value = table[key] else { return false }
 		table[key] = value > 1 ? value - 1 : nil
 		return true
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func decrementNested(_ table: inout [String: [String: Int]],
 							 totals: inout [String: Int], context: String, word: String) {
 		guard var words = table[context], let value = words[word] else { return }
@@ -207,6 +254,8 @@ final class UserModel {
 	/// On-disk shape. Older files carry extra keys (`keptCounts`, `kept`) from when
 	/// rejections persisted — JSONDecoder ignores unknown keys, so they load fine and
 	/// the keys vanish on the next save.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private nonisolated struct Snapshot: Codable {
 		var version: Int?
 		var epoch: UInt64?
@@ -214,6 +263,8 @@ final class UserModel {
 		var uni: [String: Int]
 		var confirmed: [String: Int]?
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func load() {
 		let current = KBPersonalData.currentEpoch
 		guard let primary = storeURL(for: current) else {
@@ -250,8 +301,12 @@ final class UserModel {
 		}
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private enum StoreError: Error { case invalidShape }
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func install(_ m: Snapshot, current: UInt64, migratedLegacy: Bool) {
 		lock.lock()
 		modelEpoch = current
@@ -270,6 +325,8 @@ final class UserModel {
 		if pruned || migratedLegacy { save() }
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func sanitize(_ table: [String: [String: Int]]) -> [String: [String: Int]] {
 		var result: [String: [String: Int]] = [:]
 		result.reserveCapacity(min(table.count, Self.maxContexts))
@@ -280,10 +337,14 @@ final class UserModel {
 		return result
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func isValidWord(_ word: String) -> Bool {
 		!word.isEmpty && word.count <= 64
 			&& word.allSatisfy { $0.isLetter || $0 == "'" }
 	}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func save() {
 		// Snapshot under the lock (COW references — O(1)); encoding and the atomic write
 		// both run on the I/O queue. The epoch and cross-process file lock make reset win
@@ -316,6 +377,8 @@ final class UserModel {
 		}
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func reset(to epoch: UInt64 = KBPersonalData.currentEpoch) {
 		lock.lock()
 		clearLocked(epoch: epoch)
@@ -323,8 +386,12 @@ final class UserModel {
 	}
 
 	/// Deterministic test seam; production never waits for persistence on an input path.
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func waitForPendingIO() { ioQueue.sync {} }
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private func clearLocked(epoch: UInt64) {
 		tri.removeAll(keepingCapacity: false)
 		triTot.removeAll(keepingCapacity: false)

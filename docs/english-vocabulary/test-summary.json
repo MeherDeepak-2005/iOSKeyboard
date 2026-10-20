@@ -1,0 +1,27 @@
+{
+  "python_tests": 12,
+  "release_simulator_keyboard_tests": 90,
+  "release_simulator_native_and_severe_tests": 10,
+  "total_simulator_tests": 100,
+  "native_read_and_search_parity": "passed",
+  "literal_words_and_glide_anchor_coverage": "passed",
+  "severe_contexts": 5,
+  "severe_replays": 155,
+  "severe_correct_commits": 155,
+  "neural_status": "not_run_missing_trained_model_and_matching_tokenizer",
+  "production_bundle_audit": {
+    "build": "succeeded",
+    "architecture": "arm64 iPhone, unsigned",
+    "gate_passed": true,
+    "extension_bytes": 13972006,
+    "cap_bytes": 14000000,
+    "dictionary_delta_bytes": 64344
+  },
+  "final_simulator_run": "passed",
+  "source_snapshot_reproducibility": "identical final manifest and snapshot hashes",
+  "temporary_cleanup": {
+    "completed": true,
+    "removed_bytes": 920357582,
+    "retained": "committed snapshots/provenance/evidence; standard FrequencyWords build cache"
+  }
+}

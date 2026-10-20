@@ -1,0 +1,54 @@
+{
+  "checksum" : 12727044,
+  "environment" : "optimized macOS CLI; isolated initialization benchmark; not physical iPhone",
+  "rows" : [
+    {
+      "case" : "seed_preparation",
+      "native_mapped_p50_ms" : 0.22687501041218638,
+      "native_mapped_p95_ms" : 0.2391250163782388,
+      "samples_per_backend" : 51,
+      "swift_p50_ms" : 2.1129999950062484,
+      "swift_p95_ms" : 2.3004999966360629
+    },
+    {
+      "case" : "prepared_session_init",
+      "native_boxed_p50_ms" : 4.3244583357591182,
+      "native_boxed_p95_ms" : 4.8621666501276195,
+      "native_mapped_p50_ms" : 0.10929166455753148,
+      "native_mapped_p95_ms" : 0.13791664969176054,
+      "samples_per_backend" : 51,
+      "swift_p50_ms" : 0.93191667110659182,
+      "swift_p95_ms" : 1.1327500105835497
+    },
+    {
+      "case" : "seed_selection_and_session_init",
+      "native_boxed_p50_ms" : 6.2876666488591582,
+      "native_boxed_p95_ms" : 6.8262499989941716,
+      "native_mapped_p50_ms" : 0.32137500238604844,
+      "native_mapped_p95_ms" : 0.35441666841506958,
+      "samples_per_backend" : 51,
+      "swift_p50_ms" : 2.9096250073052943,
+      "swift_p95_ms" : 3.1161250080913305
+    },
+    {
+      "case" : "seed_selection_init_decode_and_candidates",
+      "native_boxed_p50_ms" : 20.264916674932465,
+      "native_boxed_p95_ms" : 21.657125005731359,
+      "native_mapped_p50_ms" : 14.241333323298022,
+      "native_mapped_p95_ms" : 14.808583306148648,
+      "samples_per_backend" : 51,
+      "swift_p50_ms" : 25.775791669730097,
+      "swift_p95_ms" : 27.202124998439103
+    },
+    {
+      "case" : "resource_open_and_validation",
+      "native_mapped_p50_ms" : 2.2061250056140125,
+      "native_mapped_p95_ms" : 2.3590833297930658,
+      "samples_per_backend" : 51,
+      "swift_p50_ms" : 0.18820833065547049,
+      "swift_p95_ms" : 0.21820832625962794
+    }
+  ],
+  "scope" : "warm filesystem mapping\/validation reported separately; seed preparation and creation included where named; no neural scorer or physical iPhone",
+  "seed_count" : 9228
+}

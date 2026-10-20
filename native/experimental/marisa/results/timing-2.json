@@ -1,0 +1,1 @@
+{"samples_per_backend":275,"packed_search_p50_ms":0.318417,"packed_search_p95_ms":0.605959,"marisa_search_p50_ms":5.39337,"marisa_search_p95_ms":5.84112,"packed_validated_open_ms":2.94558,"additional_marisa_validated_open_ms":23.3545,"packed_full_vocab_lookup_p50_ms":15.4132,"marisa_full_vocab_lookup_p50_ms":35.2375,"checksum":65302549950}

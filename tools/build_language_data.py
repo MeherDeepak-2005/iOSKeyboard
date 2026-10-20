@@ -2,10 +2,15 @@
 """Build the bundled language data for the keyboard extension.
 
 Produces keyboard/langdata.bin — ONE little-endian binary the extension
-memory-maps at launch. mmap means the n-gram tables never become Swift
-dictionaries on the heap: the pages are clean/file-backed, the OS evicts them
-under pressure, and they barely count against the extension's ~60-70 MB kill
-limit (dirty heap counts fully; mapped read-only file pages effectively don't).
+memory-maps at launch. The n-gram tables remain file-backed instead of becoming
+Swift dictionaries. Accessed pages still contribute to resident memory; the
+extension's actual footprint and memory-pressure behavior require device testing.
+
+The default build includes the CoreV4 stored-form union in KBLM v6. V6 keeps
+sorted contexts but uses 32-bit word IDs, 16-byte bigram contexts, 20-byte
+trigram contexts (two separate IDs, total, start, count), 8-byte continuations
+and starters, and 14-byte trie nodes (u32 terminal; 0xffffffff sentinel).
+It has a separate 20,000,000-byte cap. --without-corev4 reproduces v5.
 
 FORMAT v5 replaces v4's sparse open-addressing context tables with sorted packed
 records. The reader performs mmap-backed binary search without materializing a
@@ -48,8 +53,10 @@ Release inputs are deliberately immutable and checksum-verified:
 See ARTIFACTS.json and THIRD_PARTY_NOTICES.md for provenance and licensing.
 """
 
+import argparse
 import bz2
 import hashlib
+import json
 import re
 import struct
 import sys
@@ -112,6 +119,10 @@ CORPUS = ROOT / "data" / "tatoeba-eng-cc0-2026-07-18.tsv.bz2"
 ESDB = ROOT / "data" / "esdb-v2-en-60-70-2026-07-20.tsv.bz2"
 SUPPLEMENTAL = ROOT / "data" / "english_supplemental.tsv"
 OUT = ROOT.parent / "keyboard" / "langdata.bin"
+EXPANSION_MANIFEST = ROOT / "data" / "english-expansion-v1.manifest.json"
+LANGDATA_CAP = 11_000_000
+COREV4_LANGDATA_CAP = 20_000_000
+COREV4_MANIFEST = ROOT / "data" / "corev4" / "english" / "manifest.json"
 
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -295,9 +306,16 @@ def build_trie(vocab) -> list[list[int]]:
     return records
 
 
-def write_bin(vocab, bigrams, trigrams, starters) -> None:
-    if len(vocab) > EMPTY16 - 1:
+def write_bin(vocab, bigrams, trigrams, starters, *, output=None, context_totals=None,
+              version=5, max_bytes=None) -> None:
+    output = Path(output) if output is not None else OUT
+    context_totals = context_totals or {"bigrams": {}, "trigrams": {}}
+    if version not in (5, 6):
+        raise ValueError("writer supports KBLM v5 and v6")
+    if version == 5 and len(vocab) > EMPTY16 - 1:
         sys.exit(f"v5 supports at most {EMPTY16 - 1} words; got {len(vocab)}")
+    if len(vocab) > 0x7fffffff:
+        raise ValueError("word IDs exceed signed runtime ID range")
 
     blob = bytearray()
     offsets = [0]
@@ -310,9 +328,11 @@ def write_bin(vocab, bigrams, trigrams, starters) -> None:
     bi_rows, bi_ent = [], []
     for ctx in sorted(bigrams):
         ent = bigrams[ctx]
-        total = sum(c for _, c in ent)
+        total = context_totals["bigrams"].get(ctx, sum(c for _, c in ent))
+        if total < sum(c for _, c in ent):
+            raise ValueError(f"bigram context {ctx}: total below retained counts")
         kept = ent if BI_PER_CTX is None else ent[:BI_PER_CTX]
-        if len(kept) > EMPTY16:
+        if version == 5 and len(kept) > EMPTY16:
             sys.exit(f"bigram context {ctx} has too many continuations: {len(kept)}")
         bi_rows.append((ctx, len(kept), min(total, 0xFFFFFFFF), len(bi_ent)))
         bi_ent += [(w, min(c, 0xFFFFFFFF)) for w, c in kept]
@@ -320,41 +340,59 @@ def write_bin(vocab, bigrams, trigrams, starters) -> None:
     tri_rows, tri_ent = [], []
     for a, b in sorted(trigrams):
         ent = trigrams[(a, b)]
-        total = sum(c for _, c in ent)
+        total = context_totals["trigrams"].get((a, b), sum(c for _, c in ent))
+        if total < sum(c for _, c in ent):
+            raise ValueError(f"trigram context {(a, b)}: total below retained counts")
         kept = ent if TRI_PER_CTX is None else ent[:TRI_PER_CTX]
-        key = (a << 16) | b
-        tri_rows.append((key, min(total, 0xFFFFFFFF), len(tri_ent)))
+        if version == 5:
+            tri_rows.append(((a << 16) | b, min(total, 0xFFFFFFFF), len(tri_ent)))
+        else:
+            tri_rows.append((a, b, min(total, 0xFFFFFFFF), len(tri_ent), len(kept)))
         tri_ent += [(w, min(c, 0xFFFFFFFF)) for w, c in kept]
 
     trie = build_trie(vocab)
 
-    temporary = OUT.with_suffix(".bin.tmp")
-    with temporary.open("wb") as f:
-        f.write(struct.pack("<9I", 0x4B424C4D, 5, len(vocab),
-                            len(bi_rows), len(bi_ent), len(tri_rows), len(tri_ent), len(trie),
-                            len(starters)))
-        f.write(struct.pack(f"<{len(vocab)}I", *(c for _, c in vocab)))
-        f.write(struct.pack(f"<{len(offsets)}I", *offsets))
-        for row in bi_rows:
-            f.write(struct.pack("<HHII", *row))
-        for row in bi_ent:
-            f.write(struct.pack("<HI", *row))
-        for row in tri_rows:
-            f.write(struct.pack("<III", *row))
-        for row in tri_ent:
-            f.write(struct.pack("<HI", *row))
-        for rec in trie:
-            label, child_count, first_child, word_id, max_freq = rec
-            packed_word = EMPTY16 if word_id == EMPTY else word_id
-            f.write(struct.pack("<BBIHI", label, child_count, first_child,
-                                packed_word, max_freq))
-        for w, n in starters:
-            f.write(struct.pack("<HI", w, min(n, 0xFFFFFFFF)))
-        f.write(blob)
-    temporary.replace(OUT)
-    mb = OUT.stat().st_size / 1e6
+    # Reject an oversized candidate BEFORE replacing the installed artifact.
+    compact = version == 5
+    expected_bytes = 36 + 4 * len(vocab) + 4 * len(offsets) + (12 if compact else 16) * len(bi_rows) \
+        + (6 if compact else 8) * len(bi_ent) + (12 if compact else 20) * len(tri_rows) + (6 if compact else 8) * len(tri_ent) \
+        + (12 if compact else 14) * len(trie) + (6 if compact else 8) * len(starters) + len(blob)
+    cap = max_bytes if max_bytes is not None else (LANGDATA_CAP if compact else COREV4_LANGDATA_CAP)
+    if expected_bytes > cap:
+        raise ValueError(f"language pack exceeds {cap:,} byte cap: {expected_bytes:,}")
+    temporary = output.with_suffix(output.suffix + ".tmp")
+    try:
+        with temporary.open("wb") as f:
+            f.write(struct.pack("<9I", 0x4B424C4D, version, len(vocab),
+                                len(bi_rows), len(bi_ent), len(tri_rows), len(tri_ent), len(trie),
+                                len(starters)))
+            f.write(struct.pack(f"<{len(vocab)}I", *(c for _, c in vocab)))
+            f.write(struct.pack(f"<{len(offsets)}I", *offsets))
+            for row in bi_rows:
+                if compact: f.write(struct.pack("<HHII", *row))
+                else:
+                    ctx, count, total, start = row
+                    f.write(struct.pack("<IIII", ctx, total, start, count))
+            for row in bi_ent:
+                f.write(struct.pack("<HI" if compact else "<II", *row))
+            for row in tri_rows:
+                f.write(struct.pack("<III" if compact else "<IIIII", *row))
+            for row in tri_ent:
+                f.write(struct.pack("<HI" if compact else "<II", *row))
+            for rec in trie:
+                label, child_count, first_child, word_id, max_freq = rec
+                packed_word = EMPTY16 if compact and word_id == EMPTY else word_id
+                f.write(struct.pack("<BBIHI" if compact else "<BBIII", label, child_count, first_child,
+                                    packed_word, max_freq))
+            for w, n in starters:
+                f.write(struct.pack("<HI" if compact else "<II", w, min(n, 0xFFFFFFFF)))
+            f.write(blob)
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
+    mb = output.stat().st_size / 1e6
     top = ", ".join(vocab[w][0] for w, _ in starters[:6])
-    print(f"wrote {OUT} ({mb:.1f} MB): {len(vocab)} words, "
+    print(f"wrote {output} ({mb:.1f} MB): {len(vocab)} words, "
           f"{len(bi_ent)} bigrams/{len(bi_rows)} ctx, "
           f"{len(tri_ent)} trigrams/{len(tri_rows)} ctx, "
           f"{len(trie)} trie nodes, {len(starters)} starters [{top} ...]")
@@ -402,10 +440,153 @@ def merge_contractions(vocab: list[tuple[str, int]]) -> list[tuple[str, int]]:
     return merged
 
 
-if __name__ == "__main__":
-    if not OUT.parent.is_dir():
-        sys.exit(f"expected keyboard/ folder at {OUT.parent}")
+def load_expansion(manifest_path: Path):
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema_version") != 1 or manifest.get("release_eligible") is not True:
+        raise ValueError("expansion manifest is incompatible or not release eligible")
+    if set(manifest.get("sources", {})) != {"esdb", "wordnet", "masc", "frequency"} \
+            or any(source.get("release_eligible") is not True for source in manifest["sources"].values()):
+        raise ValueError("unapproved expansion source")
+    artifacts = {}
+    for name in ("vocabulary", "contexts"):
+        record = manifest["artifacts"][name]
+        path = (ROOT.parent / record["path"]).resolve()
+        if not path.is_relative_to(ROOT.parent.resolve()):
+            raise ValueError("expansion artifact outside repository")
+        require_hash(path, record["sha256"])
+        if path.stat().st_size != record["bytes"]:
+            raise ValueError("expansion size mismatch")
+        with bz2.open(path, "rt", encoding="utf-8") as handle:
+            artifacts[name] = json.load(handle)
+        if artifacts[name].get("schema_version") != 1:
+            raise ValueError("unsupported expansion snapshot")
+    for record in manifest["project_inputs"]:
+        path = (ROOT.parent / record["path"]).resolve()
+        if not path.is_relative_to(ROOT.parent.resolve()):
+            raise ValueError("project input outside repository")
+        require_hash(path, record["sha256"])
+    if manifest["additional_words"] != len(artifacts["vocabulary"]["entries"]) \
+            or manifest["baseline_words"] != artifacts["vocabulary"]["baseline_words"]:
+        raise ValueError("manifest vocabulary counts disagree")
+    return manifest, artifacts["vocabulary"], artifacts["contexts"]
+
+
+def merge_expansion(vocab, snapshot):
+    if snapshot["baseline_words"] != len(vocab):
+        raise ValueError("expansion was prepared for a different baseline")
+    merged = dict(vocab)
+    if len(merged) != len(vocab):
+        raise ValueError("duplicate baseline word")
+    for entry in snapshot["entries"]:
+        word, frequency = entry["word"], entry["frequency_prior"]
+        if not WORD.fullmatch(word) or word.startswith("'") or word.endswith("'") \
+                or word in EXCLUDE or len(word) < 2 or len(word) > 32 \
+                or type(frequency) is not int or not 1 <= frequency <= 20_000 \
+                or word in merged or not entry.get("sources") \
+                or not set(entry["sources"]) <= {"esdb", "wordnet", "project"}:
+            raise ValueError(f"invalid or duplicate expansion entry: {word}")
+        merged[word] = frequency
+    if len(merged) > EMPTY16 - 1:
+        raise ValueError("expanded vocabulary exceeds v5 ID capacity")
+    # Glide anchor buckets assume ID order follows frequency. Rebuild ALL IDs
+    # atomically with n-grams; appending low-ID-unsorted additions loses coverage.
+    return sorted(merged.items(), key=lambda entry: (-entry[1], entry[0]))
+
+
+def merge_contexts(ids, bigrams, trigrams, snapshot):
+    maps = {"bigrams": {ctx: Counter(dict(entries)) for ctx, entries in bigrams.items()},
+            "trigrams": {ctx: Counter(dict(entries)) for ctx, entries in trigrams.items()}}
+    totals = {kind: {ctx: sum(entries.values()) for ctx, entries in data.items()}
+              for kind, data in maps.items()}
+    for source, distribution in snapshot["sources"].items():
+        if source not in {"masc", "project"}:
+            raise ValueError(f"unapproved context source: {source}")
+        for kind, width in (("bigrams", 1), ("trigrams", 2)):
+            seen_contexts = set()
+            for group in distribution[kind]:
+                if len(group["context"]) != width or any(word not in ids for word in group["context"]):
+                    raise ValueError("unknown context word or invalid context width")
+                key_ids = tuple(ids[word] for word in group["context"])
+                key = key_ids[0] if width == 1 else key_ids
+                if key in seen_contexts:
+                    raise ValueError("duplicate source context")
+                seen_contexts.add(key)
+                entries = Counter()
+                for word, count in group["entries"]:
+                    if word not in ids or type(count) is not int or count <= 0 or ids[word] in entries:
+                        raise ValueError("invalid or duplicate context continuation")
+                    entries[ids[word]] = count
+                total = group["total"]
+                if type(total) is not int or total < sum(entries.values()):
+                    raise ValueError("source context total below retained counts")
+                maps[kind].setdefault(key, Counter()).update(entries)
+                totals[kind][key] = totals[kind].get(key, 0) + total
+    return ({key: counts.most_common() for key, counts in maps["bigrams"].items()},
+            {key: counts.most_common() for key, counts in maps["trigrams"].items()}, totals)
+
+
+def merge_corev4(vocab, bigrams, trigrams, starters, totals):
+    """Admit stored forms, preserving old weights and all context distributions.
+
+    New forms have a conservative prior of 1 (not an observed CoreV4 count).
+    Build the original corpus BEFORE merging so previously OOV tokens do not
+    silently create new context windows or change old probability denominators.
+    """
+    manifest = json.loads(COREV4_MANIFEST.read_text())
+    record = next(x for x in manifest["exports"] if x["path"] == "english-all.txt")
+    source = require_hash(COREV4_MANIFEST.parent / record["path"], record["sha256"])
+    forms = source.read_text().splitlines()
+    if len(forms) != record["forms"] or len(set(forms)) != len(forms):
+        raise ValueError("invalid CoreV4 vocabulary count/duplicates")
+    merged = dict(vocab)
+    excluded = []
+    for word in forms:
+        if not word or "\x00" in word:
+            raise ValueError("invalid CoreV4 stored spelling")
+        if word in EXCLUDE:
+            excluded.append(word)
+        else:
+            merged.setdefault(word, 1)
+    expanded = sorted(merged.items(), key=lambda entry: (-entry[1], entry[0]))
+    ids = {word: i for i, (word, _) in enumerate(expanded)}
+    remap = {i: ids[word] for i, (word, _) in enumerate(vocab)}
+    bi = {remap[c]: [(remap[w], n) for w, n in ent] for c, ent in bigrams.items()}
+    tri = {(remap[a], remap[b]): [(remap[w], n) for w, n in ent]
+           for (a, b), ent in trigrams.items()}
+    starters = [(remap[w], n) for w, n in starters]
+    if totals is not None:
+        totals = {"bigrams": {remap[c]: n for c, n in totals["bigrams"].items()},
+                  "trigrams": {(remap[a], remap[b]): n for (a, b), n in totals["trigrams"].items()}}
+    print(f"CoreV4: +{len(expanded)-len(vocab)} forms; {len(excluded)} existing contraction-policy exclusions; new prior=1")
+    return expanded, bi, tri, starters, totals
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Build checksum-verified English KBLM v6 data")
+    parser.add_argument("--output", type=Path, default=OUT)
+    parser.add_argument("--baseline", action="store_true", help="reproduce the pre-expansion vocabulary/context pipeline")
+    parser.add_argument("--manifest", type=Path, default=EXPANSION_MANIFEST)
+    parser.add_argument("--without-corev4", action="store_true", help="reproduce the expanded v5 pack without CoreV4")
+    args = parser.parse_args()
+    if not args.output.parent.is_dir():
+        parser.error(f"output folder does not exist: {args.output.parent}")
     vocab = merge_contractions(build_vocab())
-    ids = {w: i for i, (w, _) in enumerate(vocab)}
-    print(f"vocab: {len(vocab)} words")
-    write_bin(vocab, *build_ngrams(ids))
+    contexts = None
+    if not args.baseline:
+        manifest, vocabulary, contexts = load_expansion(args.manifest)
+        vocab = merge_expansion(vocab, vocabulary)
+        print(f"expansion: +{manifest['additional_words']} forms from pinned open sources")
+    ids = {word: index for index, (word, _) in enumerate(vocab)}
+    bi, tri, starters = build_ngrams(ids)
+    totals = None
+    if contexts is not None:
+        bi, tri, totals = merge_contexts(ids, bi, tri, contexts)
+    version = 5
+    if not args.baseline and not args.without_corev4:
+        vocab, bi, tri, starters, totals = merge_corev4(vocab, bi, tri, starters, totals)
+        version = 6
+    write_bin(vocab, bi, tri, starters, output=args.output, context_totals=totals, version=version)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,54 @@
+{"register":"formal","text":"Thank you for your consideration."}
+{"register":"formal","text":"Thank you for your patience."}
+{"register":"formal","text":"Thank you for your help."}
+{"register":"formal","text":"Thank you for your time."}
+{"register":"formal","text":"Kind regards."}
+{"register":"formal","text":"Yours sincerely."}
+{"register":"formal","text":"Best regards."}
+{"register":"formal","text":"Warm regards."}
+{"register":"formal","text":"Could you please clarify the requirements?"}
+{"register":"formal","text":"Could you please confirm the appointment?"}
+{"register":"formal","text":"Please let me know at your convenience."}
+{"register":"formal","text":"I appreciate your help."}
+{"register":"formal","text":"I appreciate your consideration."}
+{"register":"formal","text":"Sorry for the inconvenience."}
+{"register":"formal","text":"I would appreciate your feedback."}
+{"register":"formal","text":"Would you mind sharing the details?"}
+{"register":"formal","text":"Please accept my sincere thanks."}
+{"register":"formal","text":"I look forward to hearing from you."}
+{"register":"academic","text":"The results are statistically significant."}
+{"register":"academic","text":"This is a peer reviewed study."}
+{"register":"academic","text":"The methodology supports reproducibility."}
+{"register":"academic","text":"The findings are reproducible."}
+{"register":"academic","text":"Further research is needed."}
+{"register":"academic","text":"In accordance with the guidelines."}
+{"register":"academic","text":"With respect to the hypothesis."}
+{"register":"regional","text":"My favourite colour is blue."}
+{"register":"regional","text":"Please organise the meeting."}
+{"register":"regional","text":"The appointment was cancelled."}
+{"register":"regional","text":"We are travelling tomorrow."}
+{"register":"regional","text":"The theatre is near the city centre."}
+{"register":"regional","text":"Could we prepone the meeting?"}
+{"register":"regional","text":"Please share the pincode."}
+{"register":"regional","text":"There is load shedding today."}
+{"register":"regional","text":"No worries."}
+{"register":"regional","text":"We are meeting in Bengaluru."}
+{"register":"casual","text":"brb grabbing lunch."}
+{"register":"casual","text":"ttyl have a good day."}
+{"register":"casual","text":"omw see you soon."}
+{"register":"casual","text":"tysm for your help."}
+{"register":"casual","text":"thx for letting me know."}
+{"register":"casual","text":"idk what happened."}
+{"register":"casual","text":"tbh that sounds good."}
+{"register":"casual","text":"ngl that was fun."}
+{"register":"casual","text":"lmk when you are free."}
+{"register":"modern","text":"I unsubscribed from the newsletter."}
+{"register":"modern","text":"Please send the screenshots."}
+{"register":"modern","text":"We are livestreaming the event."}
+{"register":"modern","text":"You can unmute your microphone."}
+{"register":"modern","text":"The browser supports passkeys."}
+{"register":"modern","text":"The chatbot answered my question."}
+{"register":"technical","text":"The webhook sends a notification."}
+{"register":"technical","text":"The tokenizer produces tokens."}
+{"register":"technical","text":"The model uses quantization."}
+{"register":"modern","text":"The clinic offers telehealth appointments."}

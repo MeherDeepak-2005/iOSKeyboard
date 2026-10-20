@@ -1,0 +1,11 @@
+{
+  "configuration": "Normal Release, arm64 iPhone target, CODE_SIGNING_ALLOWED=NO",
+  "physical_device_execution": false,
+  "bundled_dictionary_matches_source": true,
+  "bundled_app_notices_match_source": true,
+  "pack_bytes": 9455641,
+  "pack_sha256": "ddbb25cb14d90bfb3e0097980aab68b8423f9e768b9bdfb8fbdbd55f163298d2",
+  "extension_bytes": 13972006,
+  "extension_cap_bytes": 14000000,
+  "extension_gate_passed": true
+}

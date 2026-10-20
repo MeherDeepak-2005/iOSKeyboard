@@ -1,7 +1,11 @@
+// MIGRATION-FILE: planned SPLIT | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: CPP_CORE owns spatial/statistical math; SWIFT_IOS owns boundary values and stored profile lifecycle.
 import Foundation
 
 // Spatial model + per-tap coordinates — extracted from Keyboardengine.swift.
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=DecodeBoundary
+// MIGRATION-NOTE: Keep the Swift boundary value; mirror dx/dy as Double in the portable request.
 nonisolated struct KeyTap: Equatable {
 	let dx: Double
 	let dy: Double
@@ -11,7 +15,11 @@ nonisolated struct KeyTap: Equatable {
 /// Only aggregate sufficient statistics are persisted; no text or raw touch sequence
 /// leaves the decoder. Three row clusters provide enough data to adapt without the
 /// severe overfitting of one model per key.
+// MIGRATION: planned SPLIT | stage=search | target=TouchProfile
+// MIGRATION-SPLIT: CPP_CORE owns tap-adjustment/statistics math; SWIFT_IOS owns loading, serialization, defaults and reset coordination.
 final class TouchSpatialProfile {
+	// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private struct Bucket: Codable, Equatable {
 		var count = 0
 		var meanX = 0.0
@@ -19,6 +27,8 @@ final class TouchSpatialProfile {
 		var m2X = 0.0
 		var m2Y = 0.0
 
+		// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+		// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 		mutating func observe(_ tap: KeyTap) {
 			count += 1
 			let dx = tap.dx - meanX
@@ -35,6 +45,8 @@ final class TouchSpatialProfile {
 		}
 	}
 
+	// MIGRATION: planned SPLIT | stage=search | target=TouchProfile
+	// MIGRATION-SPLIT: CPP_CORE owns tap-adjustment/statistics math; SWIFT_IOS owns loading, serialization, defaults and reset coordination.
 	private struct Stored: Codable, Equatable {
 		var version = 1
 		var rows = [Bucket(), Bucket(), Bucket()]
@@ -46,6 +58,7 @@ final class TouchSpatialProfile {
 	private var stored: Stored
 	private var unsavedSamples = 0
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=TouchProfileStorage
 	init(defaults: UserDefaults = KBSettings.sharedDefaults) {
 		if let data = defaults.data(forKey: Self.key),
 		   let decoded = try? JSONDecoder().decode(Stored.self, from: data),
@@ -56,6 +69,8 @@ final class TouchSpatialProfile {
 		}
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func adjusted(_ taps: [KeyTap?]?, typed: String) -> [KeyTap?]? {
 		guard let taps, taps.count == typed.utf8.count else { return taps }
 		return zip(typed.utf8, taps).map { letter, tap in
@@ -76,6 +91,8 @@ final class TouchSpatialProfile {
 		}
 	}
 
+	// MIGRATION: planned SPLIT | stage=search | target=TouchProfile
+	// MIGRATION-SPLIT: CPP_CORE updates bucket statistics; SWIFT_IOS owns unsaved-sample bookkeeping and save scheduling.
 	func observe(word: String, taps: [KeyTap?],
 				 defaults: UserDefaults = KBSettings.sharedDefaults) {
 		guard word.utf8.count == taps.count else { return }
@@ -88,24 +105,30 @@ final class TouchSpatialProfile {
 		if unsavedSamples >= 32 { save(defaults: defaults) }
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=TouchProfileStorage
 	func save(defaults: UserDefaults = KBSettings.sharedDefaults) {
 		guard unsavedSamples > 0, let data = try? JSONEncoder().encode(stored) else { return }
 		defaults.set(data, forKey: Self.key)
 		unsavedSamples = 0
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=TouchProfileStorage
 	func reset(defaults: UserDefaults = KBSettings.sharedDefaults) {
 		stored = Stored()
 		unsavedSamples = 0
 		defaults.removeObject(forKey: Self.key)
 	}
 
+	// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func rowIndex(for letter: UInt8) -> Int? {
 		guard let y = KB.pos[letter]?.1 else { return nil }
 		return Int(y)
 	}
 }
 
+// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated enum KB {
 	static let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 	/// Normalized visual center offsets in key pitches. The UIKit deck centers the
@@ -129,6 +152,8 @@ nonisolated enum KB {
 		}
 		return m
 	}()
+	// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	static func subCost(_ intended: UInt8, _ typed: UInt8) -> Double {
 		if intended == typed { return 0 }
 		guard let a = pos[intended], let b = pos[typed] else { return 3.0 }
@@ -137,6 +162,8 @@ nonisolated enum KB {
 	}
 	/// Grid position of a letter (col+rowOffset, row) — the coordinate space glide
 	/// decoding maps the swipe trajectory into.
+	// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	static func grid(for letter: Character) -> (Double, Double)? {
 		guard let a = letter.asciiValue else { return nil }
 		return pos[a]
@@ -145,6 +172,8 @@ nonisolated enum KB {
 	/// landing point. Parity with the discrete table when the tap is dead-center
 	/// (cost → 0 for the pressed key); the 0.3 cross-key floor still separates
 	/// neighbors so a centered tap never reads as ambiguous.
+	// MIGRATION: planned CPP_CORE | stage=search | target=SpatialModel
+	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	static func subCost(_ intended: UInt8, typed: UInt8, tap: KeyTap?) -> Double {
 		guard let tap, let a = pos[intended], let t = pos[typed] else { return subCost(intended, typed) }
 		let px = t.0 + tap.dx, py = t.1 + tap.dy

@@ -1,0 +1,1245 @@
+{
+  "experiment": {
+    "models": [
+      "wittenBell",
+      "modifiedKneserNey",
+      "frequencyBackoff"
+    ],
+    "policy": {
+      "oovMargin": 3.0,
+      "realWordMargin": 5.0,
+      "closeRescueMargin": 3.0,
+      "closeRescueGap": 0.0,
+      "minimumCloseGap": 0.0,
+      "closeRescueMaxCost": 1.6
+    },
+    "prototype_strength": 8,
+    "incrementalEvery": 20,
+    "requests_sha256": "6c86017c78f8665ae831cd0525904210f16869b502ebc43d8b908dd1c3edab66",
+    "pack_sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4",
+    "source_manifest": {
+      "seed": 4419026,
+      "split_rule": "SHA256(mkn-calibration-v1:+family) first 32 bits mod 10 < 6 -> development",
+      "counts": {
+        "validation:clean_oov": 349,
+        "validation:typo_real_word": 250,
+        "development:clean_known": 1000,
+        "development:typo_single": 1000,
+        "validation:typo_multi": 400,
+        "validation:typo_single": 1000,
+        "development:typo_multi": 400,
+        "development:clean_oov": 420,
+        "validation:clean_known": 1000,
+        "development:clean_contraction": 100,
+        "development:typo_real_word": 250,
+        "validation:clean_contraction": 100
+      },
+      "families": {
+        "development": [
+          "masc_500k_texts/spoken/debate-transcript/3rd_Bush-Kerry",
+          "masc_500k_texts/written/blog/Seedbombing",
+          "masc_500k_texts/written/blog/Tupelo-Honey-Cafe",
+          "masc_500k_texts/written/email/12174",
+          "masc_500k_texts/written/email/210343",
+          "masc_500k_texts/written/email/21257",
+          "masc_500k_texts/written/email/52201",
+          "masc_500k_texts/written/email/53536",
+          "masc_500k_texts/written/email/53555",
+          "masc_500k_texts/written/email/54261",
+          "masc_500k_texts/written/email/54536",
+          "masc_500k_texts/written/email/54537",
+          "masc_500k_texts/written/jokes/jokes10",
+          "masc_500k_texts/written/jokes/jokes11",
+          "masc_500k_texts/written/jokes/jokes2",
+          "masc_500k_texts/written/letters/110CYL068",
+          "masc_500k_texts/written/letters/110CYL072",
+          "masc_500k_texts/written/letters/112C-L014",
+          "masc_500k_texts/written/letters/114CUL059",
+          "masc_500k_texts/written/letters/118CWL049",
+          "masc_500k_texts/written/letters/alumnifund1",
+          "masc_500k_texts/written/letters/aspca1",
+          "masc_500k_texts/written/letters/united1",
+          "masc_500k_texts/written/letters/warner1",
+          "masc_500k_texts/written/newspaper:newswire/20000424_nyt-NEW",
+          "masc_500k_texts/written/newspaper:newswire/A1.E2-NEW",
+          "masc_500k_texts/written/newspaper:newswire/wsj_1640.mrg-NEW",
+          "masc_500k_texts/written/spam/111363",
+          "masc_500k_texts/written/spam/111373",
+          "masc_500k_texts/written/spam/111381",
+          "masc_500k_texts/written/spam/111425",
+          "masc_500k_texts/written/spam/114428",
+          "masc_500k_texts/written/spam/114445",
+          "masc_500k_texts/written/spam/Earnings_Season_Underway",
+          "masc_500k_texts/written/spam/ucb10",
+          "masc_500k_texts/written/spam/ucb14",
+          "masc_500k_texts/written/spam/ucb22",
+          "masc_500k_texts/written/spam/ucb26",
+          "masc_500k_texts/written/spam/ucb44",
+          "masc_500k_texts/written/spam/ucb45",
+          "masc_500k_texts/written/spam/ucb6",
+          "masc_500k_texts/written/spam/ucb8",
+          "masc_500k_texts/written/technical/1471-213X",
+          "masc_500k_texts/written/technical/pmed.0010029",
+          "masc_500k_texts/written/technical/rr166",
+          "masc_500k_texts/written/travel-guides/HistoryGreek",
+          "masc_500k_texts/written/travel-guides/IntroHongKong"
+        ],
+        "validation": [
+          "masc_500k_texts/spoken/telephone/sw2025-ms98-a-trans",
+          "masc_500k_texts/spoken/telephone/sw2078-ms98-a-trans",
+          "masc_500k_texts/written/blog/Anti-Terrorist",
+          "masc_500k_texts/written/blog/blog-monastery",
+          "masc_500k_texts/written/blog/vampires",
+          "masc_500k_texts/written/email/175841",
+          "masc_500k_texts/written/email/230685",
+          "masc_500k_texts/written/email/enron-thread",
+          "masc_500k_texts/written/ficlets/1403",
+          "masc_500k_texts/written/fiction/lw1",
+          "masc_500k_texts/written/letters/112C-L015",
+          "masc_500k_texts/written/letters/112C-L016",
+          "masc_500k_texts/written/letters/AMC2",
+          "masc_500k_texts/written/letters/audubon2",
+          "masc_500k_texts/written/newspaper:newswire/20000419_apw_eng-NEW",
+          "masc_500k_texts/written/spam/111364",
+          "masc_500k_texts/written/spam/111371",
+          "masc_500k_texts/written/spam/114440",
+          "masc_500k_texts/written/spam/114446",
+          "masc_500k_texts/written/spam/new_clients",
+          "masc_500k_texts/written/spam/ucb48",
+          "masc_500k_texts/written/spam/ucb53",
+          "masc_500k_texts/written/technical/1468",
+          "masc_500k_texts/written/travel-guides/HistoryJerusalem"
+        ]
+      },
+      "pack_sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4",
+      "heldout_sha256": "bd9129ca750c658969e02c9612fa4686e7ce8aba1e25f0604c94859dd3dab775",
+      "all_requests_sha256": "fbcc83b02b2f60cb5cc94ac4ffc2786c48ed571592a74489e6a5ac7b71d27293",
+      "limits": [
+        "Underlying MASC corpus aggregate was inspected in earlier smoothing comparison; this is a new family-disjoint calibration split, not a newly blinded corpus.",
+        "Synthetic errors; source OOV spellings are preservation labels, not independently reviewed names.",
+        "Gold intended word is supplied only to evaluator, never to the engine. No personalization learning during replay."
+      ]
+    },
+    "source_sha256": {
+      "keyboard/Engine/NgramScorer.swift": "108de9057cb9646568fd2fe376ba44c72ac877b9b839e8483c77868137281c18",
+      "keyboard/Engine/Keyboardengine.swift": "9211d892f53945fbace80ff22b8f8ff5c46d70de29f484fafa5366beddfce094",
+      "keyboardTests/CorrectionCalibrationTests.swift": "3bab1adb7be1dcc032ddb749746bae655b00e9d926631e80b051080770aa46d2",
+      "tools/evaluation/smoothing/compare_engine.py": "ce6cd021d78fb2a1c12857cd86d5a45302f1211942a18d50a9be501d4df41bea"
+    },
+    "limits": [
+      "Previously inspected synthetic validation corpus; this is a comparative audit, not a fresh blind production test.",
+      "No parameter fitting; prototype strength fixed before this comparison.",
+      "Baseline gates shared across models; no MKN-specific calibrated rescues.",
+      "No neural inference, touch coordinates, learned personalization, physical-device latency or energy measurement.",
+      "Diagnostic examples are already known and excluded from corpus rates."
+    ]
+  },
+  "full_engine_metrics": {
+    "wittenBell": {
+      "all": {
+        "cases": 3099,
+        "correct": 2436,
+        "wrong_commit": 564,
+        "changed": 1831,
+        "unfixed": 99
+      },
+      "clean_oov": {
+        "cases": 349,
+        "correct": 83,
+        "wrong_commit": 266,
+        "changed": 266,
+        "unfixed": 0
+      },
+      "clean": {
+        "cases": 1449,
+        "correct": 1169,
+        "wrong_commit": 280,
+        "changed": 280,
+        "unfixed": 0
+      },
+      "typo_real_word": {
+        "cases": 250,
+        "correct": 133,
+        "wrong_commit": 34,
+        "changed": 167,
+        "unfixed": 83
+      },
+      "typo": {
+        "cases": 1650,
+        "correct": 1267,
+        "wrong_commit": 284,
+        "changed": 1551,
+        "unfixed": 99
+      },
+      "typo_multi": {
+        "cases": 400,
+        "correct": 282,
+        "wrong_commit": 105,
+        "changed": 387,
+        "unfixed": 13
+      },
+      "typo_single": {
+        "cases": 1000,
+        "correct": 852,
+        "wrong_commit": 145,
+        "changed": 997,
+        "unfixed": 3
+      },
+      "clean_known": {
+        "cases": 1000,
+        "correct": 988,
+        "wrong_commit": 12,
+        "changed": 12,
+        "unfixed": 0
+      },
+      "clean_contraction": {
+        "cases": 100,
+        "correct": 98,
+        "wrong_commit": 2,
+        "changed": 2,
+        "unfixed": 0
+      }
+    },
+    "modifiedKneserNey": {
+      "all": {
+        "cases": 3099,
+        "correct": 2497,
+        "wrong_commit": 315,
+        "changed": 1482,
+        "unfixed": 287
+      },
+      "clean_oov": {
+        "cases": 349,
+        "correct": 232,
+        "wrong_commit": 117,
+        "changed": 117,
+        "unfixed": 0
+      },
+      "clean": {
+        "cases": 1449,
+        "correct": 1330,
+        "wrong_commit": 119,
+        "changed": 119,
+        "unfixed": 0
+      },
+      "typo_real_word": {
+        "cases": 250,
+        "correct": 123,
+        "wrong_commit": 22,
+        "changed": 145,
+        "unfixed": 105
+      },
+      "typo": {
+        "cases": 1650,
+        "correct": 1167,
+        "wrong_commit": 196,
+        "changed": 1363,
+        "unfixed": 287
+      },
+      "typo_multi": {
+        "cases": 400,
+        "correct": 250,
+        "wrong_commit": 65,
+        "changed": 315,
+        "unfixed": 85
+      },
+      "typo_single": {
+        "cases": 1000,
+        "correct": 794,
+        "wrong_commit": 109,
+        "changed": 903,
+        "unfixed": 97
+      },
+      "clean_known": {
+        "cases": 1000,
+        "correct": 998,
+        "wrong_commit": 2,
+        "changed": 2,
+        "unfixed": 0
+      },
+      "clean_contraction": {
+        "cases": 100,
+        "correct": 100,
+        "wrong_commit": 0,
+        "changed": 0,
+        "unfixed": 0
+      }
+    },
+    "frequencyBackoff": {
+      "all": {
+        "cases": 3099,
+        "correct": 2437,
+        "wrong_commit": 563,
+        "changed": 1830,
+        "unfixed": 99
+      },
+      "clean_oov": {
+        "cases": 349,
+        "correct": 84,
+        "wrong_commit": 265,
+        "changed": 265,
+        "unfixed": 0
+      },
+      "clean": {
+        "cases": 1449,
+        "correct": 1170,
+        "wrong_commit": 279,
+        "changed": 279,
+        "unfixed": 0
+      },
+      "typo_real_word": {
+        "cases": 250,
+        "correct": 133,
+        "wrong_commit": 34,
+        "changed": 167,
+        "unfixed": 83
+      },
+      "typo": {
+        "cases": 1650,
+        "correct": 1267,
+        "wrong_commit": 284,
+        "changed": 1551,
+        "unfixed": 99
+      },
+      "typo_multi": {
+        "cases": 400,
+        "correct": 282,
+        "wrong_commit": 105,
+        "changed": 387,
+        "unfixed": 13
+      },
+      "typo_single": {
+        "cases": 1000,
+        "correct": 852,
+        "wrong_commit": 145,
+        "changed": 997,
+        "unfixed": 3
+      },
+      "clean_known": {
+        "cases": 1000,
+        "correct": 988,
+        "wrong_commit": 12,
+        "changed": 12,
+        "unfixed": 0
+      },
+      "clean_contraction": {
+        "cases": 100,
+        "correct": 98,
+        "wrong_commit": 2,
+        "changed": 2,
+        "unfixed": 0
+      }
+    }
+  },
+  "versus_witten_bell": {
+    "modifiedKneserNey": {
+      "typo": {
+        "correct": {
+          "difference": -0.06060606060606061,
+          "paired_family_95_ci": [
+            -0.07575757575757576,
+            -0.0446927374301676
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.05333333333333334,
+          "paired_family_95_ci": [
+            -0.06295907660020986,
+            -0.04398447606727038
+          ]
+        }
+      },
+      "clean": {
+        "correct": {
+          "difference": 0.1111111111111111,
+          "paired_family_95_ci": [
+            0.05941845764854614,
+            0.15988372093023256
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.1111111111111111,
+          "paired_family_95_ci": [
+            -0.15983026874115983,
+            -0.059369202226345084
+          ]
+        }
+      },
+      "typo_single": {
+        "correct": {
+          "difference": -0.058,
+          "paired_family_95_ci": [
+            -0.07718120805369127,
+            -0.036755386565272496
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.036,
+          "paired_family_95_ci": [
+            -0.04748062015503876,
+            -0.021604938271604937
+          ]
+        }
+      },
+      "typo_multi": {
+        "correct": {
+          "difference": -0.08,
+          "paired_family_95_ci": [
+            -0.11212121212121212,
+            -0.042821158690176324
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.1,
+          "paired_family_95_ci": [
+            -0.12931034482758622,
+            -0.07373271889400922
+          ]
+        }
+      },
+      "typo_real_word": {
+        "correct": {
+          "difference": -0.04,
+          "paired_family_95_ci": [
+            -0.0738255033557047,
+            -0.003436426116838488
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.048,
+          "paired_family_95_ci": [
+            -0.07650273224043716,
+            -0.02727272727272727
+          ]
+        }
+      },
+      "clean_oov": {
+        "correct": {
+          "difference": 0.4269340974212034,
+          "paired_family_95_ci": [
+            0.33557046979865773,
+            0.48945147679324896
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.4269340974212034,
+          "paired_family_95_ci": [
+            -0.4894366197183099,
+            -0.33557046979865773
+          ]
+        }
+      }
+    },
+    "frequencyBackoff": {
+      "typo": {
+        "correct": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        },
+        "wrong_commit": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "clean": {
+        "correct": {
+          "difference": 0.0006901311249137336,
+          "paired_family_95_ci": [
+            0.0,
+            0.0016313213703099511
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.0006901311249137336,
+          "paired_family_95_ci": [
+            -0.0016286644951140066,
+            0.0
+          ]
+        }
+      },
+      "typo_single": {
+        "correct": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        },
+        "wrong_commit": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "typo_multi": {
+        "correct": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        },
+        "wrong_commit": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "typo_real_word": {
+        "correct": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        },
+        "wrong_commit": {
+          "difference": 0.0,
+          "paired_family_95_ci": [
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "clean_oov": {
+        "correct": {
+          "difference": 0.0028653295128939827,
+          "paired_family_95_ci": [
+            0.0,
+            0.005201560468140442
+          ]
+        },
+        "wrong_commit": {
+          "difference": -0.0028653295128939827,
+          "paired_family_95_ci": [
+            -0.005199306759098787,
+            0.0
+          ]
+        }
+      }
+    }
+  },
+  "diagnostic_results": {
+    "wittenBell": [
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "possibly",
+          "receive"
+        ],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "for",
+          "definitely",
+          "decided"
+        ],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "could",
+          "definitely",
+          "receive"
+        ],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "thisbis",
+        "intended": "this is",
+        "context": [],
+        "choice": "this is",
+        "suggestions": [
+          "this is",
+          "thanks",
+          "thinks"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "sebd",
+        "intended": "send",
+        "context": [
+          "can",
+          "you"
+        ],
+        "choice": "send",
+        "suggestions": [
+          "send",
+          "se bd"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coudl",
+        "intended": "could",
+        "context": [
+          "this",
+          "work",
+          "running"
+        ],
+        "choice": "could",
+        "suggestions": [
+          "could"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "recieve",
+        "intended": "receive",
+        "context": [
+          "running",
+          "for",
+          "definitely"
+        ],
+        "choice": "receive",
+        "suggestions": [
+          "receive",
+          "received",
+          "recover"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "colour",
+        "intended": "colour",
+        "context": [],
+        "choice": "colour",
+        "suggestions": [
+          "colour",
+          "colours",
+          "coloured"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "favourite",
+        "intended": "favourite",
+        "context": [],
+        "choice": "favourite",
+        "suggestions": [
+          "favourite",
+          "favourites",
+          "favourite's"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "organise",
+        "intended": "organise",
+        "context": [],
+        "choice": "organise",
+        "suggestions": [
+          "organised",
+          "organise",
+          "organiser"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "brb",
+        "intended": "brb",
+        "context": [],
+        "choice": "brb",
+        "suggestions": [
+          "brb"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "ttyl",
+        "intended": "ttyl",
+        "context": [],
+        "choice": "ttyl",
+        "suggestions": [
+          "ttyl"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "tysm",
+        "intended": "tysm",
+        "context": [],
+        "choice": "tysm",
+        "suggestions": [
+          "tysm",
+          "ty sm"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "screenshots",
+        "intended": "screenshots",
+        "context": [],
+        "choice": "screenshots",
+        "suggestions": [
+          "screenshots",
+          "screen shots"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "passkeys",
+        "intended": "passkeys",
+        "context": [],
+        "choice": "passkeys",
+        "suggestions": [
+          "passkeys",
+          "pass keys"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "epistemology",
+        "intended": "epistemology",
+        "context": [],
+        "choice": "epistemology",
+        "suggestions": [
+          "epistemology"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "bengaluru",
+        "intended": "bengaluru",
+        "context": [],
+        "choice": "bengaluru",
+        "suggestions": [
+          "bengaluru"
+        ],
+        "passed": true
+      }
+    ],
+    "modifiedKneserNey": [
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [],
+        "choice": "coeevitjkn",
+        "suggestions": [
+          "coercion",
+          "correction",
+          "coeevitjkn"
+        ],
+        "passed": false
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "possibly",
+          "receive"
+        ],
+        "choice": "coeevitjkn",
+        "suggestions": [
+          "coercion",
+          "correction",
+          "coeevitjkn"
+        ],
+        "passed": false
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "for",
+          "definitely",
+          "decided"
+        ],
+        "choice": "coeevitjkn",
+        "suggestions": [
+          "coercion",
+          "correction",
+          "coeevitjkn"
+        ],
+        "passed": false
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "could",
+          "definitely",
+          "receive"
+        ],
+        "choice": "coeevitjkn",
+        "suggestions": [
+          "coercion",
+          "correction",
+          "coeevitjkn"
+        ],
+        "passed": false
+      },
+      {
+        "typed": "thisbis",
+        "intended": "this is",
+        "context": [],
+        "choice": "this is",
+        "suggestions": [
+          "this is",
+          "thinks",
+          "thanks"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "sebd",
+        "intended": "send",
+        "context": [
+          "can",
+          "you"
+        ],
+        "choice": "send",
+        "suggestions": [
+          "send",
+          "se bd"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coudl",
+        "intended": "could",
+        "context": [
+          "this",
+          "work",
+          "running"
+        ],
+        "choice": "could",
+        "suggestions": [
+          "could"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "recieve",
+        "intended": "receive",
+        "context": [
+          "running",
+          "for",
+          "definitely"
+        ],
+        "choice": "receive",
+        "suggestions": [
+          "receive",
+          "received",
+          "recover"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "colour",
+        "intended": "colour",
+        "context": [],
+        "choice": "colour",
+        "suggestions": [
+          "colour",
+          "coloured",
+          "colours"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "favourite",
+        "intended": "favourite",
+        "context": [],
+        "choice": "favourite",
+        "suggestions": [
+          "favourite",
+          "favourites",
+          "favourite's"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "organise",
+        "intended": "organise",
+        "context": [],
+        "choice": "organise",
+        "suggestions": [
+          "organise",
+          "organised",
+          "organiser"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "brb",
+        "intended": "brb",
+        "context": [],
+        "choice": "brb",
+        "suggestions": [
+          "brb"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "ttyl",
+        "intended": "ttyl",
+        "context": [],
+        "choice": "ttyl",
+        "suggestions": [
+          "ttyl"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "tysm",
+        "intended": "tysm",
+        "context": [],
+        "choice": "tysm",
+        "suggestions": [
+          "tysm",
+          "ty sm"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "screenshots",
+        "intended": "screenshots",
+        "context": [],
+        "choice": "screenshots",
+        "suggestions": [
+          "screenshots",
+          "screen shots"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "passkeys",
+        "intended": "passkeys",
+        "context": [],
+        "choice": "passkeys",
+        "suggestions": [
+          "passkeys",
+          "pass keys"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "epistemology",
+        "intended": "epistemology",
+        "context": [],
+        "choice": "epistemology",
+        "suggestions": [
+          "epistemology"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "bengaluru",
+        "intended": "bengaluru",
+        "context": [],
+        "choice": "bengaluru",
+        "suggestions": [
+          "bengaluru"
+        ],
+        "passed": true
+      }
+    ],
+    "frequencyBackoff": [
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "possibly",
+          "receive"
+        ],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "for",
+          "definitely",
+          "decided"
+        ],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coeevitjkn",
+        "intended": "correction",
+        "context": [
+          "could",
+          "definitely",
+          "receive"
+        ],
+        "choice": "correction",
+        "suggestions": [
+          "correction",
+          "coercion",
+          "coediting"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "thisbis",
+        "intended": "this is",
+        "context": [],
+        "choice": "this is",
+        "suggestions": [
+          "this is",
+          "thanks",
+          "thinks"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "sebd",
+        "intended": "send",
+        "context": [
+          "can",
+          "you"
+        ],
+        "choice": "send",
+        "suggestions": [
+          "send",
+          "se bd"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "coudl",
+        "intended": "could",
+        "context": [
+          "this",
+          "work",
+          "running"
+        ],
+        "choice": "could",
+        "suggestions": [
+          "could"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "recieve",
+        "intended": "receive",
+        "context": [
+          "running",
+          "for",
+          "definitely"
+        ],
+        "choice": "receive",
+        "suggestions": [
+          "receive",
+          "received",
+          "recover"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "colour",
+        "intended": "colour",
+        "context": [],
+        "choice": "colour",
+        "suggestions": [
+          "colour",
+          "colours",
+          "coloured"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "favourite",
+        "intended": "favourite",
+        "context": [],
+        "choice": "favourite",
+        "suggestions": [
+          "favourite",
+          "favourites",
+          "favourite's"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "organise",
+        "intended": "organise",
+        "context": [],
+        "choice": "organise",
+        "suggestions": [
+          "organised",
+          "organise",
+          "organiser"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "brb",
+        "intended": "brb",
+        "context": [],
+        "choice": "brb",
+        "suggestions": [
+          "brb"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "ttyl",
+        "intended": "ttyl",
+        "context": [],
+        "choice": "ttyl",
+        "suggestions": [
+          "ttyl"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "tysm",
+        "intended": "tysm",
+        "context": [],
+        "choice": "tysm",
+        "suggestions": [
+          "tysm",
+          "ty sm"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "screenshots",
+        "intended": "screenshots",
+        "context": [],
+        "choice": "screenshots",
+        "suggestions": [
+          "screenshots",
+          "screen shots"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "passkeys",
+        "intended": "passkeys",
+        "context": [],
+        "choice": "passkeys",
+        "suggestions": [
+          "passkeys",
+          "pass keys"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "epistemology",
+        "intended": "epistemology",
+        "context": [],
+        "choice": "epistemology",
+        "suggestions": [
+          "epistemology"
+        ],
+        "passed": true
+      },
+      {
+        "typed": "bengaluru",
+        "intended": "bengaluru",
+        "context": [],
+        "choice": "bengaluru",
+        "suggestions": [
+          "bengaluru"
+        ],
+        "passed": true
+      }
+    ]
+  },
+  "candidate_gap_analysis": {
+    "wittenBell": {
+      "wrong_commit_gold_present": 250,
+      "correct_commit": 1267,
+      "gold_present_but_not_commit_winner": 43,
+      "gold_absent_from_published_candidates": 46,
+      "gold_winner_but_abstained": 44
+    },
+    "modifiedKneserNey": {
+      "wrong_commit_gold_present": 176,
+      "correct_commit": 1167,
+      "gold_present_but_not_commit_winner": 70,
+      "gold_winner_but_abstained": 191,
+      "gold_absent_from_published_candidates": 46
+    },
+    "frequencyBackoff": {
+      "wrong_commit_gold_present": 250,
+      "correct_commit": 1267,
+      "gold_present_but_not_commit_winner": 43,
+      "gold_absent_from_published_candidates": 46,
+      "gold_winner_but_abstained": 44
+    }
+  },
+  "incremental_cases": {
+    "wittenBell": 148,
+    "modifiedKneserNey": 148,
+    "frequencyBackoff": 148
+  },
+  "result_sha256": {
+    "wittenBell": "2afbf878a80b5cdff936cbf37e0e30e4d3f998ee1fe148e87589798c733502ec",
+    "modifiedKneserNey": "fd5ce5d429880ec4cbae6681f64b2dc64c21fcbed3fe10ce49190a4b4cfd1535",
+    "frequencyBackoff": "0f51d62255dfae2e85b475ca363812ccb101caa20fbd6aaa520d84ad1eb3c8fe"
+  }
+}

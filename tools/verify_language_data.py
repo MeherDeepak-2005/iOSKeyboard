@@ -20,8 +20,8 @@ class Pack:
         magic, self.version, self.words, self.bi_contexts, self.bi_entries, \
             self.tri_contexts, self.tri_entries, self.trie_nodes, self.starters = \
             struct.unpack_from("<9I", self.data, 0)
-        if magic != MAGIC or self.version not in (4, 5):
-            raise ValueError(f"{path}: expected langdata v4 or v5")
+        if magic != MAGIC or self.version not in (4, 5, 6):
+            raise ValueError(f"{path}: expected langdata v4, v5 or v6")
         self.freq_base = 36
         self.offsets_base = self.freq_base + 4 * self.words
         self.bi_base = self.offsets_base + 4 * (self.words + 1)
@@ -80,9 +80,13 @@ class Pack:
                 w1, w2, total, start, count = struct.unpack_from(
                     "<IIIII", self.data, self.tri_base + 20 * index)
                 if w1 != EMPTY32:
-                    output[(w1 << 16) | w2] = (
+                    output[(w1, w2) if self.version == 6 else (w1 << 16) | w2] = (
                         total, self.entries(self.tri_entries_base, start, count))
         return output
+
+    @staticmethod
+    def context_pair(key):
+        return key if isinstance(key, tuple) else (key >> 16, key & 65535)
 
     def trie(self):
         records = []
@@ -112,16 +116,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("reference", type=Path)
     parser.add_argument("candidate", type=Path)
-    parser.add_argument("--max-bytes", type=int, default=11_000_000)
+    parser.add_argument("--max-bytes", type=int)
     args = parser.parse_args()
     old, new = Pack(args.reference), Pack(args.candidate)
     checks = {
         "vocabulary/frequencies": old.vocabulary() == new.vocabulary(),
         "bigrams": old.bigrams() == new.bigrams(),
-        "trigrams": old.trigrams() == new.trigrams(),
+        "trigrams": {old.context_pair(k): v for k, v in old.trigrams().items()}
+            == {new.context_pair(k): v for k, v in new.trigrams().items()},
         "trie": old.trie() == new.trie(),
         "sentence starters": old.sentence_starters() == new.sentence_starters(),
-        "candidate size": len(new.data) <= args.max_bytes,
+        "candidate size": len(new.data) <= (args.max_bytes if args.max_bytes is not None else (20_000_000 if new.version == 6 else 11_000_000)),
     }
     failures = [name for name, passed in checks.items() if not passed]
     if failures:

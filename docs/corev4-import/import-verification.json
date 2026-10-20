@@ -1,0 +1,14 @@
+{
+  "original_assets_verified": 28,
+  "export_checksums_verified": 5,
+  "core_stored_forms": 108202,
+  "core_forms_in_active_pack": 108198,
+  "intentional_contraction_exclusions": [
+    "cant",
+    "im",
+    "lets",
+    "wont"
+  ],
+  "active_pack_forms": 114283,
+  "active_pack_sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4"
+}

@@ -1,0 +1,967 @@
+{
+  "frozen_policy": {
+    "oovMargin": 3.0,
+    "realWordMargin": 5.0,
+    "closeRescueMargin": 0.0,
+    "closeRescueGap": 0.5,
+    "minimumCloseGap": 0.25,
+    "closeRescueMaxCost": 1.2
+  },
+  "policy_sha256": "b3d6f9e26ce8903f97e3a221837f5a7ff815ca3ca6d039edf0dd0f93beb0ff58",
+  "dataset_manifest": {
+    "seed": 4419026,
+    "split_rule": "SHA256(mkn-calibration-v1:+family) first 32 bits mod 10 < 6 -> development",
+    "counts": {
+      "validation:clean_oov": 349,
+      "validation:typo_real_word": 250,
+      "development:clean_known": 1000,
+      "development:typo_single": 1000,
+      "validation:typo_multi": 400,
+      "validation:typo_single": 1000,
+      "development:typo_multi": 400,
+      "development:clean_oov": 420,
+      "validation:clean_known": 1000,
+      "development:clean_contraction": 100,
+      "development:typo_real_word": 250,
+      "validation:clean_contraction": 100
+    },
+    "families": {
+      "development": [
+        "masc_500k_texts/spoken/debate-transcript/3rd_Bush-Kerry",
+        "masc_500k_texts/written/blog/Seedbombing",
+        "masc_500k_texts/written/blog/Tupelo-Honey-Cafe",
+        "masc_500k_texts/written/email/12174",
+        "masc_500k_texts/written/email/210343",
+        "masc_500k_texts/written/email/21257",
+        "masc_500k_texts/written/email/52201",
+        "masc_500k_texts/written/email/53536",
+        "masc_500k_texts/written/email/53555",
+        "masc_500k_texts/written/email/54261",
+        "masc_500k_texts/written/email/54536",
+        "masc_500k_texts/written/email/54537",
+        "masc_500k_texts/written/jokes/jokes10",
+        "masc_500k_texts/written/jokes/jokes11",
+        "masc_500k_texts/written/jokes/jokes2",
+        "masc_500k_texts/written/letters/110CYL068",
+        "masc_500k_texts/written/letters/110CYL072",
+        "masc_500k_texts/written/letters/112C-L014",
+        "masc_500k_texts/written/letters/114CUL059",
+        "masc_500k_texts/written/letters/118CWL049",
+        "masc_500k_texts/written/letters/alumnifund1",
+        "masc_500k_texts/written/letters/aspca1",
+        "masc_500k_texts/written/letters/united1",
+        "masc_500k_texts/written/letters/warner1",
+        "masc_500k_texts/written/newspaper:newswire/20000424_nyt-NEW",
+        "masc_500k_texts/written/newspaper:newswire/A1.E2-NEW",
+        "masc_500k_texts/written/newspaper:newswire/wsj_1640.mrg-NEW",
+        "masc_500k_texts/written/spam/111363",
+        "masc_500k_texts/written/spam/111373",
+        "masc_500k_texts/written/spam/111381",
+        "masc_500k_texts/written/spam/111425",
+        "masc_500k_texts/written/spam/114428",
+        "masc_500k_texts/written/spam/114445",
+        "masc_500k_texts/written/spam/Earnings_Season_Underway",
+        "masc_500k_texts/written/spam/ucb10",
+        "masc_500k_texts/written/spam/ucb14",
+        "masc_500k_texts/written/spam/ucb22",
+        "masc_500k_texts/written/spam/ucb26",
+        "masc_500k_texts/written/spam/ucb44",
+        "masc_500k_texts/written/spam/ucb45",
+        "masc_500k_texts/written/spam/ucb6",
+        "masc_500k_texts/written/spam/ucb8",
+        "masc_500k_texts/written/technical/1471-213X",
+        "masc_500k_texts/written/technical/pmed.0010029",
+        "masc_500k_texts/written/technical/rr166",
+        "masc_500k_texts/written/travel-guides/HistoryGreek",
+        "masc_500k_texts/written/travel-guides/IntroHongKong"
+      ],
+      "validation": [
+        "masc_500k_texts/spoken/telephone/sw2025-ms98-a-trans",
+        "masc_500k_texts/spoken/telephone/sw2078-ms98-a-trans",
+        "masc_500k_texts/written/blog/Anti-Terrorist",
+        "masc_500k_texts/written/blog/blog-monastery",
+        "masc_500k_texts/written/blog/vampires",
+        "masc_500k_texts/written/email/175841",
+        "masc_500k_texts/written/email/230685",
+        "masc_500k_texts/written/email/enron-thread",
+        "masc_500k_texts/written/ficlets/1403",
+        "masc_500k_texts/written/fiction/lw1",
+        "masc_500k_texts/written/letters/112C-L015",
+        "masc_500k_texts/written/letters/112C-L016",
+        "masc_500k_texts/written/letters/AMC2",
+        "masc_500k_texts/written/letters/audubon2",
+        "masc_500k_texts/written/newspaper:newswire/20000419_apw_eng-NEW",
+        "masc_500k_texts/written/spam/111364",
+        "masc_500k_texts/written/spam/111371",
+        "masc_500k_texts/written/spam/114440",
+        "masc_500k_texts/written/spam/114446",
+        "masc_500k_texts/written/spam/new_clients",
+        "masc_500k_texts/written/spam/ucb48",
+        "masc_500k_texts/written/spam/ucb53",
+        "masc_500k_texts/written/technical/1468",
+        "masc_500k_texts/written/travel-guides/HistoryJerusalem"
+      ]
+    },
+    "pack_sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4",
+    "heldout_sha256": "bd9129ca750c658969e02c9612fa4686e7ce8aba1e25f0604c94859dd3dab775",
+    "all_requests_sha256": "fbcc83b02b2f60cb5cc94ac4ffc2786c48ed571592a74489e6a5ac7b71d27293",
+    "limits": [
+      "Underlying MASC corpus aggregate was inspected in earlier smoothing comparison; this is a new family-disjoint calibration split, not a newly blinded corpus.",
+      "Synthetic errors; source OOV spellings are preservation labels, not independently reviewed names.",
+      "Gold intended word is supplied only to evaluator, never to the engine. No personalization learning during replay."
+    ]
+  },
+  "full_engine_validation": [
+    {
+      "slice": "typo",
+      "cases": 1650,
+      "baseline": {
+        "cases": 1650,
+        "correct": 1167,
+        "wrong_commit": 196,
+        "changed": 1363,
+        "unfixed": 287
+      },
+      "selected": {
+        "cases": 1650,
+        "correct": 1208,
+        "wrong_commit": 168,
+        "changed": 1376,
+        "unfixed": 274
+      },
+      "correct_difference_95_ci": [
+        0.015748031496062992,
+        0.03401700850425213
+      ],
+      "wrong_commit_difference_95_ci": [
+        -0.024789029535864978,
+        -0.007846556233653008
+      ]
+    },
+    {
+      "slice": "clean",
+      "cases": 1449,
+      "baseline": {
+        "cases": 1449,
+        "correct": 1329,
+        "wrong_commit": 120,
+        "changed": 120,
+        "unfixed": 0
+      },
+      "selected": {
+        "cases": 1449,
+        "correct": 1329,
+        "wrong_commit": 120,
+        "changed": 120,
+        "unfixed": 0
+      },
+      "correct_difference_95_ci": [
+        -0.0025412960609911056,
+        0.003472222222222222
+      ],
+      "wrong_commit_difference_95_ci": [
+        -0.003468208092485549,
+        0.002544529262086514
+      ]
+    },
+    {
+      "slice": "typo_single",
+      "cases": 1000,
+      "baseline": {
+        "cases": 1000,
+        "correct": 794,
+        "wrong_commit": 109,
+        "changed": 903,
+        "unfixed": 97
+      },
+      "selected": {
+        "cases": 1000,
+        "correct": 839,
+        "wrong_commit": 84,
+        "changed": 923,
+        "unfixed": 77
+      },
+      "correct_difference_95_ci": [
+        0.031042128603104215,
+        0.05955143078112916
+      ],
+      "wrong_commit_difference_95_ci": [
+        -0.03557910673732021,
+        -0.012594458438287154
+      ]
+    },
+    {
+      "slice": "typo_multi",
+      "cases": 400,
+      "baseline": {
+        "cases": 400,
+        "correct": 250,
+        "wrong_commit": 65,
+        "changed": 315,
+        "unfixed": 85
+      },
+      "selected": {
+        "cases": 400,
+        "correct": 246,
+        "wrong_commit": 62,
+        "changed": 308,
+        "unfixed": 92
+      },
+      "correct_difference_95_ci": [
+        -0.01912568306010929,
+        -0.002702702702702703
+      ],
+      "wrong_commit_difference_95_ci": [
+        -0.017892644135188866,
+        0.005012531328320802
+      ]
+    },
+    {
+      "slice": "typo_real_word",
+      "cases": 250,
+      "baseline": {
+        "cases": 250,
+        "correct": 123,
+        "wrong_commit": 22,
+        "changed": 145,
+        "unfixed": 105
+      },
+      "selected": {
+        "cases": 250,
+        "correct": 123,
+        "wrong_commit": 22,
+        "changed": 145,
+        "unfixed": 105
+      },
+      "correct_difference_95_ci": [
+        0.0,
+        0.0
+      ],
+      "wrong_commit_difference_95_ci": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "slice": "clean_known",
+      "cases": 1000,
+      "baseline": {
+        "cases": 1000,
+        "correct": 998,
+        "wrong_commit": 2,
+        "changed": 2,
+        "unfixed": 0
+      },
+      "selected": {
+        "cases": 1000,
+        "correct": 998,
+        "wrong_commit": 2,
+        "changed": 2,
+        "unfixed": 0
+      },
+      "correct_difference_95_ci": [
+        0.0,
+        0.0
+      ],
+      "wrong_commit_difference_95_ci": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "slice": "clean_oov",
+      "cases": 349,
+      "baseline": {
+        "cases": 349,
+        "correct": 231,
+        "wrong_commit": 118,
+        "changed": 118,
+        "unfixed": 0
+      },
+      "selected": {
+        "cases": 349,
+        "correct": 231,
+        "wrong_commit": 118,
+        "changed": 118,
+        "unfixed": 0
+      },
+      "correct_difference_95_ci": [
+        -0.01056338028169014,
+        0.0234375
+      ],
+      "wrong_commit_difference_95_ci": [
+        -0.023391812865497075,
+        0.01056338028169014
+      ]
+    },
+    {
+      "slice": "clean_contraction",
+      "cases": 100,
+      "baseline": {
+        "cases": 100,
+        "correct": 100,
+        "wrong_commit": 0,
+        "changed": 0,
+        "unfixed": 0
+      },
+      "selected": {
+        "cases": 100,
+        "correct": 100,
+        "wrong_commit": 0,
+        "changed": 0,
+        "unfixed": 0
+      },
+      "correct_difference_95_ci": [
+        0.0,
+        0.0
+      ],
+      "wrong_commit_difference_95_ci": [
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "validation_cases": 3099,
+  "incremental_cases": 148,
+  "actual_engine_policy_mismatches": [],
+  "selected_vs_captured_baseline_pool_mismatch_ids": [],
+  "baseline_drift_ids": [],
+  "comparison": "Baseline and selected policy use identical final full-engine gate evidence; direct/guarded outcomes with no gate are held fixed. Selected decisions verified against real DecodeSnapshot.correction.",
+  "validation_engine_sha256": "842010479e03f9a0e352b878acdf397ce4c1d92cd0f2b410239ed16aea7bf6f1",
+  "examples": [
+    {
+      "id": 55,
+      "typed": "cullimg",
+      "intended": "culling",
+      "baseline": "cullimg",
+      "selected": "culling",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "culling",
+        "candidateGap": 2.622222536821763,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "cullimg",
+        "typedMargin": 1.423107108907205
+      }
+    },
+    {
+      "id": 217,
+      "typed": "assidting",
+      "intended": "assisting",
+      "baseline": "assidting",
+      "selected": "assisting",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "assisting",
+        "candidateGap": 1.8358752623889618,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "assidting",
+        "typedMargin": 2.711562287749265
+      }
+    },
+    {
+      "id": 222,
+      "typed": "stevs",
+      "intended": "steve",
+      "baseline": "steve's",
+      "selected": "stevs",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "steve's",
+        "candidateGap": 0,
+        "kind": "close",
+        "spatialCost": 2,
+        "typed": "stevs",
+        "typedMargin": 4.336253650030885
+      }
+    },
+    {
+      "id": 294,
+      "typed": "opposung",
+      "intended": "opposing",
+      "baseline": "opposung",
+      "selected": "opposing",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "opposing",
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "opposung",
+        "typedMargin": 2.8422020823548504
+      }
+    },
+    {
+      "id": 422,
+      "typed": "blea",
+      "intended": "bleak",
+      "baseline": "blew",
+      "selected": "blea",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "blew",
+        "candidateGap": 0.2399871867863279,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "blea",
+        "typedMargin": 4.495469843271522
+      }
+    },
+    {
+      "id": 451,
+      "typed": "procuremsnt",
+      "intended": "procurement",
+      "baseline": "procuremsnt",
+      "selected": "procurement",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "procurement",
+        "candidateGap": 3.756849236045287,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "procuremsnt",
+        "typedMargin": 1.4397933902132714
+      }
+    },
+    {
+      "id": 453,
+      "typed": "picw",
+      "intended": "price",
+      "baseline": "picw",
+      "selected": "pics",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "pics",
+        "candidateGap": 0.6059219368028632,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "picw",
+        "typedMargin": 1.091066046540588
+      }
+    },
+    {
+      "id": 469,
+      "typed": "othets",
+      "intended": "others",
+      "baseline": "other's",
+      "selected": "othets",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "other's",
+        "candidateGap": 0,
+        "kind": "close",
+        "spatialCost": 1.2000000000000002,
+        "typed": "othets",
+        "typedMargin": 11.416304057067407
+      }
+    },
+    {
+      "id": 492,
+      "typed": "demeaner",
+      "intended": "demeaner",
+      "baseline": "demeaner",
+      "selected": "demeaned",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "demeaned",
+        "candidateGap": 0.5175819081401016,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "demeaner",
+        "typedMargin": 0.29826123317171493
+      }
+    },
+    {
+      "id": 547,
+      "typed": "paddld",
+      "intended": "paddle",
+      "baseline": "paddld",
+      "selected": "paddle",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "paddle",
+        "candidateGap": 1.7209483854908587,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "paddld",
+        "typedMargin": 2.781662014426317
+      }
+    },
+    {
+      "id": 571,
+      "typed": "micheole",
+      "intended": "michelle",
+      "baseline": "micheole",
+      "selected": "michelle",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "michelle",
+        "candidateGap": 1.161287883787729,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "micheole",
+        "typedMargin": 2.597784079855259
+      }
+    },
+    {
+      "id": 612,
+      "typed": "evalhating",
+      "intended": "evaluating",
+      "baseline": "evalhating",
+      "selected": "evaluating",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "evaluating",
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "evalhating",
+        "typedMargin": 0.8147277963381576
+      }
+    },
+    {
+      "id": 655,
+      "typed": "ouflay",
+      "intended": "outlay",
+      "baseline": "ouflay",
+      "selected": "outlay",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "outlay",
+        "candidateGap": 2.3309112543266455,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "ouflay",
+        "typedMargin": 1.1279270285059209
+      }
+    },
+    {
+      "id": 676,
+      "typed": "pressntly",
+      "intended": "presently",
+      "baseline": "pressntly",
+      "selected": "presently",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "presently",
+        "candidateGap": 5.0206116489007435,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "pressntly",
+        "typedMargin": 2.7035558030687277
+      }
+    },
+    {
+      "id": 678,
+      "typed": "dederved",
+      "intended": "deserved",
+      "baseline": "deserve",
+      "selected": "dederved",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "deserve",
+        "candidateGap": 0.1966013045755659,
+        "kind": "close",
+        "spatialCost": 2.4000000000000004,
+        "typed": "dederved",
+        "typedMargin": 4.090100377929518
+      }
+    },
+    {
+      "id": 684,
+      "typed": "facs",
+      "intended": "face",
+      "baseline": "face's",
+      "selected": "facs",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "face's",
+        "candidateGap": 0,
+        "kind": "close",
+        "spatialCost": 1.7976931348623157e+308,
+        "typed": "facs",
+        "typedMargin": 10.809711859821672
+      }
+    },
+    {
+      "id": 690,
+      "typed": "recufrent",
+      "intended": "recurrent",
+      "baseline": "recufrent",
+      "selected": "recurrent",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "recurrent",
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "recufrent",
+        "typedMargin": 0.5801839510444768
+      }
+    },
+    {
+      "id": 767,
+      "typed": "sunscribed",
+      "intended": "subscribed",
+      "baseline": "sunscribed",
+      "selected": "subscribed",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "subscribed",
+        "candidateGap": 0.8006076047628561,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "sunscribed",
+        "typedMargin": 2.1270338922349694
+      }
+    },
+    {
+      "id": 869,
+      "typed": "fjols",
+      "intended": "fills",
+      "baseline": "fills",
+      "selected": "fjols",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "fills",
+        "candidateGap": 0.12598141538339647,
+        "kind": "close",
+        "spatialCost": 1.85,
+        "typed": "fjols",
+        "typedMargin": 3.2944423743582245
+      }
+    },
+    {
+      "id": 874,
+      "typed": "cushilns",
+      "intended": "cushions",
+      "baseline": "cushilns",
+      "selected": "cushions",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "cushions",
+        "candidateGap": 2.1035493533379626,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "cushilns",
+        "typedMargin": 2.4969706546222685
+      }
+    },
+    {
+      "id": 877,
+      "typed": "collijs",
+      "intended": "collins",
+      "baseline": "collijs",
+      "selected": "collins",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "collins",
+        "candidateGap": 2.9464815767495445,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "collijs",
+        "typedMargin": 2.5438848905107676
+      }
+    },
+    {
+      "id": 894,
+      "typed": "multifudes",
+      "intended": "multitudes",
+      "baseline": "multifudes",
+      "selected": "multitudes",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "multitudes",
+        "candidateGap": 1.9142725785721293,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "multifudes",
+        "typedMargin": 2.044728758889045
+      }
+    },
+    {
+      "id": 910,
+      "typed": "senss",
+      "intended": "sense",
+      "baseline": "sense's",
+      "selected": "senss",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "sense's",
+        "candidateGap": 0,
+        "kind": "close",
+        "spatialCost": 2,
+        "typed": "senss",
+        "typedMargin": 14.3953146000654
+      }
+    },
+    {
+      "id": 982,
+      "typed": "radicalizes",
+      "intended": "radicalizes",
+      "baseline": "radicalizes",
+      "selected": "radicalized",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "radicalized",
+        "candidateGap": 2.0232612331717164,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "radicalizes",
+        "typedMargin": 0.6312053873396994
+      }
+    },
+    {
+      "id": 999,
+      "typed": "fluanting",
+      "intended": "fluanting",
+      "baseline": "fluanting",
+      "selected": "flaunting",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "flaunting",
+        "candidateGap": 3.3518227111292234,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "fluanting",
+        "typedMargin": 1.6556263998155547
+      }
+    },
+    {
+      "id": 1109,
+      "typed": "liffs",
+      "intended": "lifts",
+      "baseline": "life's",
+      "selected": "liffs",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "life's",
+        "candidateGap": 0,
+        "kind": "close",
+        "spatialCost": 2.325,
+        "typed": "liffs",
+        "typedMargin": 7.265355957590392
+      }
+    },
+    {
+      "id": 1152,
+      "typed": "comprehendion",
+      "intended": "comprehension",
+      "baseline": "comprehendion",
+      "selected": "comprehension",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "comprehension",
+        "candidateGap": 4.148298060044379,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "comprehendion",
+        "typedMargin": 2.936691674665216
+      }
+    },
+    {
+      "id": 1195,
+      "typed": "ninjs",
+      "intended": "ninja",
+      "baseline": "nine's",
+      "selected": "ninjs",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "nine's",
+        "candidateGap": 0,
+        "kind": "close",
+        "spatialCost": 1.7976931348623157e+308,
+        "typed": "ninjs",
+        "typedMargin": 5.8176590770812755
+      }
+    },
+    {
+      "id": 1201,
+      "typed": "excludijg",
+      "intended": "excluding",
+      "baseline": "excludijg",
+      "selected": "excluding",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "excluding",
+        "candidateGap": 3.29971202195334,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "excludijg",
+        "typedMargin": 2.4082077213500117
+      }
+    },
+    {
+      "id": 1221,
+      "typed": "ymur",
+      "intended": "your",
+      "baseline": "ymur",
+      "selected": "ymir",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "ymir",
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "ymur",
+        "typedMargin": 0.6579437213085004
+      }
+    },
+    {
+      "id": 1299,
+      "typed": "ingerventions",
+      "intended": "interventions",
+      "baseline": "ingerventions",
+      "selected": "interventions",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "interventions",
+        "candidateGap": 0.8224789979724427,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "ingerventions",
+        "typedMargin": 2.1029755632213316
+      }
+    },
+    {
+      "id": 1430,
+      "typed": "finslizing",
+      "intended": "finalizing",
+      "baseline": "finslizing",
+      "selected": "finalizing",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "finalizing",
+        "candidateGap": 2.0429404179174586,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "finslizing",
+        "typedMargin": 0.6508845720854417
+      }
+    },
+    {
+      "id": 1562,
+      "typed": "usdlessly",
+      "intended": "uselessly",
+      "baseline": "usdlessly",
+      "selected": "uselessly",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "uselessly",
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "usdlessly",
+        "typedMargin": 1.2632291670724456
+      }
+    },
+    {
+      "id": 1576,
+      "typed": "madneds",
+      "intended": "madness",
+      "baseline": "madneds",
+      "selected": "madness",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "madness",
+        "candidateGap": 11.374292063930671,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "madneds",
+        "typedMargin": 2.6335734960658197
+      }
+    },
+    {
+      "id": 1588,
+      "typed": "pasadenq",
+      "intended": "pasadena",
+      "baseline": "pasadenq",
+      "selected": "pasadena",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "pasadena",
+        "candidateGap": 3.7981884281919704,
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "pasadenq",
+        "typedMargin": 1.0811325823599542
+      }
+    },
+    {
+      "id": 1624,
+      "typed": "reatrain",
+      "intended": "restrain",
+      "baseline": "reatrain",
+      "selected": "restrain",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "restrain",
+        "candidateGap": 0.5120779180058985,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "reatrain",
+        "typedMargin": 2.0899003107591625
+      }
+    },
+    {
+      "id": 1640,
+      "typed": "epietemology",
+      "intended": "epistemology",
+      "baseline": "epietemology",
+      "selected": "epistemology",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "epistemology",
+        "kind": "close",
+        "spatialCost": 0.925,
+        "typed": "epietemology",
+        "typedMargin": 0.7326358817395349
+      }
+    },
+    {
+      "id": 1703,
+      "typed": "falen",
+      "intended": "fallen",
+      "baseline": "fake",
+      "selected": "falen",
+      "gate": {
+        "allowsCloseRescue": false,
+        "candidate": "fake",
+        "candidateGap": 0.10074286835599189,
+        "kind": "close",
+        "spatialCost": 2.4000000000000004,
+        "typed": "falen",
+        "typedMargin": 4.343534434318968
+      }
+    },
+    {
+      "id": 1730,
+      "typed": "oblihated",
+      "intended": "obligated",
+      "baseline": "oblihated",
+      "selected": "obligated",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "obligated",
+        "candidateGap": 1.8133178064140338,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "oblihated",
+        "typedMargin": 2.0519283485026154
+      }
+    },
+    {
+      "id": 1763,
+      "typed": "musclez",
+      "intended": "muscles",
+      "baseline": "muscles",
+      "selected": "musclez",
+      "gate": {
+        "allowsCloseRescue": true,
+        "candidate": "muscles",
+        "candidateGap": 0.15668071004899176,
+        "kind": "close",
+        "spatialCost": 0.8,
+        "typed": "musclez",
+        "typedMargin": 4.832173055513106
+      }
+    }
+  ]
+}

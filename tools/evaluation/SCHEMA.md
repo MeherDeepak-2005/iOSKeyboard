@@ -65,3 +65,46 @@ is. False-correction rate is conditioned on already-correct input; missed-correc
 rate is conditioned on actual typo input, so neither denominator is diluted by
 ineligible cases. The report intentionally does not claim production readiness;
 physical-device memory, energy, and jetsam tests remain separate release gates.
+
+## Severe-typo runtime benchmark
+
+`keyboardTests/SevereTypoBenchmark.swift` replays `coeevitjkn → correction`
+through the Swift engine with empty context, `auto`, and three recorded live
+contexts. Each mode/context uses a fresh engine, one first decode and 30 repeated
+warm decodes. It records suggestions, the boundary correction, candidate evidence,
+and decode timing to `results/coeevitjkn-simulator.json`. No expected answer is
+injected into the candidate pool. These repeated inputs measure this particular
+benchmark, not population recall or ordinary incremental-typing latency.
+
+Run with an optimized simulator build:
+
+```bash
+xcodebuild -project keyboard.xcodeproj -scheme keyboard -configuration Release \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -only-testing:keyboardTests/SevereTypoBenchmark -parallel-testing-enabled NO \
+  ENABLE_TESTABILITY=YES CODE_SIGNING_ALLOWED=NO test
+```
+
+Without trained artifacts, the report explicitly records the neural mode as
+unavailable. To compare a real scorer, create
+`/tmp/ioskeyboard-severe-benchmark-config.json` with absolute paths:
+
+```json
+{
+  "kind": "gru",
+  "model": "/path/to/trained/gru.mlpackage",
+  "tokenizer": "/path/to/matching/gru_tokenizer.bin",
+  "scoreModel": "/path/to/gru_score.mlpackage"
+}
+```
+
+`scoreModel` is optional. Use `kind: "transformer"` with a matching transformer
+package and runtime binary tokenizer for the W8 route. Compiled `.mlmodelc` step
+or transformer models are accepted too. The scorer is injected directly; no
+neural generation prior is installed. GRU-tier decoding still uses its tier's
+candidate-cap and multiword behavior, so that comparison is an end-to-end mode
+comparison rather than a fixed-pool reranking experiment. Model load and engine
+synchronous construction are outside the reported decode timers. The first
+decode includes queued engine initialization (lexicon/personalization/index warmup);
+warm decodes are reported separately. Simulator timing and RAM
+must not be presented as physical-iPhone measurements.

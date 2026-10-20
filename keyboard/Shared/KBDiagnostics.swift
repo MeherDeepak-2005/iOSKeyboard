@@ -1,3 +1,5 @@
+// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 import os
 
@@ -24,6 +26,13 @@ enum KBDiagnostics {
 		// Word-start search-space setup latency (Gboard's UpdateLM analog): the decode that
 		// builds the prediction/context search space when a new word begins.
 		var initLatencyBins: [Int]?
+		var searchPriorLatencyBins: [Int]?
+		var searchPriorCompleted: Int?
+		var searchPriorCancelled: Int?
+		var searchPriorCacheHits: Int?
+		var searchPriorCacheMisses: Int?
+		var neuralFundedDecodes: Int?
+		var ngramFundedDecodes: Int?
 
 		// MARK: Typing-quality benchmark metrics (aggregate counters only — never any text).
 		// These let the keyboard be measured against Gboard's TypingTester pillars. Each is a
@@ -63,6 +72,10 @@ enum KBDiagnostics {
 	/// ordinary mid-word tap decode.
 	static func recordInitializationLatency(milliseconds: Double) {
 		recordLatency(.initialization, milliseconds: milliseconds)
+	}
+
+	static func recordSearchPrior(milliseconds: Double = 0, state: String) {
+		metricsQueue.async { Recorder.shared.recordSearchPrior(milliseconds: milliseconds, state: state) }
 	}
 
 	static func beginHostInsert() -> OSSignpostID {
@@ -161,7 +174,7 @@ enum KBDiagnostics {
 	static func reset() {
 		store.removeObject(forKey: key)
 		// NEURAL_DEBUG_TELEMETRY_REMOVE
-		#if DEBUG || INTERNAL_NEURAL
+		#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
 		store.removeObject(forKey: neuralDebugKey)
 		#endif
 		Recorder.shared.clear()
@@ -170,7 +183,7 @@ enum KBDiagnostics {
 	// MARK: DEBUG-only neural ranking telemetry
 	// NEURAL_DEBUG_TELEMETRY_REMOVE: remove every block carrying this marker in
 	// KBDiagnostics.swift, Keyboardengine.swift, and ContentView.swift after promotion.
-	#if DEBUG || INTERNAL_NEURAL
+	#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
 	struct NeuralRankRowSnapshot: Codable, Equatable, Identifiable {
 		var id: String { "\(finalRank)-\(word)" }
 		let word: String
@@ -513,6 +526,24 @@ enum KBDiagnostics {
 			tick += 1
 			if tick % 32 == 0 { persistLocked() }
 			lock.unlock()
+		}
+
+		func recordSearchPrior(milliseconds: Double, state: String) {
+			lock.lock(); defer { lock.unlock() }
+			switch state {
+			case "completed": snap.searchPriorCompleted = (snap.searchPriorCompleted ?? 0) + 1
+			case "cancelled": snap.searchPriorCancelled = (snap.searchPriorCancelled ?? 0) + 1
+			case "hit": snap.searchPriorCacheHits = (snap.searchPriorCacheHits ?? 0) + 1
+			case "miss": snap.searchPriorCacheMisses = (snap.searchPriorCacheMisses ?? 0) + 1
+			case "neural-funded": snap.neuralFundedDecodes = (snap.neuralFundedDecodes ?? 0) + 1
+			case "ngram-funded": snap.ngramFundedDecodes = (snap.ngramFundedDecodes ?? 0) + 1
+			default: return
+			}
+			if state == "completed" || state == "cancelled" {
+				snap.searchPriorLatencyBins = bucket(snap.searchPriorLatencyBins, milliseconds)
+			}
+			tick += 1
+			if tick % 32 == 0 { persistLocked() }
 		}
 
 		// MARK: Typing-quality accumulators

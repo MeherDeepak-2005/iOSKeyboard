@@ -1,0 +1,44 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project /Users/meherdeepak/iOSKeyboard/keyboard.xcodeproj -scheme keyboard -configuration Debug -destination "platform=iOS Simulator,name=iPhone 17 Pro" -derivedDataPath /tmp/ioskeyboard-mkn-derived CODE_SIGNING_ALLOWED=NO test-without-building "-only-testing:keyboardTests/CorrectionCalibrationTests/replayFrozenCalibrationRequests()"
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+2026-10-19 23:02:36.388761+0530 keyboard[68841:1730881] [unspecified] container_create_or_lookup_app_group_path_by_app_group_identifier: client is not entitled
+Test Suite 'Selected tests' started at 2026-10-19 23:02:38.308.
+Test Suite 'keyboardTests.xctest' started at 2026-10-19 23:02:38.310.
+Test Suite 'keyboardTests.xctest' passed at 2026-10-19 23:02:38.310.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-19 23:02:38.310.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.002) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64-apple-ios13.0-simulator
+◇ Suite CorrectionCalibrationTests started.
+◇ Test replayFrozenCalibrationRequests() started.
+CORRECTION_REPLAY 250/3117
+CORRECTION_REPLAY 500/3117
+CORRECTION_REPLAY 750/3117
+CORRECTION_REPLAY 1000/3117
+CORRECTION_REPLAY 1250/3117
+CORRECTION_REPLAY 1500/3117
+CORRECTION_REPLAY 1750/3117
+CORRECTION_REPLAY 2000/3117
+CORRECTION_REPLAY 2250/3117
+CORRECTION_REPLAY 2500/3117
+CORRECTION_REPLAY 2750/3117
+CORRECTION_REPLAY 3000/3117
+CORRECTION_REPLAY_COMPLETE 3117 output=/Users/meherdeepak/iOSKeyboard/tools/evaluation/results/engine-smoothing-2026-10-19/modifiedKneserNey.jsonl
+✔ Test replayFrozenCalibrationRequests() passed after 87.890 seconds.
+✔ Suite CorrectionCalibrationTests passed after 87.893 seconds.
+✔ Test run with 1 test in 1 suite passed after 87.893 seconds.
+2026-10-19 23:04:06.679 xcodebuild[68604:1727679] [MT] IDETestOperationsObserverDebug: 122.214 elapsed -- Testing started completed.
+2026-10-19 23:04:06.679 xcodebuild[68604:1727679] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-19 23:04:06.679 xcodebuild[68604:1727679] [MT] IDETestOperationsObserverDebug: 122.214 sec, +122.214 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/ioskeyboard-mkn-derived/Logs/Test/Test-keyboard-2026.10.19_23-02-01-+0530.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

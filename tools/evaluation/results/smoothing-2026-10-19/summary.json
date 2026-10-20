@@ -1,0 +1,1347 @@
+{
+  "schema_version": 1,
+  "seed": 20261019,
+  "pack_sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4",
+  "heldout_sha256": "bd9129ca750c658969e02c9612fa4686e7ce8aba1e25f0604c94859dd3dab775",
+  "script_sha256": "4e27a6d981c57639c1b9ccb6fea98696091b69afbb433b57c8e3c67ff48079fc",
+  "method": "Exact full-vocabulary LM top-k; fixed native unfunded fuzzy candidates for synthetic typo/clean-input proxy.",
+  "limits": [
+    "Document-family split; author identities are unavailable in this text-only archive.",
+    "CoreV4 source provenance cannot establish isolation from all vocabulary-frequency sources.",
+    "Only in-vocabulary targets after at least one supported context token; unknown spans reset context.",
+    "Synthetic errors never alter the first letter; no real-user labels; no complete engine policy, personalization, context injection, multiword search or device performance.",
+    "Negative log scores use deployed unknown floors; not normalized-vocabulary perplexity.",
+    "Native C++ search is identical for both; fixed 32-row channel/frequency cap, weights 1.0/0.3 and margins 3.0 OOV, 5.0 known."
+  ],
+  "next_word_lm_proxy": {
+    "cases": 55997,
+    "document_families": 71,
+    "models": {
+      "witten_bell": {
+        "top1": 0.13834669714448988,
+        "top3": 0.2275657624515599,
+        "negative_log_score": 6.973744754283111
+      },
+      "modified_kneser_ney": {
+        "top1": 0.13795381895458686,
+        "top3": 0.22785149204421665,
+        "negative_log_score": 6.502278860700019
+      }
+    },
+    "mkn_minus_wb": {
+      "top1": {
+        "difference": -0.0003928781899030305,
+        "paired_document_bootstrap_95_ci": [
+          -0.0030355021776428664,
+          0.003336749529279977
+        ]
+      },
+      "top3": {
+        "difference": 0.00028572959265674944,
+        "paired_document_bootstrap_95_ci": [
+          -0.004464285714285714,
+          0.006597532304215495
+        ]
+      },
+      "negative_log_score": {
+        "difference": -0.471465893583091,
+        "paired_document_bootstrap_95_ci": [
+          -0.6199236775363323,
+          -0.3665229155717372
+        ]
+      }
+    }
+  },
+  "python_mkn_statistics_init_seconds": 2.202974792,
+  "typo_proxy": {
+    "cases": 3000,
+    "document_families": 69,
+    "models": {
+      "witten_bell": {
+        "top1": 0.8643333333333333,
+        "top3": 0.987,
+        "committed_correct": 0.863,
+        "incorrect_result": 0.137,
+        "wrong_commit": 0.13433333333333333,
+        "changed": 0.9973333333333333
+      },
+      "modified_kneser_ney": {
+        "top1": 0.8886666666666667,
+        "top3": 0.9873333333333333,
+        "committed_correct": 0.8136666666666666,
+        "incorrect_result": 0.18633333333333332,
+        "wrong_commit": 0.089,
+        "changed": 0.9026666666666666
+      }
+    },
+    "mkn_minus_wb": {
+      "top1": {
+        "difference": 0.024333333333333332,
+        "paired_document_bootstrap_95_ci": [
+          0.015803631472763955,
+          0.03546831955922865
+        ]
+      },
+      "top3": {
+        "difference": 0.0003333333333333333,
+        "paired_document_bootstrap_95_ci": [
+          -0.002079002079002079,
+          0.002514668901927913
+        ]
+      },
+      "committed_correct": {
+        "difference": -0.04933333333333333,
+        "paired_document_bootstrap_95_ci": [
+          -0.07073170731707316,
+          -0.03316487681617183
+        ]
+      },
+      "incorrect_result": {
+        "difference": 0.04933333333333333,
+        "paired_document_bootstrap_95_ci": [
+          0.03318777292576419,
+          0.07073509015256588
+        ]
+      },
+      "wrong_commit": {
+        "difference": -0.04533333333333334,
+        "paired_document_bootstrap_95_ci": [
+          -0.06381118881118882,
+          -0.03276301419730615
+        ]
+      },
+      "changed": {
+        "difference": -0.09466666666666666,
+        "paired_document_bootstrap_95_ci": [
+          -0.12209026128266033,
+          -0.0733928246221089
+        ]
+      }
+    },
+    "shared_candidate_oracle_recall": 1
+  },
+  "clean_proxy": {
+    "cases": 3000,
+    "document_families": 70,
+    "models": {
+      "witten_bell": {
+        "top1": 0.8556666666666667,
+        "top3": 0.9833333333333333,
+        "committed_correct": 0.9886666666666667,
+        "incorrect_result": 0.011333333333333334,
+        "wrong_commit": 0.011333333333333334,
+        "changed": 0.011333333333333334
+      },
+      "modified_kneser_ney": {
+        "top1": 0.903,
+        "top3": 0.989,
+        "committed_correct": 0.997,
+        "incorrect_result": 0.003,
+        "wrong_commit": 0.003,
+        "changed": 0.003
+      }
+    },
+    "mkn_minus_wb": {
+      "top1": {
+        "difference": 0.04733333333333333,
+        "paired_document_bootstrap_95_ci": [
+          0.03901734104046243,
+          0.05945945945945946
+        ]
+      },
+      "top3": {
+        "difference": 0.005666666666666667,
+        "paired_document_bootstrap_95_ci": [
+          0.002066115702479339,
+          0.009438528557599225
+        ]
+      },
+      "committed_correct": {
+        "difference": 0.008333333333333333,
+        "paired_document_bootstrap_95_ci": [
+          0.004180602006688963,
+          0.011441647597254004
+        ]
+      },
+      "incorrect_result": {
+        "difference": -0.008333333333333333,
+        "paired_document_bootstrap_95_ci": [
+          -0.011435832274459974,
+          -0.004178854993731718
+        ]
+      },
+      "wrong_commit": {
+        "difference": -0.008333333333333333,
+        "paired_document_bootstrap_95_ci": [
+          -0.011435832274459974,
+          -0.004178854993731718
+        ]
+      },
+      "changed": {
+        "difference": -0.008333333333333333,
+        "paired_document_bootstrap_95_ci": [
+          -0.011435832274459974,
+          -0.004178854993731718
+        ]
+      }
+    },
+    "shared_candidate_oracle_recall": 1
+  },
+  "changed_outcome_examples": [
+    {
+      "family": "masc_500k_texts/written/technical/1468",
+      "typed": "causdd",
+      "gold": "caused",
+      "context": [
+        "biases"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "cause",
+        "top": [
+          "cause",
+          "caused",
+          "causes"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "caused",
+        "top": [
+          "caused",
+          "cause",
+          "causes"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/blog/Tupelo-Honey-Cafe",
+      "typed": "ashevuille",
+      "gold": "asheville",
+      "context": [
+        "people",
+        "of"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "asheville",
+        "top": [
+          "asheville",
+          "ashevuille"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "ashevuille",
+        "top": [
+          "ashevuille",
+          "asheville"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/spoken/debate-transcript/3rd_Bush-Kerry",
+      "typed": "lewjn",
+      "gold": "lewin",
+      "context": [
+        "the"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "lean",
+        "top": [
+          "lean",
+          "leann",
+          "lewin"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 0,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "lewjn",
+        "top": [
+          "lean",
+          "leann",
+          "lewjn"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/travel-guides/IntroHongKong",
+      "typed": "intoxicatinf",
+      "gold": "intoxicating",
+      "context": [
+        "is",
+        "an"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "intoxicating",
+        "top": [
+          "intoxicating",
+          "intoxication",
+          "intoxicatinf"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "intoxicatinf",
+        "top": [
+          "intoxicating",
+          "intoxicatinf",
+          "intoxication"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/spam/114446",
+      "typed": "periodicqlly",
+      "gold": "periodically",
+      "context": [
+        "as",
+        "we"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "periodically",
+        "top": [
+          "periodically",
+          "periodicqlly"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "periodicqlly",
+        "top": [
+          "periodically",
+          "periodicqlly"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/jokes/jokes2",
+      "typed": "beafs",
+      "gold": "beats",
+      "context": [
+        "the",
+        "world"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "beat",
+        "top": [
+          "beat",
+          "bear",
+          "beats"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "bears",
+        "top": [
+          "bears",
+          "beat",
+          "beats"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/spam/114440",
+      "typed": "youd",
+      "gold": "your",
+      "context": [
+        "desires",
+        "of"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "you",
+        "top": [
+          "you",
+          "your",
+          "you'd"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "your",
+        "top": [
+          "your",
+          "you",
+          "you'd"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/email/54536",
+      "typed": "diagnozstic",
+      "gold": "diagnostic",
+      "context": [
+        "mapi"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "diagnostic",
+        "top": [
+          "diagnostic",
+          "diagnostics",
+          "diagnozstic"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "diagnozstic",
+        "top": [
+          "diagnostic",
+          "diagnozstic",
+          "diagnostics"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/email/54536",
+      "typed": "vijnce",
+      "gold": "vince",
+      "context": [
+        "to"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "vince",
+        "top": [
+          "vince",
+          "vijnce"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "vijnce",
+        "top": [
+          "vince",
+          "vijnce"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/technical/rr166",
+      "typed": "decreaswd",
+      "gold": "decreased",
+      "context": [
+        "reports",
+        "suggesting"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "deceased",
+        "top": [
+          "deceased",
+          "decreased",
+          "decrease"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "decreased",
+        "top": [
+          "decreased",
+          "decreases",
+          "decrease"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/fiction/lw1",
+      "typed": "swidhed",
+      "gold": "swished",
+      "context": [
+        "long",
+        "tail"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "swishes",
+        "top": [
+          "swishes",
+          "swisher",
+          "swished"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 0,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "swidhed",
+        "top": [
+          "swidhed",
+          "swishes",
+          "swisher"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/ficlets/1403",
+      "typed": "collarbome",
+      "gold": "collarbone",
+      "context": [
+        "below",
+        "her"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "collarbone",
+        "top": [
+          "collarbone",
+          "collarbome",
+          "collarbones"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "collarbome",
+        "top": [
+          "collarbone",
+          "collarbome",
+          "collarbones"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/ficlets/1403",
+      "typed": "thsn",
+      "gold": "then",
+      "context": [
+        "begins",
+        "slowly"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "then",
+        "top": [
+          "then",
+          "them",
+          "than"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "than",
+        "top": [
+          "than",
+          "them",
+          "then"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/email/21257",
+      "typed": "cokmpliance",
+      "gold": "compliance",
+      "context": [
+        "certify",
+        "your"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "compliance",
+        "top": [
+          "compliance",
+          "cokmpliance",
+          "compliances"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "cokmpliance",
+        "top": [
+          "compliance",
+          "cokmpliance",
+          "compliances"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/technical/rr166",
+      "typed": "mechansms",
+      "gold": "mechanisms",
+      "context": [
+        "and",
+        "autocrine"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "mechanism",
+        "top": [
+          "mechanism",
+          "mechanisms",
+          "mechansms"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "mechansms",
+        "top": [
+          "mechanism",
+          "mechanisms",
+          "mechansms"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/email/54537",
+      "typed": "assesse",
+      "gold": "assessed",
+      "context": [
+        "i'll",
+        "be"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "assess",
+        "top": [
+          "assess",
+          "assessed",
+          "assessor"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "assesse",
+        "top": [
+          "assess",
+          "assessed",
+          "assesse"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/technical/1468",
+      "typed": "patjients",
+      "gold": "patients",
+      "context": [
+        "second"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "patient's",
+        "top": [
+          "patient's",
+          "patients",
+          "patient"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "patients",
+        "top": [
+          "patients",
+          "patient",
+          "patient's"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/spoken/debate-transcript/3rd_Bush-Kerry",
+      "typed": "chaurman",
+      "gold": "chairman",
+      "context": [
+        "i",
+        "was"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "chairman",
+        "top": [
+          "chairman",
+          "chairmen",
+          "chaurman"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "chaurman",
+        "top": [
+          "chairman",
+          "chaurman",
+          "chairmen"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/blog/vampires",
+      "typed": "caplibrate",
+      "gold": "calibrate",
+      "context": [
+        "have",
+        "to"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "calibrate",
+        "top": [
+          "calibrate",
+          "calibrated",
+          "caplibrate"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "caplibrate",
+        "top": [
+          "calibrate",
+          "caplibrate",
+          "calibrated"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/ficlets/1403",
+      "typed": "bkankets",
+      "gold": "blankets",
+      "context": [
+        "flannel"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "blankets",
+        "top": [
+          "blankets",
+          "blanket",
+          "bankers"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "bkankets",
+        "top": [
+          "blankets",
+          "blanket",
+          "bankers"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/travel-guides/HistoryJerusalem",
+      "typed": "benefactlr",
+      "gold": "benefactor",
+      "context": [
+        "friend",
+        "and"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "benefactor",
+        "top": [
+          "benefactor",
+          "benefactors",
+          "benefactlr"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "benefactlr",
+        "top": [
+          "benefactor",
+          "benefactlr",
+          "benefactors"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/letters/aspca1",
+      "typed": "aspcw",
+      "gold": "aspca",
+      "context": [
+        "to",
+        "the"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "aspca",
+        "top": [
+          "aspca",
+          "aspcw",
+          "asps"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "aspcw",
+        "top": [
+          "aspca",
+          "aspcw",
+          "asps"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/travel-guides/HistoryJerusalem",
+      "typed": "taboets",
+      "gold": "tablets",
+      "context": [
+        "containing",
+        "the"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "tablets",
+        "top": [
+          "tablets",
+          "tables",
+          "tablet"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "taboets",
+        "top": [
+          "tables",
+          "tablets",
+          "tablet"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/letters/united1",
+      "typed": "irineraries",
+      "gold": "itineraries",
+      "context": [
+        "these",
+        "great"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "itineraries",
+        "top": [
+          "itineraries",
+          "irineraries"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "irineraries",
+        "top": [
+          "itineraries",
+          "irineraries"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/technical/1468",
+      "typed": "conter",
+      "gold": "confer",
+      "context": [
+        "that",
+        "statins"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 0,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "counter",
+        "top": [
+          "counter",
+          "contest",
+          "content"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 0,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "content",
+        "top": [
+          "content",
+          "contest",
+          "counter"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/email/175841",
+      "typed": "protectwd",
+      "gold": "protected",
+      "context": [
+        "who",
+        "were"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 1,
+        "changed": 1,
+        "choice": "protect",
+        "top": [
+          "protect",
+          "protected",
+          "protects"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "protected",
+        "top": [
+          "protected",
+          "protect",
+          "protects"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/letters/aspca1",
+      "typed": "asteo",
+      "gold": "astro",
+      "context": [
+        "we",
+        "found"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "astro",
+        "top": [
+          "astro",
+          "asteo",
+          "austro"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "asteo",
+        "top": [
+          "astro",
+          "asteo",
+          "austro"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/email/53536",
+      "typed": "altp",
+      "gold": "alto",
+      "context": [
+        "palo"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "alto",
+        "top": [
+          "alto",
+          "alt",
+          "alp"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 0,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "altp",
+        "top": [
+          "alt",
+          "alto",
+          "atp"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/travel-guides/HistoryJerusalem",
+      "typed": "crucifixiion",
+      "gold": "crucifixion",
+      "context": [
+        "where",
+        "jesus's"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "crucifixion",
+        "top": [
+          "crucifixion",
+          "crucifixions",
+          "crucifixiion"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "crucifixiion",
+        "top": [
+          "crucifixion",
+          "crucifixiion",
+          "crucifixions"
+        ]
+      }
+    },
+    {
+      "family": "masc_500k_texts/written/letters/alumnifund1",
+      "typed": "fqaculty",
+      "gold": "faculty",
+      "context": [
+        "our",
+        "students"
+      ],
+      "slice": "typo",
+      "oracle": 1,
+      "witten_bell": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 1,
+        "incorrect_result": 0,
+        "wrong_commit": 0,
+        "changed": 1,
+        "choice": "faculty",
+        "top": [
+          "faculty",
+          "faulty",
+          "fqaculty"
+        ]
+      },
+      "modified_kneser_ney": {
+        "top1": 1,
+        "top3": 1,
+        "committed_correct": 0,
+        "incorrect_result": 1,
+        "wrong_commit": 0,
+        "changed": 0,
+        "choice": "fqaculty",
+        "top": [
+          "faculty",
+          "fqaculty",
+          "faulty"
+        ]
+      }
+    }
+  ]
+}

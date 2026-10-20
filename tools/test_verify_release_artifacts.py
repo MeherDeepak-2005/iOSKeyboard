@@ -65,6 +65,22 @@ class ReleaseArtifactVerifierTests(unittest.TestCase):
             )
             self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
 
+            # Full-vocabulary budgets are explicit; legacy gates stay enforced.
+            with (root / "langdata.bin").open("wb") as handle:
+                handle.truncate(11_000_001)
+            base = [sys.executable, str(script), str(root), "--output", str(output)]
+            legacy = subprocess.run(base, capture_output=True, text=True)
+            self.assertNotEqual(legacy.returncode, 0)
+            expanded = subprocess.run(base + ["--corev4"], capture_output=True, text=True)
+            self.assertEqual(expanded.returncode, 0, expanded.stdout + expanded.stderr)
+            self.assertEqual(json.loads(output.read_text())["gateBytes"], 24_000_000)
+            with (root / "langdata.bin").open("wb") as handle:
+                handle.truncate(20_000_001)
+            too_big = subprocess.run(base + ["--corev4"], capture_output=True, text=True)
+            self.assertNotEqual(too_big.returncode, 0)
+            self.assertIn("langdata.bin exceeds 20,000,000 bytes", too_big.stderr)
+            (root / "langdata.bin").write_bytes(b"english")
+
             (root / "tenglish_lexicon.bin").unlink()
             invalid = subprocess.run(
                 [sys.executable, str(script), str(root), "--output", str(output)],

@@ -1,0 +1,1478 @@
+{
+  "clean_known|realWord|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 94,
+    "winner_is_gold": 0,
+    "baseline_correct": 94,
+    "selected_correct": 94
+  },
+  "typo_single|close|margin=3-5|gap=none|rescuable=True": {
+    "cases": 10,
+    "winner_is_gold": 10,
+    "baseline_correct": 10,
+    "selected_correct": 10
+  },
+  "clean_known|realWord|margin=<1|gap=>=3|rescuable=False": {
+    "cases": 194,
+    "winner_is_gold": 0,
+    "baseline_correct": 194,
+    "selected_correct": 194
+  },
+  "typo_single|close|margin=>=5|gap=>=3|rescuable=True": {
+    "cases": 476,
+    "winner_is_gold": 470,
+    "baseline_correct": 470,
+    "selected_correct": 470
+  },
+  "typo_multi|close|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 15,
+    "winner_is_gold": 13,
+    "baseline_correct": 13,
+    "selected_correct": 13
+  },
+  "clean_oov|close|margin=1-2|gap=0.5-1|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_known|realWord|margin=<1|gap=0.5-1|rescuable=False": {
+    "cases": 80,
+    "winner_is_gold": 0,
+    "baseline_correct": 80,
+    "selected_correct": 80
+  },
+  "typo_multi|close|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 18,
+    "winner_is_gold": 14,
+    "baseline_correct": 14,
+    "selected_correct": 14
+  },
+  "typo_single|close|margin=3-5|gap=2-3|rescuable=True": {
+    "cases": 22,
+    "winner_is_gold": 21,
+    "baseline_correct": 21,
+    "selected_correct": 21
+  },
+  "typo_real_word|realWord|margin=>=5|gap=0.5-1|rescuable=False": {
+    "cases": 10,
+    "winner_is_gold": 8,
+    "baseline_correct": 8,
+    "selected_correct": 8
+  },
+  "typo_real_word|realWord|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 10,
+    "winner_is_gold": 8,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=2-3|gap=2-3|rescuable=True": {
+    "cases": 8,
+    "winner_is_gold": 8,
+    "baseline_correct": 0,
+    "selected_correct": 7
+  },
+  "clean_oov|loose|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 11,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|severe|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 25,
+    "winner_is_gold": 0,
+    "baseline_correct": 25,
+    "selected_correct": 25
+  },
+  "clean_oov|loose|margin=<1|gap=0.5-1|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "clean_oov|loose|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 0,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "typo_single|close|margin=>=5|gap=none|rescuable=True": {
+    "cases": 44,
+    "winner_is_gold": 44,
+    "baseline_correct": 44,
+    "selected_correct": 44
+  },
+  "clean_oov|close|margin=>=5|gap=<0.5|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 7
+  },
+  "clean_oov|severe|margin=<1|gap=0.5-1|rescuable=False": {
+    "cases": 9,
+    "winner_is_gold": 0,
+    "baseline_correct": 9,
+    "selected_correct": 9
+  },
+  "typo_multi|close|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 99,
+    "winner_is_gold": 91,
+    "baseline_correct": 91,
+    "selected_correct": 91
+  },
+  "typo_real_word|realWord|margin=2-3|gap=2-3|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 4,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=2-3|gap=>=3|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 0,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "clean_known|realWord|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 164,
+    "winner_is_gold": 0,
+    "baseline_correct": 164,
+    "selected_correct": 164
+  },
+  "typo_real_word|realWord|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 91,
+    "winner_is_gold": 87,
+    "baseline_correct": 87,
+    "selected_correct": 87
+  },
+  "typo_single|close|margin=>=5|gap=1-2|rescuable=True": {
+    "cases": 67,
+    "winner_is_gold": 61,
+    "baseline_correct": 61,
+    "selected_correct": 61
+  },
+  "clean_oov|severe|margin=<1|gap=>=3|rescuable=False": {
+    "cases": 37,
+    "winner_is_gold": 0,
+    "baseline_correct": 37,
+    "selected_correct": 37
+  },
+  "typo_single|close|margin=>=5|gap=0.5-1|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_real_word|realWord|margin=>=5|gap=1-2|rescuable=False": {
+    "cases": 14,
+    "winner_is_gold": 10,
+    "baseline_correct": 10,
+    "selected_correct": 10
+  },
+  "clean_known|realWord|margin=<1|gap=2-3|rescuable=False": {
+    "cases": 86,
+    "winner_is_gold": 0,
+    "baseline_correct": 86,
+    "selected_correct": 86
+  },
+  "typo_single|close|margin=>=5|gap=1-2|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 2,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_single|close|margin=3-5|gap=>=3|rescuable=True": {
+    "cases": 36,
+    "winner_is_gold": 36,
+    "baseline_correct": 36,
+    "selected_correct": 36
+  },
+  "typo_single|close|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 18,
+    "winner_is_gold": 13,
+    "baseline_correct": 13,
+    "selected_correct": 13
+  },
+  "clean_contraction|realWord|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_multi|close|margin=>=5|gap=2-3|rescuable=True": {
+    "cases": 6,
+    "winner_is_gold": 6,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "typo_single|close|margin=>=5|gap=2-3|rescuable=True": {
+    "cases": 95,
+    "winner_is_gold": 92,
+    "baseline_correct": 92,
+    "selected_correct": 92
+  },
+  "typo_multi|close|margin=2-3|gap=>=3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 3,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=1-2|gap=>=3|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|severe|margin=2-3|gap=1-2|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 0,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "clean_oov|close|margin=<1|gap=0.5-1|rescuable=False": {
+    "cases": 8,
+    "winner_is_gold": 0,
+    "baseline_correct": 8,
+    "selected_correct": 8
+  },
+  "clean_known|realWord|margin=<1|gap=none|rescuable=False": {
+    "cases": 10,
+    "winner_is_gold": 0,
+    "baseline_correct": 10,
+    "selected_correct": 10
+  },
+  "typo_single|close|margin=1-2|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=<1|gap=none|rescuable=False": {
+    "cases": 11,
+    "winner_is_gold": 7,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=<1|gap=0.5-1|rescuable=True": {
+    "cases": 4,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=>=5|gap=>=3|rescuable=True": {
+    "cases": 43,
+    "winner_is_gold": 42,
+    "baseline_correct": 42,
+    "selected_correct": 42
+  },
+  "typo_real_word|realWord|margin=<1|gap=2-3|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 4,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=2-3|gap=1-2|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_single|close|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_known|realWord|margin=2-3|gap=>=3|rescuable=False": {
+    "cases": 5,
+    "winner_is_gold": 0,
+    "baseline_correct": 5,
+    "selected_correct": 5
+  },
+  "clean_oov|close|margin=<1|gap=none|rescuable=True": {
+    "cases": 11,
+    "winner_is_gold": 0,
+    "baseline_correct": 11,
+    "selected_correct": 11
+  },
+  "typo_multi|close|margin=3-5|gap=0.5-1|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 6,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "typo_multi|loose|margin=>=5|gap=none|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 2,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_multi|close|margin=>=5|gap=1-2|rescuable=False": {
+    "cases": 14,
+    "winner_is_gold": 11,
+    "baseline_correct": 11,
+    "selected_correct": 11
+  },
+  "typo_multi|close|margin=3-5|gap=1-2|rescuable=False": {
+    "cases": 8,
+    "winner_is_gold": 5,
+    "baseline_correct": 5,
+    "selected_correct": 5
+  },
+  "typo_real_word|realWord|margin=>=5|gap=<0.5|rescuable=False": {
+    "cases": 16,
+    "winner_is_gold": 11,
+    "baseline_correct": 11,
+    "selected_correct": 11
+  },
+  "typo_multi|close|margin=>=5|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=<1|gap=1-2|rescuable=True": {
+    "cases": 5,
+    "winner_is_gold": 5,
+    "baseline_correct": 0,
+    "selected_correct": 4
+  },
+  "typo_single|close|margin=>=5|gap=0.5-1|rescuable=True": {
+    "cases": 40,
+    "winner_is_gold": 34,
+    "baseline_correct": 34,
+    "selected_correct": 34
+  },
+  "typo_real_word|realWord|margin=1-2|gap=2-3|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 3,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=>=5|gap=2-3|rescuable=False": {
+    "cases": 16,
+    "winner_is_gold": 11,
+    "baseline_correct": 11,
+    "selected_correct": 11
+  },
+  "typo_multi|close|margin=2-3|gap=0.5-1|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_known|realWord|margin=1-2|gap=none|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=1-2|gap=1-2|rescuable=True": {
+    "cases": 17,
+    "winner_is_gold": 0,
+    "baseline_correct": 17,
+    "selected_correct": 17
+  },
+  "typo_multi|loose|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 19,
+    "winner_is_gold": 8,
+    "baseline_correct": 8,
+    "selected_correct": 8
+  },
+  "typo_single|close|margin=3-5|gap=0.5-1|rescuable=True": {
+    "cases": 7,
+    "winner_is_gold": 6,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "clean_known|realWord|margin=1-2|gap=2-3|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 0,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "typo_multi|close|margin=<1|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=3-5|gap=>=3|rescuable=True": {
+    "cases": 6,
+    "winner_is_gold": 4,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "typo_multi|close|margin=1-2|gap=<0.5|rescuable=True": {
+    "cases": 4,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=2-3|gap=none|rescuable=True": {
+    "cases": 4,
+    "winner_is_gold": 4,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|severe|margin=<1|gap=2-3|rescuable=False": {
+    "cases": 17,
+    "winner_is_gold": 0,
+    "baseline_correct": 17,
+    "selected_correct": 17
+  },
+  "clean_oov|close|margin=<1|gap=none|rescuable=False": {
+    "cases": 14,
+    "winner_is_gold": 0,
+    "baseline_correct": 14,
+    "selected_correct": 14
+  },
+  "clean_known|realWord|margin=3-5|gap=1-2|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_single|close|margin=>=5|gap=<0.5|rescuable=True": {
+    "cases": 17,
+    "winner_is_gold": 11,
+    "baseline_correct": 11,
+    "selected_correct": 5
+  },
+  "typo_real_word|realWord|margin=2-3|gap=1-2|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 3,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=>=5|gap=0.5-1|rescuable=True": {
+    "cases": 7,
+    "winner_is_gold": 4,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "clean_contraction|realWord|margin=1-2|gap=none|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_contraction|realWord|margin=3-5|gap=0.5-1|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "clean_contraction|realWord|margin=<1|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=3-5|gap=1-2|rescuable=True": {
+    "cases": 4,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=>=5|gap=1-2|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=>=5|gap=<0.5|rescuable=False": {
+    "cases": 5,
+    "winner_is_gold": 0,
+    "baseline_correct": 5,
+    "selected_correct": 5
+  },
+  "typo_real_word|realWord|margin=1-2|gap=<0.5|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=2-3|gap=2-3|rescuable=False": {
+    "cases": 5,
+    "winner_is_gold": 0,
+    "baseline_correct": 5,
+    "selected_correct": 5
+  },
+  "typo_real_word|realWord|margin=3-5|gap=1-2|rescuable=False": {
+    "cases": 11,
+    "winner_is_gold": 5,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=1-2|gap=2-3|rescuable=True": {
+    "cases": 4,
+    "winner_is_gold": 4,
+    "baseline_correct": 0,
+    "selected_correct": 4
+  },
+  "typo_single|close|margin=>=5|gap=<0.5|rescuable=False": {
+    "cases": 20,
+    "winner_is_gold": 2,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_real_word|realWord|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 6,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=<1|gap=1-2|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_single|close|margin=<1|gap=0.5-1|rescuable=True": {
+    "cases": 5,
+    "winner_is_gold": 5,
+    "baseline_correct": 0,
+    "selected_correct": 4
+  },
+  "clean_known|realWord|margin=1-2|gap=1-2|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 0,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "clean_oov|close|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 11,
+    "winner_is_gold": 0,
+    "baseline_correct": 11,
+    "selected_correct": 11
+  },
+  "clean_oov|severe|margin=1-2|gap=1-2|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_multi|close|margin=>=5|gap=2-3|rescuable=False": {
+    "cases": 14,
+    "winner_is_gold": 11,
+    "baseline_correct": 11,
+    "selected_correct": 11
+  },
+  "typo_multi|loose|margin=>=5|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=3-5|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=<1|gap=2-3|rescuable=True": {
+    "cases": 3,
+    "winner_is_gold": 3,
+    "baseline_correct": 0,
+    "selected_correct": 2
+  },
+  "clean_oov|close|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 10,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 5
+  },
+  "clean_oov|severe|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 15,
+    "winner_is_gold": 0,
+    "baseline_correct": 15,
+    "selected_correct": 15
+  },
+  "clean_contraction|realWord|margin=<1|gap=>=3|rescuable=False": {
+    "cases": 20,
+    "winner_is_gold": 0,
+    "baseline_correct": 20,
+    "selected_correct": 20
+  },
+  "typo_real_word|realWord|margin=2-3|gap=>=3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=>=5|gap=>=3|rescuable=True": {
+    "cases": 8,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=>=5|gap=0.5-1|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 5,
+    "baseline_correct": 5,
+    "selected_correct": 5
+  },
+  "typo_single|close|margin=3-5|gap=<0.5|rescuable=True": {
+    "cases": 14,
+    "winner_is_gold": 11,
+    "baseline_correct": 11,
+    "selected_correct": 6
+  },
+  "clean_oov|close|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=<1|gap=2-3|rescuable=True": {
+    "cases": 5,
+    "winner_is_gold": 0,
+    "baseline_correct": 5,
+    "selected_correct": 2
+  },
+  "typo_multi|loose|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=1-2|gap=none|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "clean_contraction|realWord|margin=<1|gap=none|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_known|realWord|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_multi|close|margin=<1|gap=2-3|rescuable=False": {
+    "cases": 5,
+    "winner_is_gold": 5,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 9,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=1-2|gap=>=3|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 4,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=1-2|gap=>=3|rescuable=True": {
+    "cases": 8,
+    "winner_is_gold": 8,
+    "baseline_correct": 0,
+    "selected_correct": 5
+  },
+  "clean_oov|close|margin=<1|gap=>=3|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 0,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "clean_oov|close|margin=1-2|gap=2-3|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=2-3|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=1-2|gap=>=3|rescuable=True": {
+    "cases": 7,
+    "winner_is_gold": 0,
+    "baseline_correct": 7,
+    "selected_correct": 7
+  },
+  "clean_oov|severe|margin=1-2|gap=>=3|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 0,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "typo_multi|close|margin=3-5|gap=<0.5|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_single|close|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=>=5|gap=2-3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=3-5|gap=1-2|rescuable=False": {
+    "cases": 5,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=3-5|gap=none|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 6,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "typo_real_word|realWord|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 8,
+    "winner_is_gold": 4,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=<1|gap=none|rescuable=True": {
+    "cases": 5,
+    "winner_is_gold": 5,
+    "baseline_correct": 0,
+    "selected_correct": 2
+  },
+  "clean_oov|close|margin=<1|gap=>=3|rescuable=True": {
+    "cases": 7,
+    "winner_is_gold": 0,
+    "baseline_correct": 7,
+    "selected_correct": 7
+  },
+  "typo_multi|close|margin=2-3|gap=>=3|rescuable=True": {
+    "cases": 3,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|loose|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=1-2|gap=<0.5|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=>=5|gap=none|rescuable=True": {
+    "cases": 4,
+    "winner_is_gold": 4,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "clean_oov|loose|margin=3-5|gap=none|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_contraction|realWord|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|loose|margin=2-3|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_multi|loose|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=2-3|gap=>=3|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=<1|gap=0.5-1|rescuable=True": {
+    "cases": 12,
+    "winner_is_gold": 0,
+    "baseline_correct": 12,
+    "selected_correct": 11
+  },
+  "typo_real_word|realWord|margin=<1|gap=>=3|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 6,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=2-3|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 8,
+    "winner_is_gold": 5,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=2-3|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=2-3|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=3-5|gap=1-2|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 2,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_oov|loose|margin=1-2|gap=1-2|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_oov|loose|margin=3-5|gap=0.5-1|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "typo_multi|close|margin=<1|gap=>=3|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 5,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=<1|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_contraction|realWord|margin=2-3|gap=none|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_multi|close|margin=1-2|gap=0.5-1|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 4,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|severe|margin=2-3|gap=<0.5|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "clean_oov|close|margin=>=5|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|loose|margin=2-3|gap=0.5-1|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|severe|margin=1-2|gap=<0.5|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "clean_oov|severe|margin=<1|gap=none|rescuable=False": {
+    "cases": 10,
+    "winner_is_gold": 0,
+    "baseline_correct": 10,
+    "selected_correct": 10
+  },
+  "typo_single|close|margin=2-3|gap=0.5-1|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 2
+  },
+  "typo_single|close|margin=1-2|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|loose|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|severe|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=2-3|gap=>=3|rescuable=True": {
+    "cases": 7,
+    "winner_is_gold": 7,
+    "baseline_correct": 0,
+    "selected_correct": 3
+  },
+  "typo_multi|close|margin=>=5|gap=<0.5|rescuable=False": {
+    "cases": 9,
+    "winner_is_gold": 4,
+    "baseline_correct": 4,
+    "selected_correct": 2
+  },
+  "clean_oov|loose|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "typo_multi|close|margin=3-5|gap=none|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_known|realWord|margin=2-3|gap=2-3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "typo_single|close|margin=1-2|gap=0.5-1|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 1
+  },
+  "clean_oov|severe|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=1-2|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_single|close|margin=<1|gap=>=3|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 1
+  },
+  "clean_contraction|realWord|margin=1-2|gap=>=3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_single|close|margin=3-5|gap=1-2|rescuable=True": {
+    "cases": 18,
+    "winner_is_gold": 17,
+    "baseline_correct": 17,
+    "selected_correct": 17
+  },
+  "clean_known|realWord|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=2-3|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|loose|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 6,
+    "winner_is_gold": 0,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "typo_multi|loose|margin=2-3|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=1-2|gap=>=3|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 8,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=>=5|gap=1-2|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_known|realWord|margin=1-2|gap=>=3|rescuable=False": {
+    "cases": 13,
+    "winner_is_gold": 0,
+    "baseline_correct": 13,
+    "selected_correct": 13
+  },
+  "typo_multi|loose|margin=3-5|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=<1|gap=1-2|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_known|realWord|margin=>=5|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=>=5|gap=none|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 6,
+    "baseline_correct": 6,
+    "selected_correct": 6
+  },
+  "typo_multi|close|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 5,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_real_word|realWord|margin=1-2|gap=1-2|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 3,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=3-5|gap=>=3|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=2-3|gap=1-2|rescuable=True": {
+    "cases": 3,
+    "winner_is_gold": 3,
+    "baseline_correct": 0,
+    "selected_correct": 2
+  },
+  "clean_oov|severe|margin=>=5|gap=>=3|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=>=5|gap=2-3|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=2-3|gap=1-2|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|severe|margin=1-2|gap=2-3|rescuable=False": {
+    "cases": 4,
+    "winner_is_gold": 0,
+    "baseline_correct": 4,
+    "selected_correct": 4
+  },
+  "clean_known|realWord|margin=1-2|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_multi|severe|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|loose|margin=3-5|gap=none|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=2-3|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_multi|close|margin=2-3|gap=2-3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 3,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=>=5|gap=none|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|loose|margin=>=5|gap=1-2|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_contraction|realWord|margin=1-2|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=2-3|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_multi|close|margin=2-3|gap=none|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=<1|gap=0.5-1|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=2-3|gap=<0.5|rescuable=False": {
+    "cases": 7,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=>=5|gap=1-2|rescuable=True": {
+    "cases": 4,
+    "winner_is_gold": 2,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_contraction|realWord|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|severe|margin=2-3|gap=>=3|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_known|realWord|margin=1-2|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_real_word|realWord|margin=1-2|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=1-2|gap=1-2|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 2,
+    "baseline_correct": 0,
+    "selected_correct": 2
+  },
+  "clean_oov|close|margin=3-5|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_real_word|realWord|margin=3-5|gap=0.5-1|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=>=5|gap=2-3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 2,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_contraction|realWord|margin=<1|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_known|realWord|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=1-2|gap=0.5-1|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 2,
+    "selected_correct": 2
+  },
+  "clean_oov|loose|margin=<1|gap=2-3|rescuable=False": {
+    "cases": 3,
+    "winner_is_gold": 0,
+    "baseline_correct": 3,
+    "selected_correct": 3
+  },
+  "typo_multi|close|margin=1-2|gap=none|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=3-5|gap=none|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=<1|gap=>=3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=2-3|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|loose|margin=2-3|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|loose|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|loose|margin=>=5|gap=0.5-1|rescuable=False": {
+    "cases": 2,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=3-5|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=3-5|gap=2-3|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=>=5|gap=none|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=3-5|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=3-5|gap=>=3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=1-2|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=<1|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=>=5|gap=0.5-1|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=3-5|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|loose|margin=3-5|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_single|close|margin=3-5|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=1-2|gap=<0.5|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=2-3|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=<1|gap=2-3|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|severe|margin=3-5|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=>=5|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=3-5|gap=0.5-1|rescuable=True": {
+    "cases": 2,
+    "winner_is_gold": 1,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|loose|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "clean_oov|close|margin=3-5|gap=0.5-1|rescuable=True": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "clean_oov|close|margin=2-3|gap=1-2|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 1,
+    "selected_correct": 1
+  },
+  "typo_single|close|margin=1-2|gap=0.5-1|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 0,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  },
+  "typo_multi|close|margin=<1|gap=<0.5|rescuable=False": {
+    "cases": 1,
+    "winner_is_gold": 1,
+    "baseline_correct": 0,
+    "selected_correct": 0
+  }
+}

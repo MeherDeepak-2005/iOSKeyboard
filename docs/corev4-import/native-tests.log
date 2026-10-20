@@ -1,0 +1,12 @@
+PASS v2: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 130 truncated prefixes + corrupt fields
+PASS v3: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 148 truncated prefixes + corrupt fields
+PASS v4: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 160 truncated prefixes + corrupt fields
+PASS v5: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 136 truncated prefixes + corrupt fields
+PASS v6: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 160 truncated prefixes + corrupt fields
+PASS mapped seed sets v3: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS mapped seed sets v4: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS mapped seed sets v5: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS mapped seed sets v6: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS v6 IDs above 65535, distinct wide context pairs, starters, trie and corrupt fields
+PASS spatial/retained DP: geometry, Double costs, first-letter policy, transpose, apostrophe, severe typo, reset, invalid/mismatched input and empty seeds
+PASS production corpus v6: 114283 words, 29206 bigram contexts, 218403 trigram contexts

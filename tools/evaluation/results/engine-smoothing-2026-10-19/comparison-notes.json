@@ -1,0 +1,31 @@
+{
+  "prior_mkn_replay_drift": [
+    {
+      "id": 741,
+      "typed": "arrallin",
+      "earlier_choice": "american",
+      "current_choice": "arrallin",
+      "earlier_gate": {
+        "allowsCloseRescue": false,
+        "candidate": "american",
+        "candidateGap": 2.3174467177568445,
+        "kind": "loose",
+        "spatialCost": 7.2,
+        "typed": "arrallin",
+        "typedMargin": 6.045597130877752
+      },
+      "current_gate": {
+        "allowsCloseRescue": false,
+        "candidate": "american",
+        "candidateGap": 0.5140438057358416,
+        "kind": "loose",
+        "spatialCost": 7.2,
+        "typed": "arrallin",
+        "typedMargin": 6.045597130877752
+      }
+    }
+  ],
+  "interpretation": "One earlier MKN outcome changed with identical top candidate score because an additional competitor entered the pool. Count-only dictionary ordering has no tie break in NgramScorer.merged. The precise origin of this candidate-pool variation has not been isolated. Treat tiny model differences cautiously.",
+  "scoring_parity": "One simulator test passed: all three native scorers matched Swift references and independent WB/custom formulas within 1e-12. Nine offline smoothing tests passed.",
+  "decision": "Do not promote the custom variant: same typo decisions as WB, one additional preserved unreviewed OOV input, no demonstrated general improvement. WB has better correction coverage and severe regressions; MKN is more conservative. Pause further smoothing tuning; prioritize trained neural LM plus NSS, retain fallback and full-engine evaluation. No default changed."
+}

@@ -1,0 +1,31 @@
+{
+  "dictionary": {
+    "forms": 61082,
+    "bytes": 9455641,
+    "sha256": "ddbb25cb14d90bfb3e0097980aab68b8423f9e768b9bdfb8fbdbd55f163298d2",
+    "deviceBundleIdentical": true
+  },
+  "iOSTests": {
+    "passed": 104,
+    "failed": 0
+  },
+  "severeTypo": {
+    "correctCommits": 155,
+    "replays": 155,
+    "contexts": 5
+  },
+  "portableSanitizers": "passed ASan/UBSan",
+  "portableCMake": "passed 1/1",
+  "dictionaryPipelineTests": "passed 12/12",
+  "androidJNI": "host clang syntax check passed; Android ABI/runtime unverified",
+  "androidSDK_NDK_Kotlin_Gradle": "not available on this machine",
+  "macOSHarnesses": "native benchmark and Glide compile-only passed",
+  "physicalDevicePerformance": "unmeasured",
+  "trainedNeuralComparison": "pending artifacts",
+  "shippingSwiftOptimization": "-Osize",
+  "shippingReferenceSearchBodies": "excluded; enabled in test builds",
+  "bundleAudits": [
+    "device-release-bundle-audit.json",
+    "adhoc-device-bundle-audit.json"
+  ]
+}

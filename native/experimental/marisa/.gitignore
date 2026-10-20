@@ -1,0 +1,5 @@
+!CMakeLists.txt
+*.marisa
+*.ids
+results/build.log
+results/*-build.log

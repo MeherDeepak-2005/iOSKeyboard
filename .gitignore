@@ -77,3 +77,12 @@ graphify-out/
 !keyboard/ThirdPartyNotices.txt
 !tools/data/google_profanity_en.txt
 !tools/data/google_profanity_shidouuu_en.txt
+
+# Android integration build/cache files; keep SDK paths machine-local.
+android/.gradle/
+android/**/build/
+android/local.properties
+
+# Reproducible imported vocabulary and integration report.
+!tools/data/corev4/**/*.txt
+!docs/corev4-import/*.txt

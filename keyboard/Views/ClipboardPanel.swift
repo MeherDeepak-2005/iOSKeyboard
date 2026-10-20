@@ -1,3 +1,5 @@
+// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 
 // Clipboard panel — the full history/pins overlay. Shown by KeyboardView OVER the key

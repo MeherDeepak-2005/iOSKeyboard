@@ -1,0 +1,198 @@
+{
+  "date": "2026-10-06",
+  "host": {
+    "cpu": "Apple M2",
+    "model": "Mac14,2",
+    "ram_bytes": 8589934592
+  },
+  "macos_peak_rss": {
+    "native": {
+      "median_bytes": 13729792,
+      "samples_bytes": [
+        13697024,
+        13729792,
+        13762560,
+        13729792,
+        13729792
+      ]
+    },
+    "native_minus_swift_median_bytes": 2637824,
+    "swift": {
+      "median_bytes": 11091968,
+      "samples_bytes": [
+        11091968,
+        11124736,
+        11091968,
+        11091968,
+        11091968
+      ]
+    }
+  },
+  "physical_iphone": "not_measured; known iPhones unavailable",
+  "production_backend": "Swift; native paths remain opt-in comparison implementations",
+  "timings": {
+    "macos": {
+      "checksum": 10250928,
+      "dp_cells": 81241,
+      "environment": "optimized macOS CLI; matched input; not physical iPhone",
+      "optimization": "Swift -O; C++ optimized; no shadow execution",
+      "rows": [
+        {
+          "case": "session_init",
+          "median_latency_reduction_percent": -381.9175565728574,
+          "median_speedup": 0.20750437214022058,
+          "native_bridge_p50_ms": 4.3163750087842345,
+          "native_bridge_p95_ms": 4.7163333219941705,
+          "samples_per_backend": 51,
+          "swift_p50_ms": 0.8956666861195117,
+          "swift_p95_ms": 0.9980000031646341
+        },
+        {
+          "case": "session_init_decode_and_candidates",
+          "median_latency_reduction_percent": 17.207091059994816,
+          "median_speedup": 1.2078329084011736,
+          "native_bridge_p50_ms": 17.523291666293517,
+          "native_bridge_p95_ms": 17.912875016918406,
+          "samples_per_backend": 51,
+          "swift_p50_ms": 21.165208338061348,
+          "swift_p95_ms": 21.611166652292013
+        },
+        {
+          "case": "append_one",
+          "median_latency_reduction_percent": 21.271359347050055,
+          "median_speedup": 1.2701857820817464,
+          "native_bridge_p50_ms": 1.5857916441746056,
+          "native_bridge_p95_ms": 1.6783333558123559,
+          "samples_per_backend": 51,
+          "swift_p50_ms": 2.01424999977462,
+          "swift_p95_ms": 2.0807916880585253
+        },
+        {
+          "case": "append_one_with_taps",
+          "median_latency_reduction_percent": 23.344112312884224,
+          "median_speedup": 1.3045312371590718,
+          "native_bridge_p50_ms": 1.6000000177882612,
+          "native_bridge_p95_ms": 1.6963749949354678,
+          "samples_per_backend": 51,
+          "swift_p50_ms": 2.0872500026598573,
+          "swift_p95_ms": 2.2229583410080522
+        },
+        {
+          "case": "candidates_only",
+          "median_latency_reduction_percent": 83.69337712821002,
+          "median_speedup": 6.132477631097811,
+          "native_bridge_p50_ms": 0.019500002963468432,
+          "native_bridge_p95_ms": 0.028041686164215207,
+          "samples_per_backend": 51,
+          "swift_p50_ms": 0.11958333197981119,
+          "swift_p95_ms": 0.1255416718777269
+        },
+        {
+          "case": "fresh_word_and_candidates",
+          "median_latency_reduction_percent": 34.94845381626317,
+          "median_speedup": 1.5372424771818942,
+          "native_bridge_p50_ms": 13.164291653083637,
+          "native_bridge_p95_ms": 13.326333340955898,
+          "samples_per_backend": 51,
+          "swift_p50_ms": 20.236708311131224,
+          "swift_p95_ms": 20.467916678171605
+        },
+        {
+          "case": "backspace_rebuild_and_candidates",
+          "median_latency_reduction_percent": 38.455200006225176,
+          "median_speedup": 1.6248326424021993,
+          "native_bridge_p50_ms": 11.670458334265277,
+          "native_bridge_p95_ms": 11.85966667253524,
+          "samples_per_backend": 51,
+          "swift_p50_ms": 18.962541653309017,
+          "swift_p95_ms": 19.23345835530199
+        }
+      ],
+      "scope": "retained English DP kernels with bridge; not whole decoder, NSS, neural inference or physical-device metrics",
+      "seed_count": 9228,
+      "three_double_buffers_bytes_each_backend": 1949784
+    },
+    "simulator": {
+      "checksum": 19742528,
+      "dp_cells": 81241,
+      "environment": "Release iOS simulator on Mac; isolated benchmark; not physical iPhone",
+      "optimization": "Swift -O; C++ optimized; no shadow execution",
+      "rows": [
+        {
+          "case": "session_init",
+          "median_latency_reduction_percent": -929.4384518147234,
+          "median_speedup": 0.097140338816485,
+          "native_bridge_p50_ms": 5.392541672335938,
+          "native_bridge_p95_ms": 6.109750014729798,
+          "samples_per_backend": 101,
+          "swift_p50_ms": 0.5238333251327276,
+          "swift_p95_ms": 0.5793749878648669
+        },
+        {
+          "case": "session_init_decode_and_candidates",
+          "median_latency_reduction_percent": 27.06379792401966,
+          "median_speedup": 1.3710612446727937,
+          "native_bridge_p50_ms": 20.333458320237696,
+          "native_bridge_p95_ms": 21.315624995622784,
+          "samples_per_backend": 101,
+          "swift_p50_ms": 27.878416673047468,
+          "swift_p95_ms": 29.82287501799874
+        },
+        {
+          "case": "append_one",
+          "median_latency_reduction_percent": 36.31984389920152,
+          "median_speedup": 1.5703479093504626,
+          "native_bridge_p50_ms": 1.7460833478253335,
+          "native_bridge_p95_ms": 1.8891666550189257,
+          "samples_per_backend": 101,
+          "swift_p50_ms": 2.741958334809169,
+          "swift_p95_ms": 2.977374999318272
+        },
+        {
+          "case": "append_one_with_taps",
+          "median_latency_reduction_percent": 40.33995200367224,
+          "median_speedup": 1.6761635861599589,
+          "native_bridge_p50_ms": 1.7125416779890656,
+          "native_bridge_p95_ms": 1.8340833485126495,
+          "samples_per_backend": 101,
+          "swift_p50_ms": 2.8705000004265457,
+          "swift_p95_ms": 3.0582083272747695
+        },
+        {
+          "case": "candidates_only",
+          "median_latency_reduction_percent": 14.338260155739746,
+          "median_speedup": 1.1673823130584065,
+          "native_bridge_p50_ms": 0.02912498894147575,
+          "native_bridge_p95_ms": 0.046166678657755256,
+          "samples_per_backend": 101,
+          "swift_p50_ms": 0.03399999695830047,
+          "swift_p95_ms": 0.04633332719095051
+        },
+        {
+          "case": "fresh_word_and_candidates",
+          "median_latency_reduction_percent": 46.21095643489404,
+          "median_speedup": 1.8591146704246664,
+          "native_bridge_p50_ms": 14.40237500355579,
+          "native_bridge_p95_ms": 15.137125010369346,
+          "samples_per_backend": 101,
+          "swift_p50_ms": 26.775666658068076,
+          "swift_p95_ms": 27.592458325671032
+        },
+        {
+          "case": "backspace_rebuild_and_candidates",
+          "median_latency_reduction_percent": 47.04830654733482,
+          "median_speedup": 1.8885137278828004,
+          "native_bridge_p50_ms": 12.895833351649344,
+          "native_bridge_p95_ms": 13.50050000473857,
+          "samples_per_backend": 101,
+          "swift_p50_ms": 24.35395831707865,
+          "swift_p95_ms": 25.705875013954937
+        }
+      ],
+      "scope": "retained English DP kernels with bridge; not whole decoder, NSS, neural inference or physical-device metrics",
+      "seed_count": 9228,
+      "three_double_buffers_bytes_each_backend": 1949784
+    }
+  },
+  "vocabulary_disk_bytes_unchanged": 9391297
+}

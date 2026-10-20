@@ -1,0 +1,2857 @@
+{
+  "additional_words": 632,
+  "artifacts": {
+    "contexts": {
+      "bytes": 41612,
+      "path": "tools/data/english-contexts-v1.json.bz2",
+      "sha256": "45513ca164bfd7b0d86630e468f29222d5e1f0c997176dee28a38e485baa1c9d"
+    },
+    "heldout": {
+      "bytes": 120258,
+      "path": "tools/data/english-masc-heldout-v1.json.bz2",
+      "sha256": "bd9129ca750c658969e02c9612fa4686e7ce8aba1e25f0604c94859dd3dab775"
+    },
+    "vocabulary": {
+      "bytes": 6455,
+      "path": "tools/data/english-expansion-v1.json.bz2",
+      "sha256": "cc1134dea1bd533339720decbb233bf456c1df394de07f26873199c18bf773e3"
+    }
+  },
+  "baseline_words": 60450,
+  "documents": [
+    {
+      "document": "masc_500k_texts/spoken/court transcript/Day3PMSession.txt",
+      "family": "masc_500k_texts/spoken/court transcript/Day3PMSession",
+      "genre": "court transcript",
+      "sentences": 1937,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/court transcript/Lessig-court-transcript.txt",
+      "family": "masc_500k_texts/spoken/court transcript/Lessig-court-transcript",
+      "genre": "court transcript",
+      "sentences": 926,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/debate-transcript/2nd_Gore-Bush.txt",
+      "family": "masc_500k_texts/spoken/debate-transcript/2nd_Gore-Bush",
+      "genre": "debate-transcript",
+      "sentences": 1079,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/debate-transcript/3rd_Bush-Kerry.txt",
+      "family": "masc_500k_texts/spoken/debate-transcript/3rd_Bush-Kerry",
+      "genre": "debate-transcript",
+      "sentences": 1093,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/spoken/face-to-face/Bed012.txt",
+      "family": "masc_500k_texts/spoken/face-to-face/Bed012",
+      "genre": "face-to-face",
+      "sentences": 798,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/face-to-face/Bmr021.txt",
+      "family": "masc_500k_texts/spoken/face-to-face/Bmr021",
+      "genre": "face-to-face",
+      "sentences": 770,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/face-to-face/NapierDianne.txt",
+      "family": "masc_500k_texts/spoken/face-to-face/NapierDianne",
+      "genre": "face-to-face",
+      "sentences": 96,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/face-to-face/PolkMaria.txt",
+      "family": "masc_500k_texts/spoken/face-to-face/PolkMaria",
+      "genre": "face-to-face",
+      "sentences": 52,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/face-to-face/ReidSandra.txt",
+      "family": "masc_500k_texts/spoken/face-to-face/ReidSandra",
+      "genre": "face-to-face",
+      "sentences": 104,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/face-to-face/RindnerBonnie.txt",
+      "family": "masc_500k_texts/spoken/face-to-face/RindnerBonnie",
+      "genre": "face-to-face",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/telephone/sw2014-ms98-a-trans.txt",
+      "family": "masc_500k_texts/spoken/telephone/sw2014-ms98-a-trans",
+      "genre": "telephone",
+      "sentences": 38,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/telephone/sw2015-ms98-a-trans.txt",
+      "family": "masc_500k_texts/spoken/telephone/sw2015-ms98-a-trans",
+      "genre": "telephone",
+      "sentences": 60,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/telephone/sw2025-ms98-a-trans.txt",
+      "family": "masc_500k_texts/spoken/telephone/sw2025-ms98-a-trans",
+      "genre": "telephone",
+      "sentences": 60,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/spoken/telephone/sw2071-ms98-a-trans.txt",
+      "family": "masc_500k_texts/spoken/telephone/sw2071-ms98-a-trans",
+      "genre": "telephone",
+      "sentences": 61,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/spoken/telephone/sw2078-ms98-a-trans.txt",
+      "family": "masc_500k_texts/spoken/telephone/sw2078-ms98-a-trans",
+      "genre": "telephone",
+      "sentences": 188,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Acephalous-Cant-believe.txt",
+      "family": "masc_500k_texts/written/blog/Acephalous-Cant-believe",
+      "genre": "blog",
+      "sentences": 67,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Acephalous-Internet.txt",
+      "family": "masc_500k_texts/written/blog/Acephalous-Internet",
+      "genre": "blog",
+      "sentences": 75,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Anti-Terrorist.txt",
+      "family": "masc_500k_texts/written/blog/Anti-Terrorist",
+      "genre": "blog",
+      "sentences": 92,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Effing-Idiot.txt",
+      "family": "masc_500k_texts/written/blog/Effing-Idiot",
+      "genre": "blog",
+      "sentences": 474,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Fermentation_Eminent-Domain.txt",
+      "family": "masc_500k_texts/written/blog/Fermentation_Eminent-Domain",
+      "genre": "blog",
+      "sentences": 261,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Fermentation_HR5034.txt",
+      "family": "masc_500k_texts/written/blog/Fermentation_HR5034",
+      "genre": "blog",
+      "sentences": 303,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/How_soon-Fans.txt",
+      "family": "masc_500k_texts/written/blog/How_soon-Fans",
+      "genre": "blog",
+      "sentences": 91,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/How_soon-Lebron-James.txt",
+      "family": "masc_500k_texts/written/blog/How_soon-Lebron-James",
+      "genre": "blog",
+      "sentences": 64,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Italy.txt",
+      "family": "masc_500k_texts/written/blog/Italy",
+      "genre": "blog",
+      "sentences": 86,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Seedbombing.txt",
+      "family": "masc_500k_texts/written/blog/Seedbombing",
+      "genre": "blog",
+      "sentences": 153,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Tupelo-Honey-Cafe.txt",
+      "family": "masc_500k_texts/written/blog/Tupelo-Honey-Cafe",
+      "genre": "blog",
+      "sentences": 75,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Uprooted_Bike.txt",
+      "family": "masc_500k_texts/written/blog/Uprooted_Bike",
+      "genre": "blog",
+      "sentences": 130,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/Uprooted_Farming-on-Sand.txt",
+      "family": "masc_500k_texts/written/blog/Uprooted_Farming-on-Sand",
+      "genre": "blog",
+      "sentences": 112,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/blog-jet-lag.txt",
+      "family": "masc_500k_texts/written/blog/blog-jet-lag",
+      "genre": "blog",
+      "sentences": 96,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/blog-monastery.txt",
+      "family": "masc_500k_texts/written/blog/blog-monastery",
+      "genre": "blog",
+      "sentences": 97,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/blog-new-year's-resolutions.txt",
+      "family": "masc_500k_texts/written/blog/blog-new-year's-resolutions",
+      "genre": "blog",
+      "sentences": 86,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/blog-varsity-athletics.txt",
+      "family": "masc_500k_texts/written/blog/blog-varsity-athletics",
+      "genre": "blog",
+      "sentences": 92,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/detroit.txt",
+      "family": "masc_500k_texts/written/blog/detroit",
+      "genre": "blog",
+      "sentences": 375,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/lessig_blog-carbon.txt",
+      "family": "masc_500k_texts/written/blog/lessig_blog-carbon",
+      "genre": "blog",
+      "sentences": 175,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/sucker.txt",
+      "family": "masc_500k_texts/written/blog/sucker",
+      "genre": "blog",
+      "sentences": 51,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/blog/vampires.txt",
+      "family": "masc_500k_texts/written/blog/vampires",
+      "genre": "blog",
+      "sentences": 82,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/12030.txt",
+      "family": "masc_500k_texts/written/email/12030",
+      "genre": "email",
+      "sentences": 20,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/12174.txt",
+      "family": "masc_500k_texts/written/email/12174",
+      "genre": "email",
+      "sentences": 14,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/12176.txt",
+      "family": "masc_500k_texts/written/email/12176",
+      "genre": "email",
+      "sentences": 159,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/173252.txt",
+      "family": "masc_500k_texts/written/email/173252",
+      "genre": "email",
+      "sentences": 85,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/173906.txt",
+      "family": "masc_500k_texts/written/email/173906",
+      "genre": "email",
+      "sentences": 11,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/174124.txt",
+      "family": "masc_500k_texts/written/email/174124",
+      "genre": "email",
+      "sentences": 21,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/175448.txt",
+      "family": "masc_500k_texts/written/email/175448",
+      "genre": "email",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/175814.txt",
+      "family": "masc_500k_texts/written/email/175814",
+      "genre": "email",
+      "sentences": 21,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/175816.txt",
+      "family": "masc_500k_texts/written/email/175816",
+      "genre": "email",
+      "sentences": 21,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/175841.txt",
+      "family": "masc_500k_texts/written/email/175841",
+      "genre": "email",
+      "sentences": 399,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/176581.txt",
+      "family": "masc_500k_texts/written/email/176581",
+      "genre": "email",
+      "sentences": 40,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/210343.txt",
+      "family": "masc_500k_texts/written/email/210343",
+      "genre": "email",
+      "sentences": 12,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/211401.txt",
+      "family": "masc_500k_texts/written/email/211401",
+      "genre": "email",
+      "sentences": 5,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/211402.txt",
+      "family": "masc_500k_texts/written/email/211402",
+      "genre": "email",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/21257.txt",
+      "family": "masc_500k_texts/written/email/21257",
+      "genre": "email",
+      "sentences": 20,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/218920.txt",
+      "family": "masc_500k_texts/written/email/218920",
+      "genre": "email",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/219122.txt",
+      "family": "masc_500k_texts/written/email/219122",
+      "genre": "email",
+      "sentences": 13,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/219123.txt",
+      "family": "masc_500k_texts/written/email/219123",
+      "genre": "email",
+      "sentences": 33,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/219257.txt",
+      "family": "masc_500k_texts/written/email/219257",
+      "genre": "email",
+      "sentences": 5,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/221197.txt",
+      "family": "masc_500k_texts/written/email/221197",
+      "genre": "email",
+      "sentences": 20,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/230685.txt",
+      "family": "masc_500k_texts/written/email/230685",
+      "genre": "email",
+      "sentences": 25,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/234267.txt",
+      "family": "masc_500k_texts/written/email/234267",
+      "genre": "email",
+      "sentences": 13,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/234783.txt",
+      "family": "masc_500k_texts/written/email/234783",
+      "genre": "email",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/23559.txt",
+      "family": "masc_500k_texts/written/email/23559",
+      "genre": "email",
+      "sentences": 16,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/49059.txt",
+      "family": "masc_500k_texts/written/email/49059",
+      "genre": "email",
+      "sentences": 37,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/50307.txt",
+      "family": "masc_500k_texts/written/email/50307",
+      "genre": "email",
+      "sentences": 22,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/52201.txt",
+      "family": "masc_500k_texts/written/email/52201",
+      "genre": "email",
+      "sentences": 13,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/52555.txt",
+      "family": "masc_500k_texts/written/email/52555",
+      "genre": "email",
+      "sentences": 32,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/52713.txt",
+      "family": "masc_500k_texts/written/email/52713",
+      "genre": "email",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/52998.txt",
+      "family": "masc_500k_texts/written/email/52998",
+      "genre": "email",
+      "sentences": 50,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/52999.txt",
+      "family": "masc_500k_texts/written/email/52999",
+      "genre": "email",
+      "sentences": 0,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/53536.txt",
+      "family": "masc_500k_texts/written/email/53536",
+      "genre": "email",
+      "sentences": 50,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/53555.txt",
+      "family": "masc_500k_texts/written/email/53555",
+      "genre": "email",
+      "sentences": 13,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/54261.txt",
+      "family": "masc_500k_texts/written/email/54261",
+      "genre": "email",
+      "sentences": 3,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/54262.txt",
+      "family": "masc_500k_texts/written/email/54262",
+      "genre": "email",
+      "sentences": 1,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/54263.txt",
+      "family": "masc_500k_texts/written/email/54263",
+      "genre": "email",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/54536.txt",
+      "family": "masc_500k_texts/written/email/54536",
+      "genre": "email",
+      "sentences": 61,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/54537.txt",
+      "family": "masc_500k_texts/written/email/54537",
+      "genre": "email",
+      "sentences": 8,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/8885.txt",
+      "family": "masc_500k_texts/written/email/8885",
+      "genre": "email",
+      "sentences": 30,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/9066.txt",
+      "family": "masc_500k_texts/written/email/9066",
+      "genre": "email",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/9085.txt",
+      "family": "masc_500k_texts/written/email/9085",
+      "genre": "email",
+      "sentences": 34,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/9159.txt",
+      "family": "masc_500k_texts/written/email/9159",
+      "genre": "email",
+      "sentences": 31,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/9191.txt",
+      "family": "masc_500k_texts/written/email/9191",
+      "genre": "email",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/ENRON-pearson-email-25jul02.txt",
+      "family": "masc_500k_texts/written/email/ENRON-pearson-email-25jul02",
+      "genre": "email",
+      "sentences": 11,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/enron-thread-159550.txt",
+      "family": "masc_500k_texts/written/email/enron-thread",
+      "genre": "email",
+      "sentences": 43,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2114716.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 78,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2121270.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 16,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2125109.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2129640.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 11,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2133315.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2137010.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 69,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2144868.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2148080.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 27,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2152883.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 16,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2171003.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2173878.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 88,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2180740.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 16,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2183485.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-003-2205935.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 128,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-034-10062451.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 39,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-034-10066763.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-034-10069772.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-034-10073419.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 23,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-034-10077455.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 19,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-034-10082707.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 24,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-11485666.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 27,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-11489622.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 55,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-11493928.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 187,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-11506817.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12119260.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 8,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12122969.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 100,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12130258.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12133410.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 29,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12139072.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12142206.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 24,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12146425.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 47,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12151335.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 22,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12155427.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 8,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12158926.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 20,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/email/lists-046-12162937.txt",
+      "family": "masc_500k_texts/written/email/lists",
+      "genre": "email",
+      "sentences": 26,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/A_defense_of_Michael_Moore.txt",
+      "family": "masc_500k_texts/written/essays/A_defense_of_Michael_Moore",
+      "genre": "essays",
+      "sentences": 231,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/Ant_Robot.txt",
+      "family": "masc_500k_texts/written/essays/Ant_Robot",
+      "genre": "essays",
+      "sentences": 561,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/Bartok.txt",
+      "family": "masc_500k_texts/written/essays/Bartok",
+      "genre": "essays",
+      "sentences": 197,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/Black_and_white.txt",
+      "family": "masc_500k_texts/written/essays/Black_and_white",
+      "genre": "essays",
+      "sentences": 304,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/Homosexuality.txt",
+      "family": "masc_500k_texts/written/essays/Homosexuality",
+      "genre": "essays",
+      "sentences": 278,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/Madame_White_Snake.txt",
+      "family": "masc_500k_texts/written/essays/Madame_White_Snake",
+      "genre": "essays",
+      "sentences": 173,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/Ohio_Steel.txt",
+      "family": "masc_500k_texts/written/essays/Ohio_Steel",
+      "genre": "essays",
+      "sentences": 285,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/essays/anth_essay_4.txt",
+      "family": "masc_500k_texts/written/essays/anth_essay",
+      "genre": "essays",
+      "sentences": 135,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/ficlets/1399.txt",
+      "family": "masc_500k_texts/written/ficlets/1399",
+      "genre": "ficlets",
+      "sentences": 522,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/ficlets/1400.txt",
+      "family": "masc_500k_texts/written/ficlets/1400",
+      "genre": "ficlets",
+      "sentences": 497,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/ficlets/1401.txt",
+      "family": "masc_500k_texts/written/ficlets/1401",
+      "genre": "ficlets",
+      "sentences": 484,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/ficlets/1402.txt",
+      "family": "masc_500k_texts/written/ficlets/1402",
+      "genre": "ficlets",
+      "sentences": 628,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/ficlets/1403.txt",
+      "family": "masc_500k_texts/written/ficlets/1403",
+      "genre": "ficlets",
+      "sentences": 535,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/fiction/A_Wasted_Day.txt",
+      "family": "masc_500k_texts/written/fiction/A_Wasted_Day",
+      "genre": "fiction",
+      "sentences": 634,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/fiction/Nathans_Bylichka.txt",
+      "family": "masc_500k_texts/written/fiction/Nathans_Bylichka",
+      "genre": "fiction",
+      "sentences": 837,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/fiction/The_Black_Willow.txt",
+      "family": "masc_500k_texts/written/fiction/The_Black_Willow",
+      "genre": "fiction",
+      "sentences": 226,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/fiction/captured_moments.txt",
+      "family": "masc_500k_texts/written/fiction/captured_moments",
+      "genre": "fiction",
+      "sentences": 708,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/fiction/hotel-california.txt",
+      "family": "masc_500k_texts/written/fiction/hotel-california",
+      "genre": "fiction",
+      "sentences": 715,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/fiction/lw1.txt",
+      "family": "masc_500k_texts/written/fiction/lw1",
+      "genre": "fiction",
+      "sentences": 89,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/govt-docs/Env_Prot_Agency-nov1.txt",
+      "family": "masc_500k_texts/written/govt-docs/Env_Prot_Agency-nov1",
+      "genre": "govt-docs",
+      "sentences": 625,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/govt-docs/Postal_Rate_Comm-ReportToCongress2002WEB.txt",
+      "family": "masc_500k_texts/written/govt-docs/Postal_Rate_Comm-ReportToCongress2002WEB",
+      "genre": "govt-docs",
+      "sentences": 610,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/govt-docs/Protocol_Regarding_Access.txt",
+      "family": "masc_500k_texts/written/govt-docs/Protocol_Regarding_Access",
+      "genre": "govt-docs",
+      "sentences": 246,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/govt-docs/chapter-10.txt",
+      "family": "masc_500k_texts/written/govt-docs/chapter",
+      "genre": "govt-docs",
+      "sentences": 659,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/govt-docs/fcic_final_report_conclusions.txt",
+      "family": "masc_500k_texts/written/govt-docs/fcic_final_report_conclusions",
+      "genre": "govt-docs",
+      "sentences": 711,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes1.txt",
+      "family": "masc_500k_texts/written/jokes/jokes1",
+      "genre": "jokes",
+      "sentences": 313,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes10.txt",
+      "family": "masc_500k_texts/written/jokes/jokes10",
+      "genre": "jokes",
+      "sentences": 143,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes11.txt",
+      "family": "masc_500k_texts/written/jokes/jokes11",
+      "genre": "jokes",
+      "sentences": 102,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes12.txt",
+      "family": "masc_500k_texts/written/jokes/jokes12",
+      "genre": "jokes",
+      "sentences": 110,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes13.txt",
+      "family": "masc_500k_texts/written/jokes/jokes13",
+      "genre": "jokes",
+      "sentences": 117,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes14.txt",
+      "family": "masc_500k_texts/written/jokes/jokes14",
+      "genre": "jokes",
+      "sentences": 117,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes15.txt",
+      "family": "masc_500k_texts/written/jokes/jokes15",
+      "genre": "jokes",
+      "sentences": 91,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes16.txt",
+      "family": "masc_500k_texts/written/jokes/jokes16",
+      "genre": "jokes",
+      "sentences": 150,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes2.txt",
+      "family": "masc_500k_texts/written/jokes/jokes2",
+      "genre": "jokes",
+      "sentences": 257,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes3.txt",
+      "family": "masc_500k_texts/written/jokes/jokes3",
+      "genre": "jokes",
+      "sentences": 215,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes4.txt",
+      "family": "masc_500k_texts/written/jokes/jokes4",
+      "genre": "jokes",
+      "sentences": 201,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes5.txt",
+      "family": "masc_500k_texts/written/jokes/jokes5",
+      "genre": "jokes",
+      "sentences": 143,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes6.txt",
+      "family": "masc_500k_texts/written/jokes/jokes6",
+      "genre": "jokes",
+      "sentences": 117,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes7.txt",
+      "family": "masc_500k_texts/written/jokes/jokes7",
+      "genre": "jokes",
+      "sentences": 80,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes8.txt",
+      "family": "masc_500k_texts/written/jokes/jokes8",
+      "genre": "jokes",
+      "sentences": 83,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/jokes/jokes9.txt",
+      "family": "masc_500k_texts/written/jokes/jokes9",
+      "genre": "jokes",
+      "sentences": 103,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/Article247_327.txt",
+      "family": "masc_500k_texts/written/journal/Article247",
+      "genre": "journal",
+      "sentences": 91,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/Article247_328.txt",
+      "family": "masc_500k_texts/written/journal/Article247",
+      "genre": "journal",
+      "sentences": 62,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/Article247_3500.txt",
+      "family": "masc_500k_texts/written/journal/Article247",
+      "genre": "journal",
+      "sentences": 66,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/Article247_400.txt",
+      "family": "masc_500k_texts/written/journal/Article247",
+      "genre": "journal",
+      "sentences": 74,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/Article247_500.txt",
+      "family": "masc_500k_texts/written/journal/Article247",
+      "genre": "journal",
+      "sentences": 79,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/Article247_66.txt",
+      "family": "masc_500k_texts/written/journal/Article247",
+      "genre": "journal",
+      "sentences": 71,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/ArticleIP_1059.txt",
+      "family": "masc_500k_texts/written/journal/ArticleIP",
+      "genre": "journal",
+      "sentences": 117,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/ArticleIP_1060.txt",
+      "family": "masc_500k_texts/written/journal/ArticleIP",
+      "genre": "journal",
+      "sentences": 119,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/journal/VOL15_3.txt",
+      "family": "masc_500k_texts/written/journal/VOL15",
+      "genre": "journal",
+      "sentences": 2015,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/110CYL067.txt",
+      "family": "masc_500k_texts/written/letters/110CYL067",
+      "genre": "letters",
+      "sentences": 62,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/110CYL068.txt",
+      "family": "masc_500k_texts/written/letters/110CYL068",
+      "genre": "letters",
+      "sentences": 55,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/110CYL069.txt",
+      "family": "masc_500k_texts/written/letters/110CYL069",
+      "genre": "letters",
+      "sentences": 73,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/110CYL070.txt",
+      "family": "masc_500k_texts/written/letters/110CYL070",
+      "genre": "letters",
+      "sentences": 30,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/110CYL071.txt",
+      "family": "masc_500k_texts/written/letters/110CYL071",
+      "genre": "letters",
+      "sentences": 52,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/110CYL072.txt",
+      "family": "masc_500k_texts/written/letters/110CYL072",
+      "genre": "letters",
+      "sentences": 19,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/110CYL200.txt",
+      "family": "masc_500k_texts/written/letters/110CYL200",
+      "genre": "letters",
+      "sentences": 47,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/112C-L012.txt",
+      "family": "masc_500k_texts/written/letters/112C-L012",
+      "genre": "letters",
+      "sentences": 30,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/112C-L013.txt",
+      "family": "masc_500k_texts/written/letters/112C-L013",
+      "genre": "letters",
+      "sentences": 46,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/112C-L014.txt",
+      "family": "masc_500k_texts/written/letters/112C-L014",
+      "genre": "letters",
+      "sentences": 34,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/112C-L015.txt",
+      "family": "masc_500k_texts/written/letters/112C-L015",
+      "genre": "letters",
+      "sentences": 35,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/112C-L016.txt",
+      "family": "masc_500k_texts/written/letters/112C-L016",
+      "genre": "letters",
+      "sentences": 26,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/113CWL017.txt",
+      "family": "masc_500k_texts/written/letters/113CWL017",
+      "genre": "letters",
+      "sentences": 29,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/113CWL018.txt",
+      "family": "masc_500k_texts/written/letters/113CWL018",
+      "genre": "letters",
+      "sentences": 29,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/114CUL057.txt",
+      "family": "masc_500k_texts/written/letters/114CUL057",
+      "genre": "letters",
+      "sentences": 28,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/114CUL058.txt",
+      "family": "masc_500k_texts/written/letters/114CUL058",
+      "genre": "letters",
+      "sentences": 45,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/114CUL059.txt",
+      "family": "masc_500k_texts/written/letters/114CUL059",
+      "genre": "letters",
+      "sentences": 35,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/114CUL060.txt",
+      "family": "masc_500k_texts/written/letters/114CUL060",
+      "genre": "letters",
+      "sentences": 51,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/115CVL035.txt",
+      "family": "masc_500k_texts/written/letters/115CVL035",
+      "genre": "letters",
+      "sentences": 40,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/115CVL036.txt",
+      "family": "masc_500k_texts/written/letters/115CVL036",
+      "genre": "letters",
+      "sentences": 41,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/115CVL037.txt",
+      "family": "masc_500k_texts/written/letters/115CVL037",
+      "genre": "letters",
+      "sentences": 49,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/116CUL032.txt",
+      "family": "masc_500k_texts/written/letters/116CUL032",
+      "genre": "letters",
+      "sentences": 46,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/116CUL033.txt",
+      "family": "masc_500k_texts/written/letters/116CUL033",
+      "genre": "letters",
+      "sentences": 33,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/116CUL034.txt",
+      "family": "masc_500k_texts/written/letters/116CUL034",
+      "genre": "letters",
+      "sentences": 77,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/117CWL008.txt",
+      "family": "masc_500k_texts/written/letters/117CWL008",
+      "genre": "letters",
+      "sentences": 26,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/117CWL009.txt",
+      "family": "masc_500k_texts/written/letters/117CWL009",
+      "genre": "letters",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/118CWL048.txt",
+      "family": "masc_500k_texts/written/letters/118CWL048",
+      "genre": "letters",
+      "sentences": 30,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/118CWL049.txt",
+      "family": "masc_500k_texts/written/letters/118CWL049",
+      "genre": "letters",
+      "sentences": 43,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/118CWL050.txt",
+      "family": "masc_500k_texts/written/letters/118CWL050",
+      "genre": "letters",
+      "sentences": 75,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/119CWL041.txt",
+      "family": "masc_500k_texts/written/letters/119CWL041",
+      "genre": "letters",
+      "sentences": 27,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/602CZL285.txt",
+      "family": "masc_500k_texts/written/letters/602CZL285",
+      "genre": "letters",
+      "sentences": 34,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/AMC2.txt",
+      "family": "masc_500k_texts/written/letters/AMC2",
+      "genre": "letters",
+      "sentences": 39,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/IFAW1.txt",
+      "family": "masc_500k_texts/written/letters/IFAW1",
+      "genre": "letters",
+      "sentences": 47,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/NWF1.txt",
+      "family": "masc_500k_texts/written/letters/NWF1",
+      "genre": "letters",
+      "sentences": 51,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/alumnifund1.txt",
+      "family": "masc_500k_texts/written/letters/alumnifund1",
+      "genre": "letters",
+      "sentences": 17,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/appalachian1.txt",
+      "family": "masc_500k_texts/written/letters/appalachian1",
+      "genre": "letters",
+      "sentences": 114,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/aspca1.txt",
+      "family": "masc_500k_texts/written/letters/aspca1",
+      "genre": "letters",
+      "sentences": 56,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/att2.txt",
+      "family": "masc_500k_texts/written/letters/att2",
+      "genre": "letters",
+      "sentences": 33,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/audubon1.txt",
+      "family": "masc_500k_texts/written/letters/audubon1",
+      "genre": "letters",
+      "sentences": 71,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/audubon2.txt",
+      "family": "masc_500k_texts/written/letters/audubon2",
+      "genre": "letters",
+      "sentences": 46,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/defenders5.txt",
+      "family": "masc_500k_texts/written/letters/defenders5",
+      "genre": "letters",
+      "sentences": 78,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/guidedogs1.txt",
+      "family": "masc_500k_texts/written/letters/guidedogs1",
+      "genre": "letters",
+      "sentences": 68,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/hsus4.txt",
+      "family": "masc_500k_texts/written/letters/hsus4",
+      "genre": "letters",
+      "sentences": 47,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/littleshelter2.txt",
+      "family": "masc_500k_texts/written/letters/littleshelter2",
+      "genre": "letters",
+      "sentences": 18,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/marine1.txt",
+      "family": "masc_500k_texts/written/letters/marine1",
+      "genre": "letters",
+      "sentences": 81,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/united1.txt",
+      "family": "masc_500k_texts/written/letters/united1",
+      "genre": "letters",
+      "sentences": 41,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/warner1.txt",
+      "family": "masc_500k_texts/written/letters/warner1",
+      "genre": "letters",
+      "sentences": 37,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/wildelifewatch1.txt",
+      "family": "masc_500k_texts/written/letters/wildelifewatch1",
+      "genre": "letters",
+      "sentences": 39,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/letters/wwf12.txt",
+      "family": "masc_500k_texts/written/letters/wwf12",
+      "genre": "letters",
+      "sentences": 55,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/movie-script/JurassicParkIV-INT.txt",
+      "family": "masc_500k_texts/written/movie-script/JurassicParkIV-INT",
+      "genre": "movie-script",
+      "sentences": 139,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene_1.txt",
+      "family": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene",
+      "genre": "movie-script",
+      "sentences": 62,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene_3.txt",
+      "family": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene",
+      "genre": "movie-script",
+      "sentences": 199,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene_4.txt",
+      "family": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene",
+      "genre": "movie-script",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene_5.txt",
+      "family": "masc_500k_texts/written/movie-script/JurassicParkIV-Scene",
+      "genre": "movie-script",
+      "sentences": 373,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/movie-script/pirates.txt",
+      "family": "masc_500k_texts/written/movie-script/pirates",
+      "genre": "movie-script",
+      "sentences": 2359,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/20000410_nyt-NEW.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/20000410_nyt-NEW",
+      "genre": "newspaper:newswire",
+      "sentences": 29,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/20000415_apw_eng-NEW.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/20000415_apw_eng-NEW",
+      "genre": "newspaper:newswire",
+      "sentences": 32,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/20000419_apw_eng-NEW.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/20000419_apw_eng-NEW",
+      "genre": "newspaper:newswire",
+      "sentences": 23,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/20000424_nyt-NEW.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/20000424_nyt-NEW",
+      "genre": "newspaper:newswire",
+      "sentences": 7,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/20020731-nyt.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/20020731-nyt",
+      "genre": "newspaper:newswire",
+      "sentences": 792,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/A1.E1-NEW.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/A1.E1-NEW",
+      "genre": "newspaper:newswire",
+      "sentences": 20,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/A1.E2-NEW.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/A1.E2-NEW",
+      "genre": "newspaper:newswire",
+      "sentences": 22,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire1.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire1",
+      "genre": "newspaper:newswire",
+      "sentences": 86,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire2.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire2",
+      "genre": "newspaper:newswire",
+      "sentences": 174,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire3.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire3",
+      "genre": "newspaper:newswire",
+      "sentences": 112,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire4.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire4",
+      "genre": "newspaper:newswire",
+      "sentences": 89,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire5.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire5",
+      "genre": "newspaper:newswire",
+      "sentences": 55,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire6.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire6",
+      "genre": "newspaper:newswire",
+      "sentences": 173,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire7.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire7",
+      "genre": "newspaper:newswire",
+      "sentences": 141,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire8.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire8",
+      "genre": "newspaper:newswire",
+      "sentences": 106,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/NYTnewswire9.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/NYTnewswire9",
+      "genre": "newspaper:newswire",
+      "sentences": 230,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0006.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 4,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0026.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0027.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 18,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0032.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0068.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0073.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0106.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0120.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 51,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0124.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 14,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0127.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0132.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0135.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0136.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0144.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0150.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0151.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0152.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0157.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 8,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0158.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 21,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0159.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 13,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0160.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0161.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0165.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 8,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0167.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0168.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0169.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0171.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0172.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0173.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 8,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0175.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0176.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0184.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 18,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0187.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_0189.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_1640.mrg-NEW.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj_1640.mrg-NEW",
+      "genre": "newspaper:newswire",
+      "sentences": 70,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/newspaper:newswire/wsj_2465.txt",
+      "family": "masc_500k_texts/written/newspaper:newswire/wsj",
+      "genre": "newspaper:newswire",
+      "sentences": 42,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/non-fiction/CUP1.txt",
+      "family": "masc_500k_texts/written/non-fiction/CUP1",
+      "genre": "non-fiction",
+      "sentences": 294,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/non-fiction/CUP2.txt",
+      "family": "masc_500k_texts/written/non-fiction/CUP2",
+      "genre": "non-fiction",
+      "sentences": 313,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/non-fiction/ch5.txt",
+      "family": "masc_500k_texts/written/non-fiction/ch5",
+      "genre": "non-fiction",
+      "sentences": 220,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/non-fiction/chZ.txt",
+      "family": "masc_500k_texts/written/non-fiction/chZ",
+      "genre": "non-fiction",
+      "sentences": 41,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/non-fiction/rybczynski-ch3.txt",
+      "family": "masc_500k_texts/written/non-fiction/rybczynski-ch3",
+      "genre": "non-fiction",
+      "sentences": 395,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111344.txt",
+      "family": "masc_500k_texts/written/spam/111344",
+      "genre": "spam",
+      "sentences": 14,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111348.txt",
+      "family": "masc_500k_texts/written/spam/111348",
+      "genre": "spam",
+      "sentences": 40,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111349.txt",
+      "family": "masc_500k_texts/written/spam/111349",
+      "genre": "spam",
+      "sentences": 26,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111359.txt",
+      "family": "masc_500k_texts/written/spam/111359",
+      "genre": "spam",
+      "sentences": 36,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111363.txt",
+      "family": "masc_500k_texts/written/spam/111363",
+      "genre": "spam",
+      "sentences": 56,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111364.txt",
+      "family": "masc_500k_texts/written/spam/111364",
+      "genre": "spam",
+      "sentences": 21,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111367.txt",
+      "family": "masc_500k_texts/written/spam/111367",
+      "genre": "spam",
+      "sentences": 33,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111369.txt",
+      "family": "masc_500k_texts/written/spam/111369",
+      "genre": "spam",
+      "sentences": 24,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111371.txt",
+      "family": "masc_500k_texts/written/spam/111371",
+      "genre": "spam",
+      "sentences": 33,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111373.txt",
+      "family": "masc_500k_texts/written/spam/111373",
+      "genre": "spam",
+      "sentences": 20,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111375.txt",
+      "family": "masc_500k_texts/written/spam/111375",
+      "genre": "spam",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111377.txt",
+      "family": "masc_500k_texts/written/spam/111377",
+      "genre": "spam",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111380.txt",
+      "family": "masc_500k_texts/written/spam/111380",
+      "genre": "spam",
+      "sentences": 37,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111381.txt",
+      "family": "masc_500k_texts/written/spam/111381",
+      "genre": "spam",
+      "sentences": 56,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111382.txt",
+      "family": "masc_500k_texts/written/spam/111382",
+      "genre": "spam",
+      "sentences": 20,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111393.txt",
+      "family": "masc_500k_texts/written/spam/111393",
+      "genre": "spam",
+      "sentences": 19,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111394.txt",
+      "family": "masc_500k_texts/written/spam/111394",
+      "genre": "spam",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111399.txt",
+      "family": "masc_500k_texts/written/spam/111399",
+      "genre": "spam",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111400.txt",
+      "family": "masc_500k_texts/written/spam/111400",
+      "genre": "spam",
+      "sentences": 63,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111404.txt",
+      "family": "masc_500k_texts/written/spam/111404",
+      "genre": "spam",
+      "sentences": 14,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111406.txt",
+      "family": "masc_500k_texts/written/spam/111406",
+      "genre": "spam",
+      "sentences": 8,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111410.txt",
+      "family": "masc_500k_texts/written/spam/111410",
+      "genre": "spam",
+      "sentences": 18,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111414.txt",
+      "family": "masc_500k_texts/written/spam/111414",
+      "genre": "spam",
+      "sentences": 61,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111422.txt",
+      "family": "masc_500k_texts/written/spam/111422",
+      "genre": "spam",
+      "sentences": 13,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111424.txt",
+      "family": "masc_500k_texts/written/spam/111424",
+      "genre": "spam",
+      "sentences": 4,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111425.txt",
+      "family": "masc_500k_texts/written/spam/111425",
+      "genre": "spam",
+      "sentences": 33,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/111428.txt",
+      "family": "masc_500k_texts/written/spam/111428",
+      "genre": "spam",
+      "sentences": 34,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114423.txt",
+      "family": "masc_500k_texts/written/spam/114423",
+      "genre": "spam",
+      "sentences": 49,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114424.txt",
+      "family": "masc_500k_texts/written/spam/114424",
+      "genre": "spam",
+      "sentences": 16,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114428.txt",
+      "family": "masc_500k_texts/written/spam/114428",
+      "genre": "spam",
+      "sentences": 10,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114433.txt",
+      "family": "masc_500k_texts/written/spam/114433",
+      "genre": "spam",
+      "sentences": 23,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114435.txt",
+      "family": "masc_500k_texts/written/spam/114435",
+      "genre": "spam",
+      "sentences": 26,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114439.txt",
+      "family": "masc_500k_texts/written/spam/114439",
+      "genre": "spam",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114440.txt",
+      "family": "masc_500k_texts/written/spam/114440",
+      "genre": "spam",
+      "sentences": 17,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114441.txt",
+      "family": "masc_500k_texts/written/spam/114441",
+      "genre": "spam",
+      "sentences": 20,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114442.txt",
+      "family": "masc_500k_texts/written/spam/114442",
+      "genre": "spam",
+      "sentences": 28,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114445.txt",
+      "family": "masc_500k_texts/written/spam/114445",
+      "genre": "spam",
+      "sentences": 51,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114446.txt",
+      "family": "masc_500k_texts/written/spam/114446",
+      "genre": "spam",
+      "sentences": 5,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114447.txt",
+      "family": "masc_500k_texts/written/spam/114447",
+      "genre": "spam",
+      "sentences": 19,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114448.txt",
+      "family": "masc_500k_texts/written/spam/114448",
+      "genre": "spam",
+      "sentences": 85,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114450.txt",
+      "family": "masc_500k_texts/written/spam/114450",
+      "genre": "spam",
+      "sentences": 16,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/114452.txt",
+      "family": "masc_500k_texts/written/spam/114452",
+      "genre": "spam",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Apply.txt",
+      "family": "masc_500k_texts/written/spam/Apply",
+      "genre": "spam",
+      "sentences": 18,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Cartoonist_services.txt",
+      "family": "masc_500k_texts/written/spam/Cartoonist_services",
+      "genre": "spam",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Dear_e-mail_user.txt",
+      "family": "masc_500k_texts/written/spam/Dear_e-mail_user",
+      "genre": "spam",
+      "sentences": 6,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Earnings_Season_Underway.txt",
+      "family": "masc_500k_texts/written/spam/Earnings_Season_Underway",
+      "genre": "spam",
+      "sentences": 20,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/FBI_urgent.txt",
+      "family": "masc_500k_texts/written/spam/FBI_urgent",
+      "genre": "spam",
+      "sentences": 47,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Fastest_Reader.txt",
+      "family": "masc_500k_texts/written/spam/Fastest_Reader",
+      "genre": "spam",
+      "sentences": 72,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Globa_Professional_Directory.txt",
+      "family": "masc_500k_texts/written/spam/Globa_Professional_Directory",
+      "genre": "spam",
+      "sentences": 43,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Laptop_Bags.txt",
+      "family": "masc_500k_texts/written/spam/Laptop_Bags",
+      "genre": "spam",
+      "sentences": 67,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Mailbox_Upgrade.txt",
+      "family": "masc_500k_texts/written/spam/Mailbox_Upgrade",
+      "genre": "spam",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Re_ Job Offer.txt",
+      "family": "masc_500k_texts/written/spam/Re_ Job Offer",
+      "genre": "spam",
+      "sentences": 43,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/SEO.txt",
+      "family": "masc_500k_texts/written/spam/SEO",
+      "genre": "spam",
+      "sentences": 18,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/Secret_Shopper.txt",
+      "family": "masc_500k_texts/written/spam/Secret_Shopper",
+      "genre": "spam",
+      "sentences": 11,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/SgtCassandra.txt",
+      "family": "masc_500k_texts/written/spam/SgtCassandra",
+      "genre": "spam",
+      "sentences": 29,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/new_clients.txt",
+      "family": "masc_500k_texts/written/spam/new_clients",
+      "genre": "spam",
+      "sentences": 35,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/record_volume.txt",
+      "family": "masc_500k_texts/written/spam/record_volume",
+      "genre": "spam",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb1.txt",
+      "family": "masc_500k_texts/written/spam/ucb1",
+      "genre": "spam",
+      "sentences": 21,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb10.txt",
+      "family": "masc_500k_texts/written/spam/ucb10",
+      "genre": "spam",
+      "sentences": 11,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb11.txt",
+      "family": "masc_500k_texts/written/spam/ucb11",
+      "genre": "spam",
+      "sentences": 17,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb12.txt",
+      "family": "masc_500k_texts/written/spam/ucb12",
+      "genre": "spam",
+      "sentences": 8,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb14.txt",
+      "family": "masc_500k_texts/written/spam/ucb14",
+      "genre": "spam",
+      "sentences": 17,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb15.txt",
+      "family": "masc_500k_texts/written/spam/ucb15",
+      "genre": "spam",
+      "sentences": 14,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb2.txt",
+      "family": "masc_500k_texts/written/spam/ucb2",
+      "genre": "spam",
+      "sentences": 22,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb20.txt",
+      "family": "masc_500k_texts/written/spam/ucb20",
+      "genre": "spam",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb21.txt",
+      "family": "masc_500k_texts/written/spam/ucb21",
+      "genre": "spam",
+      "sentences": 13,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb22.txt",
+      "family": "masc_500k_texts/written/spam/ucb22",
+      "genre": "spam",
+      "sentences": 11,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb23.txt",
+      "family": "masc_500k_texts/written/spam/ucb23",
+      "genre": "spam",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb24.txt",
+      "family": "masc_500k_texts/written/spam/ucb24",
+      "genre": "spam",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb25.txt",
+      "family": "masc_500k_texts/written/spam/ucb25",
+      "genre": "spam",
+      "sentences": 13,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb26.txt",
+      "family": "masc_500k_texts/written/spam/ucb26",
+      "genre": "spam",
+      "sentences": 14,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb27.txt",
+      "family": "masc_500k_texts/written/spam/ucb27",
+      "genre": "spam",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb28.txt",
+      "family": "masc_500k_texts/written/spam/ucb28",
+      "genre": "spam",
+      "sentences": 11,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb29.txt",
+      "family": "masc_500k_texts/written/spam/ucb29",
+      "genre": "spam",
+      "sentences": 3,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb3.txt",
+      "family": "masc_500k_texts/written/spam/ucb3",
+      "genre": "spam",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb30.txt",
+      "family": "masc_500k_texts/written/spam/ucb30",
+      "genre": "spam",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb31.txt",
+      "family": "masc_500k_texts/written/spam/ucb31",
+      "genre": "spam",
+      "sentences": 87,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb4.txt",
+      "family": "masc_500k_texts/written/spam/ucb4",
+      "genre": "spam",
+      "sentences": 18,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb40.txt",
+      "family": "masc_500k_texts/written/spam/ucb40",
+      "genre": "spam",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb41.txt",
+      "family": "masc_500k_texts/written/spam/ucb41",
+      "genre": "spam",
+      "sentences": 24,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb42.txt",
+      "family": "masc_500k_texts/written/spam/ucb42",
+      "genre": "spam",
+      "sentences": 14,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb43.txt",
+      "family": "masc_500k_texts/written/spam/ucb43",
+      "genre": "spam",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb44.txt",
+      "family": "masc_500k_texts/written/spam/ucb44",
+      "genre": "spam",
+      "sentences": 36,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb45.txt",
+      "family": "masc_500k_texts/written/spam/ucb45",
+      "genre": "spam",
+      "sentences": 6,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb46.txt",
+      "family": "masc_500k_texts/written/spam/ucb46",
+      "genre": "spam",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb47.txt",
+      "family": "masc_500k_texts/written/spam/ucb47",
+      "genre": "spam",
+      "sentences": 7,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb48.txt",
+      "family": "masc_500k_texts/written/spam/ucb48",
+      "genre": "spam",
+      "sentences": 29,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb49.txt",
+      "family": "masc_500k_texts/written/spam/ucb49",
+      "genre": "spam",
+      "sentences": 23,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb50.txt",
+      "family": "masc_500k_texts/written/spam/ucb50",
+      "genre": "spam",
+      "sentences": 9,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb51.txt",
+      "family": "masc_500k_texts/written/spam/ucb51",
+      "genre": "spam",
+      "sentences": 14,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb52.txt",
+      "family": "masc_500k_texts/written/spam/ucb52",
+      "genre": "spam",
+      "sentences": 10,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb53.txt",
+      "family": "masc_500k_texts/written/spam/ucb53",
+      "genre": "spam",
+      "sentences": 13,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb54.txt",
+      "family": "masc_500k_texts/written/spam/ucb54",
+      "genre": "spam",
+      "sentences": 12,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb6.txt",
+      "family": "masc_500k_texts/written/spam/ucb6",
+      "genre": "spam",
+      "sentences": 11,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb8.txt",
+      "family": "masc_500k_texts/written/spam/ucb8",
+      "genre": "spam",
+      "sentences": 30,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/spam/ucb9.txt",
+      "family": "masc_500k_texts/written/spam/ucb9",
+      "genre": "spam",
+      "sentences": 15,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/1468-6708-3-1.txt",
+      "family": "masc_500k_texts/written/technical/1468",
+      "genre": "technical",
+      "sentences": 455,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/1468-6708-3-3.txt",
+      "family": "masc_500k_texts/written/technical/1468",
+      "genre": "technical",
+      "sentences": 300,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/1471-2091-2-9.txt",
+      "family": "masc_500k_texts/written/technical/1471",
+      "genre": "technical",
+      "sentences": 478,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/1471-213X-1-1.txt",
+      "family": "masc_500k_texts/written/technical/1471-213X",
+      "genre": "technical",
+      "sentences": 340,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/1471-230X-2-21.txt",
+      "family": "masc_500k_texts/written/technical/1471-230X",
+      "genre": "technical",
+      "sentences": 289,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/journal.pbio.0020001.txt",
+      "family": "masc_500k_texts/written/technical/journal.pbio.0020001",
+      "genre": "technical",
+      "sentences": 247,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/pmed.0010029.txt",
+      "family": "masc_500k_texts/written/technical/pmed.0010029",
+      "genre": "technical",
+      "sentences": 40,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/technical/rr166.txt",
+      "family": "masc_500k_texts/written/technical/rr166",
+      "genre": "technical",
+      "sentences": 428,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/travel-guides/HistoryGreek.txt",
+      "family": "masc_500k_texts/written/travel-guides/HistoryGreek",
+      "genre": "travel-guides",
+      "sentences": 330,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/travel-guides/HistoryJerusalem.txt",
+      "family": "masc_500k_texts/written/travel-guides/HistoryJerusalem",
+      "genre": "travel-guides",
+      "sentences": 318,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/travel-guides/HistoryLasVegas.txt",
+      "family": "masc_500k_texts/written/travel-guides/HistoryLasVegas",
+      "genre": "travel-guides",
+      "sentences": 335,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/travel-guides/IntroDublin.txt",
+      "family": "masc_500k_texts/written/travel-guides/IntroDublin",
+      "genre": "travel-guides",
+      "sentences": 149,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/travel-guides/IntroHongKong.txt",
+      "family": "masc_500k_texts/written/travel-guides/IntroHongKong",
+      "genre": "travel-guides",
+      "sentences": 100,
+      "split": "test"
+    },
+    {
+      "document": "masc_500k_texts/written/travel-guides/WhatToHongKong.txt",
+      "family": "masc_500k_texts/written/travel-guides/WhatToHongKong",
+      "genre": "travel-guides",
+      "sentences": 459,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/travel-guides/WhereToHongKong.txt",
+      "family": "masc_500k_texts/written/travel-guides/WhereToHongKong",
+      "genre": "travel-guides",
+      "sentences": 1181,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/twitter/tweets1.txt",
+      "family": "masc_500k_texts/written/twitter/tweets1",
+      "genre": "twitter",
+      "sentences": 1457,
+      "split": "train"
+    },
+    {
+      "document": "masc_500k_texts/written/twitter/tweets2.txt",
+      "family": "masc_500k_texts/written/twitter/tweets2",
+      "genre": "twitter",
+      "sentences": 1224,
+      "split": "train"
+    }
+  ],
+  "not_enabled": {
+    "BNC2014": "Research-only public terms",
+    "COCA": "Requires embedded commercial distribution rights",
+    "GeoNames": "Optional entity layer; separate correction policy required",
+    "GloWbE": "Requires embedded commercial distribution rights",
+    "Gutenberg": "Optional literary stream; per-title territorial selection required",
+    "Kaikki": "Optional later adapter; attribution/share-alike and register review required",
+    "NUS_SMS": "Commercial rights unresolved",
+    "PMC": "Optional science-domain stream; article license filtering required",
+    "wordfreq": "Optional calibration; source overlap/redistribution review required"
+  },
+  "project_inputs": [
+    {
+      "path": "tools/vocabulary/curated_terms.tsv",
+      "sha256": "3b203d351f28498737948a3240f1fced6befd79841bb5aee0231031f51f9d010"
+    },
+    {
+      "path": "tools/vocabulary/curated_contexts.jsonl",
+      "sha256": "5f75ec0df191e78600dbb17095305e75274c811e0b6dc915605b4ed2e44d7b68"
+    }
+  ],
+  "release_eligible": true,
+  "schema_version": 1,
+  "scope": "ASCII English v5 expansion; no paid/research-only sources",
+  "selection": {
+    "alternative_masc_count": 5,
+    "alternative_masc_document_count": 3,
+    "eligible_candidates": 632,
+    "frequency_prior_cap": 20000,
+    "maximum_additions": 4000,
+    "tier60_frequency_minimum": 100,
+    "wordnet_only_frequency_minimum": 500
+  },
+  "source_statistics": {
+    "esdb_exports": {
+      "en-AU:60": 79325,
+      "en-AU:70": 126523,
+      "en-CA:60": 79062,
+      "en-CA:70": 126439,
+      "en-GB-ise:60": 79063,
+      "en-GB-ise:70": 126402,
+      "en-GB-ize:60": 79073,
+      "en-GB-ize:70": 126448,
+      "en-US:60": 79067,
+      "en-US:70": 126494
+    },
+    "masc_documents": 390,
+    "selected_registers": {
+      "academic": 20,
+      "casual": 31,
+      "general": 67,
+      "inflection": 23,
+      "literary": 8,
+      "modern": 20,
+      "name": 17,
+      "regional": 419,
+      "technical": 27
+    },
+    "selected_word_sources": {
+      "esdb": 465,
+      "project": 167,
+      "wordnet": 371
+    },
+    "test_sentences": 7078,
+    "train_sentences": 41374,
+    "train_tokens": 403222,
+    "wordnet_eligible_entries": 76248
+  },
+  "sources": {
+    "esdb": {
+      "file": "esdb.tar.gz",
+      "license": "MIT-like combined ESDB work; constituent notices retained",
+      "release_eligible": true,
+      "sha256": "aaecc7a54af576057e30b22a19b78bad011f2181f7e368ff3b736fbecbdfd4d0",
+      "url": "https://codeload.github.com/en-wl/wordlist/tar.gz/1e5b7d3a72f47a71da5d28686c1dd4b397178485",
+      "version": "1e5b7d3a72f47a71da5d28686c1dd4b397178485"
+    },
+    "frequency": {
+      "file": "frequency-en.txt",
+      "license": "CC-BY-SA-4.0",
+      "release_eligible": true,
+      "sha256": "7fea67ab954e2c01df6c608c9826e594cf36f8823b3243554f88245fb75dc506",
+      "url": "https://raw.githubusercontent.com/hermitdave/FrequencyWords/525f9b560de45753a5ea01069454e72e9aa541c6/content/2018/en/en_full.txt",
+      "version": "2018; 525f9b560de45753a5ea01069454e72e9aa541c6"
+    },
+    "masc": {
+      "file": "masc.zip",
+      "license": "OANC/MASC unrestricted usage and redistribution, including commercial use",
+      "release_eligible": true,
+      "sha256": "0c3f1fd3314ee5ec09830d6f6b217c19a6899d1cabd22c42264578c3348b2d01",
+      "terms_url": "https://anc.org/data/oanc/",
+      "url": "https://github.com/nancyide/anc-website/releases/download/datasets-2026-09-25/masc_500k_texts.zip",
+      "version": "500K text-only; datasets-2026-09-25"
+    },
+    "wordnet": {
+      "file": "wordnet.xml.gz",
+      "license": "CC-BY-4.0",
+      "release_eligible": true,
+      "sha256": "9ca6d1dcb75f822fdd66617f7d9da48142ace38dd544d6ad5e2feca1674ad3fe",
+      "url": "https://en-word.net/static/english-wordnet-2025.xml.gz",
+      "version": "2025 core"
+    }
+  },
+  "version": "english-expansion-v1"
+}

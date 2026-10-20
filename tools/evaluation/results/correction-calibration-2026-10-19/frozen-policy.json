@@ -1,0 +1,155 @@
+{
+  "policy": {
+    "oovMargin": 3.0,
+    "realWordMargin": 5.0,
+    "closeRescueMargin": 0.0,
+    "closeRescueGap": 0.5,
+    "minimumCloseGap": 0.25,
+    "closeRescueMaxCost": 1.2
+  },
+  "baseline_policy": {
+    "oovMargin": 3.0,
+    "realWordMargin": 5.0,
+    "closeRescueMargin": 3.0,
+    "closeRescueGap": 0.0,
+    "minimumCloseGap": 0.0,
+    "closeRescueMaxCost": 1.6
+  },
+  "selection": "Maximize correct typo commits with no increase in wrong commits in any development typo or clean category; tie-break fewer errors then smallest parameter change.",
+  "selected_on": "development only",
+  "configurations": 1961,
+  "safe_configurations": 1799,
+  "baseline_development": {
+    "all": {
+      "cases": 3170,
+      "correct": 2624,
+      "wrong_commit": 289,
+      "changed": 1502,
+      "unfixed": 257
+    },
+    "clean_known": {
+      "cases": 1000,
+      "correct": 993,
+      "wrong_commit": 7,
+      "changed": 7,
+      "unfixed": 0
+    },
+    "clean": {
+      "cases": 1520,
+      "correct": 1411,
+      "wrong_commit": 109,
+      "changed": 109,
+      "unfixed": 0
+    },
+    "typo_single": {
+      "cases": 1000,
+      "correct": 834,
+      "wrong_commit": 92,
+      "changed": 926,
+      "unfixed": 74
+    },
+    "typo": {
+      "cases": 1650,
+      "correct": 1213,
+      "wrong_commit": 180,
+      "changed": 1393,
+      "unfixed": 257
+    },
+    "typo_multi": {
+      "cases": 400,
+      "correct": 252,
+      "wrong_commit": 68,
+      "changed": 320,
+      "unfixed": 80
+    },
+    "clean_oov": {
+      "cases": 420,
+      "correct": 318,
+      "wrong_commit": 102,
+      "changed": 102,
+      "unfixed": 0
+    },
+    "clean_contraction": {
+      "cases": 100,
+      "correct": 100,
+      "wrong_commit": 0,
+      "changed": 0,
+      "unfixed": 0
+    },
+    "typo_real_word": {
+      "cases": 250,
+      "correct": 127,
+      "wrong_commit": 20,
+      "changed": 147,
+      "unfixed": 103
+    }
+  },
+  "selected_development": {
+    "all": {
+      "cases": 3170,
+      "correct": 2658,
+      "wrong_commit": 249,
+      "changed": 1488,
+      "unfixed": 263
+    },
+    "clean_known": {
+      "cases": 1000,
+      "correct": 993,
+      "wrong_commit": 7,
+      "changed": 7,
+      "unfixed": 0
+    },
+    "clean": {
+      "cases": 1520,
+      "correct": 1419,
+      "wrong_commit": 101,
+      "changed": 101,
+      "unfixed": 0
+    },
+    "typo_single": {
+      "cases": 1000,
+      "correct": 862,
+      "wrong_commit": 67,
+      "changed": 929,
+      "unfixed": 71
+    },
+    "typo": {
+      "cases": 1650,
+      "correct": 1239,
+      "wrong_commit": 148,
+      "changed": 1387,
+      "unfixed": 263
+    },
+    "typo_multi": {
+      "cases": 400,
+      "correct": 250,
+      "wrong_commit": 61,
+      "changed": 311,
+      "unfixed": 89
+    },
+    "clean_oov": {
+      "cases": 420,
+      "correct": 326,
+      "wrong_commit": 94,
+      "changed": 94,
+      "unfixed": 0
+    },
+    "clean_contraction": {
+      "cases": 100,
+      "correct": 100,
+      "wrong_commit": 0,
+      "changed": 0,
+      "unfixed": 0
+    },
+    "typo_real_word": {
+      "cases": 250,
+      "correct": 127,
+      "wrong_commit": 20,
+      "changed": 147,
+      "unfixed": 103
+    }
+  },
+  "dataset_manifest_sha256": "cc83650636b59c87a918b3132ceec79c99e2bcf6fdb9faa66baf94c0a54249ea",
+  "baseline_engine_sha256": "7ea23fc7e55c2393de29b3a4d35d84712223de4dfb1de42831fb432d5e4b8444",
+  "calibrator_sha256": "4d376c6e94a1e71886d1d86a4ee5f739400aff5faf852eb44bc8767081333cdc"
+}

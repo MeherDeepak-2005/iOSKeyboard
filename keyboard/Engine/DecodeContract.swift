@@ -1,5 +1,9 @@
+// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
+// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 enum DecodeModelTier: String, Codable, Equatable {
 	case ngram
 	case neuralW8
@@ -9,6 +13,9 @@ enum DecodeModelTier: String, Codable, Equatable {
 
 /// Immutable identity for one decoder request. A result may be presented or committed
 /// only while every revision still matches the controller's current document state.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+// MIGRATION-NOTE: Planned portable DecodeInput mirrors every revision/session ID, UTF-8 word/context, optional Double taps, language/model tier and vocabulary/personalization epochs; controller APIs retain Swift records.
 struct DecodeRequest: Equatable {
 	let fieldRevision: UInt64
 	let documentRevision: UInt64
@@ -22,6 +29,8 @@ struct DecodeRequest: Equatable {
 	/// Chosen only at a word boundary and frozen in this request's word session.
 	let requestedModelTier: DecodeModelTier
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	init(fieldRevision: UInt64, documentRevision: UInt64, wordSessionID: UInt64,
 		 generation: UInt64, layoutRevision: UInt64, currentWord: String,
 		 context: [String], taps: [KeyTap?]?, languageMode: KBLanguageMode = .english,
@@ -39,6 +48,8 @@ struct DecodeRequest: Equatable {
 	}
 }
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 enum DecodeCandidateSource: String, Codable, Equatable {
 	case typed
 	case fuzzyLexicon
@@ -50,6 +61,9 @@ enum DecodeCandidateSource: String, Codable, Equatable {
 	case transliterationComposition
 }
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+// MIGRATION-NOTE: Planned portable RankedEvidence mirrors every score, channel cost, source and margin; bridge results own strings/buffers and Swift retains casing/publication.
 struct DecodeCandidateEvidence: Equatable {
 	let word: String
 	let score: Double
@@ -60,6 +74,8 @@ struct DecodeCandidateEvidence: Equatable {
 	let source: DecodeCandidateSource
 	let typedWordMargin: Double
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	init(word: String, score: Double, spatialCost: Double, logFrequency: Double,
 		 logLanguageProbability: Double, neuralLogProbability: Double? = nil,
 		 source: DecodeCandidateSource = .fuzzyLexicon, typedWordMargin: Double = 0) {
@@ -77,79 +93,115 @@ struct DecodeCandidateEvidence: Equatable {
 /// Runtime seam for an iOS 18 stateful model. Implementations must score only the
 /// supplied bounded continuation set, never perform full neural beam search on the
 /// host-insertion path, and must return on their own queue.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 protocol NeuralLanguagePrior: AnyObject {
 	var modelTier: DecodeModelTier { get }
 	/// Readiness is sampled only between words. Once selected, a model tier is frozen
 	/// for the complete word session and must not silently fall back mid-word.
 	var isReady: Bool { get }
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func prepareContext(_ words: [String], wordSessionID: UInt64)
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func score(candidates: [String], wordSessionID: UInt64,
 		 completion: @escaping (Result<[String: Double], Error>) -> Void)
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func discardSession(_ wordSessionID: UInt64)
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func prepareForSelection()
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func handleMemoryPressure()
 }
 
-/// One likely next-word with the LM's log-probability. The probability is what funds a word's
-/// bonus in `TrieSearchPrior` (a peaked distribution funds its top word near the cap, a flat one
-/// funds broadly and shallowly), so the search widens exactly as much as the LM is confident —
-/// see `TrieSearchPrior(scoredWords:)`.
+/// An exact complete-word log probability, including the word-ending event.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 struct SearchPriorWord: Equatable {
 	let word: String
 	let logProbability: Double
 }
 
-/// A typed-prefix constraint for prefix-AWARE next-word generation. Once the user has typed a
-/// few characters, the search prior can be re-warmed with the beam's start-pieces restricted to
-/// those spatially compatible with the first taps — turning "context-plausible words" into
-/// "context-AND-prefix-plausible words", which is exactly the recovery case Layer 2 exists for.
-/// `firstLetters` is the set of first characters the first tap could plausibly be (the engine
-/// owns the spatial model, so the generator stays keyboard-geometry-agnostic); `text` is the raw
-/// typed prefix, used only as the cache key. nil ⇒ context-only warm (today's behavior).
+/// A first-letter spatial constraint. The remaining text identifies the typed word;
+/// it does not imply that subword generation is constrained to an exact prefix.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 struct SearchPrefix: Equatable, Hashable {
 	let text: String
 	let firstLetters: Set<Character>
 }
 
-/// Source of the in-trie search prior's likely-next-words (the words that fund extra edit
-/// budget along their prefixes inside the trie walk — see `TrieSearchPrior`). The GRU
-/// implements this so `contextSearchPrior` can be conditioned on the neural LM instead of
-/// the n-gram. Both calls are cheap and synchronous on the decoder queue:
-///   • `warmSearchPrior` kicks off (at most one in-flight per key) an ASYNC pass that
-///     ranks the candidate pool for the context and caches it — it never blocks decode.
-///   • `searchPriorWords` reads that cache, returning nil until the async pass lands, so
-///     the caller transparently falls back to the n-gram pool while the GRU warms up.
-/// `warmSearchPrior` GENERATES the GRU's own likely next-words (a subword beam) and unions them
-/// with the supplied n-gram pool before ranking, so `searchPriorWords` returns context-plausible
-/// words the n-gram never proposed — breaking the pool's recall ceiling, not merely re-ordering
-/// it. Each returned word carries its LM log-probability so the trie bonus is probability-derived,
-/// not rank-decayed. The `pool` argument remains the n-gram fallback/seed set; `prefix`, when
-/// non-nil, constrains generation to the typed prefix (keyed separately in the cache).
-protocol SearchPriorProvider: AnyObject {
-	func warmSearchPrior(context: [String], prefix: SearchPrefix?, pool: [String])
-	func searchPriorWords(context: [String], prefix: SearchPrefix?) -> [SearchPriorWord]?
+/// Every value affecting generation participates in cache identity. Vocabulary
+/// revision changes when personal/supplementary words are added or reset.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+struct SearchPriorQuery: Equatable, Hashable {
+	let context: [String]
+	let prefix: SearchPrefix?
+	let pool: [String]
+	let vocabularyRevision: UInt64
+
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+	init(context: [String], prefix: SearchPrefix?, pool: [String], vocabularyRevision: UInt64 = 0) {
+		self.context = context.suffix(8).map { $0.lowercased() }
+		self.prefix = prefix.map { SearchPrefix(text: $0.text.lowercased(), firstLetters: $0.firstLetters) }
+		self.pool = Array(Set(pool.map { $0.lowercased() })).sorted()
+		self.vocabularyRevision = vocabularyRevision
+	}
+
+	var withoutPrefix: SearchPriorQuery {
+		SearchPriorQuery(context: context, prefix: nil, pool: pool, vocabularyRevision: vocabularyRevision)
+	}
 }
 
-/// The RECALL neural role: a streaming generator that widens in-trie candidate generation
-/// (`contextSearchPrior`). Distinct from `NeuralLanguagePrior` (the PRECISION role — batched
-/// P(word|context) rescoring on a fixed pool). Splitting the two means choosing a search prior
-/// no longer silently evicts a rescorer, and vice versa — each slot is filled independently
-/// (production fills neither). The GRU, whose cheap incremental streaming steps are structurally
-/// ideal for generation, fills this slot; the transformer fills the rescorer slot.
-protocol NeuralSearchPrior: SearchPriorProvider {
-	var isReady: Bool { get }
-	func prepareForSelection()
-	func handleMemoryPressure()
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+protocol SearchPriorProvider: AnyObject {
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+	func warmSearchPrior(_ query: SearchPriorQuery, isKnownWord: @escaping (String) -> Bool)
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+	func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]?
+}
+
+/// One model supplies both generation and exact candidate scoring. A separate
+/// transformer rescorer remains optional; the GRU must work without it.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+protocol NeuralSearchPrior: SearchPriorProvider, NeuralLanguagePrior {
+	var onSearchPriorReady: ((SearchPriorQuery) -> Void)? { get set }
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+	func cancelPendingSearch()
+}
+
+extension NeuralSearchPrior {
+	var onSearchPriorReady: ((SearchPriorQuery) -> Void)? { get { nil } set {} }
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
+	func cancelPendingSearch() {}
 }
 
 extension NeuralLanguagePrior {
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func prepareForSelection() {}
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func handleMemoryPressure() {}
 }
 
 /// One authoritative answer for a request. `suggestions.first` is always the center
 /// suggestion. If `correction` is non-nil it is also `suggestions.first`, so a boundary
 /// can never commit a word different from the primary word the user just saw.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 struct DecodeSnapshot: Equatable {
 	let request: DecodeRequest
 	let suggestions: [String]
@@ -160,11 +212,15 @@ struct DecodeSnapshot: Equatable {
 	let modelTier: DecodeModelTier
 	let completedAtUptime: TimeInterval
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func isValid(for current: DecodeRequest) -> Bool {
 		request == current
 	}
 }
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 struct PresentedSuggestion: Equatable {
 	let canonicalText: String
 	let text: String
@@ -174,6 +230,8 @@ struct PresentedSuggestion: Equatable {
 /// UI-facing projection of one canonical decoder result. Taps and boundary correction
 /// consume this same object, so case styling can never make the visible primary differ
 /// from the text committed to the host.
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 struct PresentedDecodeSnapshot: Equatable {
 	let canonical: DecodeSnapshot
 	let suggestions: [PresentedSuggestion]
@@ -181,12 +239,18 @@ struct PresentedDecodeSnapshot: Equatable {
 
 	var primaryText: String? { suggestions.first?.text }
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	func isValid(for request: DecodeRequest) -> Bool {
 		canonical.isValid(for: request)
 	}
 }
 
+// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 enum SuggestionCasePolicy {
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	static func present(_ snapshot: DecodeSnapshot, sentenceStart: Bool)
 		-> PresentedDecodeSnapshot {
 		let typed = snapshot.request.currentWord
@@ -211,6 +275,8 @@ enum SuggestionCasePolicy {
 			correction: correction)
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	static func display(_ candidate: String, typedWord: String? = nil,
 		sentenceStart: Bool, languageMode: KBLanguageMode = .english) -> String {
 		guard languageMode == .english else { return candidate }
@@ -234,18 +300,24 @@ enum SuggestionCasePolicy {
 		return intrinsic
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private static func intrinsicEnglishCase(_ value: String) -> String {
 		let lower = value.lowercased()
 		guard isIForm(lower) else { return value }
 		return "I" + lower.dropFirst()
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private static func isIForm(_ value: String) -> Bool {
 		let lower = value.lowercased()
 		return lower == "i" || lower == "i'm" || lower == "i'll"
 			|| lower == "i've" || lower == "i'd"
 	}
 
+	// MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
+	// MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 	private static func initialCapital(_ value: String) -> String {
 		guard let first = value.first else { return value }
 		return first.uppercased() + value.dropFirst()

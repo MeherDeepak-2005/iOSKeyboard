@@ -1,0 +1,28 @@
+{
+  "host": "macOS-26.5.2-arm64-arm-64bit",
+  "corpus_sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4",
+  "timing_trials": 3,
+  "median_of_trials": {
+    "samples_per_backend": 275,
+    "packed_search_p50_ms": 0.318417,
+    "packed_search_p95_ms": 0.601584,
+    "marisa_search_p50_ms": 5.38121,
+    "marisa_search_p95_ms": 5.84112,
+    "packed_validated_open_ms": 3.03696,
+    "additional_marisa_validated_open_ms": 23.3545,
+    "packed_full_vocab_lookup_p50_ms": 15.4428,
+    "marisa_full_vocab_lookup_p50_ms": 34.8062
+  },
+  "peak_rss_bytes": {
+    "packed": [
+      17416192,
+      17416192,
+      17416192
+    ],
+    "marisa": [
+      18137088,
+      18153472,
+      18153472
+    ]
+  }
+}

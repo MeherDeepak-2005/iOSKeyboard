@@ -37,10 +37,6 @@ CACHE = HERE.parent / ".cache"
 LANGDATA = HERE.parents[1] / "keyboard" / "langdata.bin"
 
 LM_W, FREQ_W = 1.0, 0.3
-# Sparse-context shrinkage — mirror of NgramScorer.sparseContextFloor. Pulls a
-# tiny context table's observed distribution toward the backoff so a lone count-1
-# successor cannot outscore its unigram by ~9 nats. Must stay numerically identical.
-SPARSE_CONTEXT_FLOOR = 8.0
 INS = DEL = 1.6
 TRANS = 0.8          # adjacent-letter swap (Damerau) — mirror of Trie.transCost
 APOS_SKIP = 0.4      # omitted apostrophe (whats -> what's) — mirror of KB.apostropheSkipCost
@@ -114,7 +110,7 @@ class LangData:
         d = self.d = path.read_bytes()
         magic, ver, self.W, self.biBuckets, self.BE, self.triBuckets, self.TE = \
             struct.unpack_from("<7I", d, 0)
-        assert magic == 0x4B424C4D and ver in (2, 3, 4, 5), "unsupported langdata.bin format"
+        assert magic == 0x4B424C4D and ver in (2, 3, 4, 5, 6), "unsupported langdata.bin format"
         self.version = ver
         self.trieNodes = struct.unpack_from("<I", d, 28)[0] if ver >= 3 else 0
         self.starterCount = struct.unpack_from("<I", d, 32)[0] if ver >= 4 else 0
@@ -146,6 +142,19 @@ class LangData:
     def bigrams(self, ctx):
         if self.biBuckets == 0:
             return None
+        if self.version == 6:
+            lo, hi = 0, self.biBuckets
+            while lo < hi:
+                mid = (lo + hi) // 2
+                slot = struct.unpack_from("<I", self.d, self.biHashB + 16 * mid)[0]
+                if slot < ctx:
+                    lo = mid + 1
+                else:
+                    hi = mid
+            if lo == self.biBuckets:
+                return None
+            slot, total, start, count = struct.unpack_from("<4I", self.d, self.biHashB + 16 * lo)
+            return (total, self._entries(self.biEntB, start, count)) if slot == ctx else None
         if self.version == 5:
             lo, hi = 0, self.biBuckets
             while lo < hi:
@@ -173,6 +182,19 @@ class LangData:
     def trigrams(self, a, c):
         if self.triBuckets == 0:
             return None
+        if self.version == 6:
+            lo, hi = 0, self.triBuckets
+            while lo < hi:
+                mid = (lo + hi) // 2
+                pair = struct.unpack_from("<2I", self.d, self.triHashB + 20 * mid)
+                if pair < (a, c):
+                    lo = mid + 1
+                else:
+                    hi = mid
+            if lo == self.triBuckets:
+                return None
+            w1, w2, total, start, count = struct.unpack_from("<5I", self.d, self.triHashB + 20 * lo)
+            return (total, self._entries(self.triEntB, start, count)) if (w1, w2) == (a, c) else None
         if self.version == 5:
             key = (a << 16) | c
             lo, hi = 0, self.triBuckets
@@ -200,6 +222,17 @@ class LangData:
             if w1 == a and w2 == c:
                 return total, self._entries(self.triEntB, start, count)
             b = (b + 1) & mask
+
+    def iter_trigrams(self):
+        for i in range(self.triBuckets):
+            if self.version == 5:
+                key = struct.unpack_from("<I", self.d, self.triHashB + 12 * i)[0]
+                first, second = key >> 16, key & 0xffff
+            else:
+                first, second = struct.unpack_from("<2I", self.d, self.triHashB + 20 * i)
+                if first == EMPTY:
+                    continue
+            yield first, second, self.trigrams(first, second)[1]
 
 
 # ---- trie with the same weighted DP as Trie.swift ----
@@ -245,45 +278,103 @@ class Trie:
         return out
 
 
-def corpus_total(ld):
-    """Σ corpus freq + V — the unigram-backoff denominator (cached on the reader)."""
-    if not hasattr(ld, "_corpus_total"):
-        ld._corpus_total = float(sum(ld.freqs)) + len(ld.freqs)
-    return ld._corpus_total
+def mkn_discounts(counts):
+    """Chen–Goodman D1, D2, D3+; bounded 0.75 fallback for absent buckets."""
+    from collections import Counter
+    n = Counter(counts)
+    y = n[1] / (n[1] + 2 * n[2]) if n[1] else 0.75
+    return [min(k, max(0.0, k - (k + 1) * y * n[k + 1] / n[k]))
+            if n[k] and n[k + 1] else 0.75 for k in (1, 2, 3)]
+
+
+class ModifiedKneserNey:
+    def __init__(self, ld):
+        from collections import Counter, defaultdict
+        self.unigrams = Counter()
+        raw_bigrams = {}
+        for previous in range(ld.W):
+            hit = ld.bigrams(previous)
+            if hit:
+                raw_bigrams[previous] = {w: c for w, c in hit[1] if c > 0}
+                self.unigrams.update(raw_bigrams[previous].keys())
+        lower = defaultdict(Counter)
+        tri_histogram = Counter()
+        for _, second, entries in ld.iter_trigrams():
+            for word, count in entries:
+                if count > 0:
+                    lower[second][word] += 1
+                    if count <= 4:
+                        tri_histogram[count] += 1
+        self.tri_discounts = mkn_discounts(
+            k for k, n in tri_histogram.items() for _ in range(n))
+        effective = lower if lower else raw_bigrams
+        self.bi_discounts = mkn_discounts(c for row in effective.values() for c in row.values())
+        self.bigrams = {ctx: self.prepare(row.items(), self.bi_discounts)
+                        for ctx, row in effective.items()}
+        self.total = sum(self.unigrams.values()) + 0.5
+
+    @staticmethod
+    def prepare(entries, discounts):
+        counts, total, mass = {}, 0, 0.0
+        for word, count in sorted(entries):
+            if count <= 0:
+                continue
+            discount = discounts[min(count, 3) - 1]
+            counts[word] = max(count - discount, 0.0)
+            total += count
+            mass += discount
+        return total, mass, counts
+
+    @staticmethod
+    def interpolate(row, wid, backoff):
+        if row is None or row[0] <= 0:
+            return backoff
+        total, mass, counts = row
+        return counts.get(wid, 0.0) / total + mass / total * backoff
+
+
+def mkn_logprob(ld, w, ctx):
+    """Explicit modified Kneser–Ney experiment, mirroring NgramScorer.swift.
+
+    Counts and continuation statistics come from retained entries. Personal boosts
+    are intentionally absent from this immutable-model evaluation.
+    """
+    if not hasattr(ld, "_mkn"):
+        ld._mkn = ModifiedKneserNey(ld)
+    model = ld._mkn
+    wid = ld.ids.get(w)
+    probability = model.unigrams.get(wid, 0.5) / model.total
+    if ctx:
+        probability = model.interpolate(model.bigrams.get(ld.ids.get(ctx[-1])), wid, probability)
+    if len(ctx) >= 2:
+        first, second = ld.ids.get(ctx[-2]), ld.ids.get(ctx[-1])
+        hit = ld.trigrams(first, second) if first is not None and second is not None else None
+        if hit:
+            row = model.prepare(hit[1], model.tri_discounts)
+            probability = model.interpolate(row, wid, probability)
+    return math.log(max(probability, float.fromhex("0x0.0000000000001p-1022")))
 
 
 def logprob(ld, w, ctx):
-    """Fresh-install Witten-Bell interpolation from ``NgramScorer.swift``.
-
-    Personal boosts are intentionally absent: this harness measures the immutable
-    shipped model. Every order contributes continuously, including when the target
-    continuation was not observed in an otherwise-known context.
-    """
+    """Production Witten–Bell, including the original sparse-context floor of 8."""
+    if not hasattr(ld, '_wb_total'):
+        ld._wb_total = sum(ld.freqs) + ld.W
     wid = ld.ids.get(w)
-    probability = (ld.freqs[wid] + 1) / corpus_total(ld) if wid is not None \
-        else 0.5 / corpus_total(ld)
-
-    def interpolate(hit, backoff):
-        if not hit:
-            return backoff
-        total, entries = hit
-        types = len(entries)
-        if total <= 0 or types <= 0:
-            return backoff
-        count = next((n for word, n in entries if word == wid), 0) if wid is not None else 0
-        confidence = total / (total + SPARSE_CONTEXT_FLOOR)
-        observed_weight = total / (total + types) * confidence
-        return observed_weight * (count / total) + (1 - observed_weight) * backoff
-
-    if len(ctx) >= 1:
-        previous = ld.ids.get(ctx[-1])
-        if previous is not None:
-            probability = interpolate(ld.bigrams(previous), probability)
-    if len(ctx) >= 2:
-        first, second = ld.ids.get(ctx[-2]), ld.ids.get(ctx[-1])
-        if first is not None and second is not None:
-            probability = interpolate(ld.trigrams(first, second), probability)
-    return math.log(max(probability, float.fromhex("0x0.0000000000001p-1022")))
+    probability = (ld.freqs[wid] + 1 if wid is not None else 0.5) / ld._wb_total
+    hits = []
+    previous = ld.ids.get(ctx[-1]) if ctx else None
+    first = ld.ids.get(ctx[-2]) if len(ctx) >= 2 else None
+    if previous is not None:
+        hits.append(ld.bigrams(previous))
+    if first is not None and previous is not None:
+        hits.append(ld.trigrams(first, previous))
+    for hit in hits:
+        if hit and hit[0] > 0 and hit[1]:
+            total, entries = hit
+            weight = total / (total + len(entries)) * total / (total + 8.0)
+            count = next((count for word, count in entries if word == wid), 0)
+            probability = weight * count / total + (1 - weight) * probability
+    return math.log(max(probability, float.fromhex('0x0.0000000000001p-1022')))
 
 
 def context_is_sparse(ld, ctx):
@@ -647,7 +738,7 @@ def main():
                 "seed": 7,
                 "synthetic_edits": None if args.dataset else args.edits,
                 "language_data_sha256": digest,
-                "scorer": "witten-bell-fresh-install",
+                "scorer": "modified-kneser-ney-fresh-install",
                 "candidate_generator": "python-trie-approximation",
                 "forced_gold_insertion": False,
                 "model": tag,
