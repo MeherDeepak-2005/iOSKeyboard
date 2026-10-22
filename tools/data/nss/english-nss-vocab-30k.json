@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "vocabulary": {
+    "path": "english-nss-vocab-30k.tsv",
+    "sha256": "6baffcfede08a37d7c67acd5c360e70f180aa10225ee4a302881366679aabef7",
+    "words": 30000,
+    "specials": [
+      "<pad>",
+      "<unk>",
+      "<bos>",
+      "<eos>"
+    ],
+    "model_vocab_size": 30004
+  },
+  "inputs": {
+    "langdata": {
+      "path": "keyboard/langdata.bin",
+      "sha256": "9db0760697014aecdf540d1828cd523156bcf87a2ed04f2afaa724ac24cd8ea6"
+    },
+    "tatoeba": {
+      "path": "tools/data/tatoeba-eng-2026-10-20.tsv.bz2",
+      "sha256": "bb3dcc28a8984a26dc466ee14eb53c4210b0dd9bb111b9d686d1efc83ecf091c"
+    },
+    "wikitext": [
+      {
+        "path": "tools/.cache/wikitext-103-raw-train-00000-of-00002.parquet",
+        "sha256": "74da360f23826045b3e6ac6375411fdb15f003030aa74f2596ed08b857cb9212"
+      },
+      {
+        "path": "tools/.cache/wikitext-103-raw-train-00001-of-00002.parquet",
+        "sha256": "ba090ac30dbf5461e8dcbdd1a1b8e6f3cf9c2c756d64f0c1220450acd514f720"
+      }
+    ],
+    "frequency-words": {
+      "path": "tools/.cache/en_full.txt",
+      "sha256": "7fea67ab954e2c01df6c608c9826e594cf36f8823b3243554f88245fb75dc506"
+    }
+  },
+  "lexicon": {
+    "emittable_words": 112311,
+    "skipped_non_word_entries": 1972
+  },
+  "weights_used": {
+    "frequency-words": 0.5625,
+    "tatoeba": 0.25,
+    "wikitext": 0.1875
+  },
+  "mix": "geometric",
+  "rules": {
+    "min_count": 3,
+    "min_sources": 2,
+    "conversational_ppm": 20.0,
+    "forced_requested": 137,
+    "forced_missing_from_lexicon": [],
+    "include_missing_from_lexicon": []
+  },
+  "admitted_by_rule": {
+    "forced": 137,
+    "multi-source": 29863
+  },
+  "source_coverage": {
+    "tatoeba": {
+      "running_tokens": 15741528,
+      "vocabulary_coverage": 0.98252,
+      "vocabulary_coverage_of_lexicon_tokens": 0.99266
+    },
+    "wikitext": {
+      "running_tokens": 82222778,
+      "vocabulary_coverage": 0.93698,
+      "vocabulary_coverage_of_lexicon_tokens": 0.96944
+    },
+    "frequency-words": {
+      "running_tokens": 690516097,
+      "vocabulary_coverage": 0.97518,
+      "vocabulary_coverage_of_lexicon_tokens": 0.99156
+    }
+  },
+  "oov_policy": "words outside the vocabulary score P(<unk>|context) * unigram probability",
+  "heldout": {
+    "path": "tools/data/english-masc-heldout-v1.json.bz2",
+    "sha256": "bd9129ca750c658969e02c9612fa4686e7ce8aba1e25f0604c94859dd3dab775",
+    "coverage": {
+      "all": {
+        "tokens": 65244,
+        "lexicon_coverage": 0.97883,
+        "vocabulary_coverage": 0.95863,
+        "vocabulary_coverage_of_lexicon_tokens": 0.97936
+      },
+      "spoken": {
+        "tokens": 18337,
+        "lexicon_coverage": 0.99847,
+        "vocabulary_coverage": 0.99127,
+        "vocabulary_coverage_of_lexicon_tokens": 0.99279
+      },
+      "written": {
+        "tokens": 46907,
+        "lexicon_coverage": 0.97116,
+        "vocabulary_coverage": 0.94587,
+        "vocabulary_coverage_of_lexicon_tokens": 0.97396
+      }
+    }
+  }
+}

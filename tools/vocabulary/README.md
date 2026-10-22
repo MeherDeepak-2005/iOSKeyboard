@@ -144,3 +144,28 @@ python3 tools/verify_release_artifacts.py /path/to/demo_keyboard.appex --corev4 
 The explicit `--corev4` gate uses a 20,000,000-byte language-pack budget and a
 24,000,000-byte non-neural extension budget. The historical default gate above
 retains 11 MB / 14 MB for the smaller v5 pack.
+
+## Neural search space vocabulary
+
+The NSS model predicts over a fixed word vocabulary, like Gboard's 30k-word NSS
+model; lexicon words outside it are scored as P(`<unk>`|context) × unigram
+probability. Without federated counting, `build_nss_vocab.py` ranks the emittable
+`[a-z']` words of `keyboard/langdata.bin` by a register-weighted mix of
+FrequencyWords (0.45), an optional messaging corpus (0.20), Tatoeba (0.20) and
+WikiText-103 (0.15) — a weighted geometric mean, so one corpus's spike such as
+Tatoeba's "tom" cannot dominate — keeps words seen in at least two sources (or frequent in
+conversation), always keeps a short forced list (contractions, numbers, days,
+months, chat forms, plus any `--include` list for terms the pinned 2016–2020
+corpora predate, such as "covid"), and writes the top 30,000 after four special
+tokens.
+
+```sh
+python3 -B tools/vocabulary/build_nss_vocab.py                  # all pinned sources
+python3 -B tools/vocabulary/build_nss_vocab.py --chat chat.txt  # add a messaging corpus
+python3 -B -m unittest tools/vocabulary/test_build_nss_vocab.py
+```
+
+Outputs land in `tools/data/nss/`: the vocabulary TSV, a manifest with input
+hashes, weights and coverage (per source and on the MASC held-out split), and a
+review file listing the cutoff band and rule-admitted words. A model export must
+record the vocabulary SHA-256; the vocabulary and the output layer are a pair.
