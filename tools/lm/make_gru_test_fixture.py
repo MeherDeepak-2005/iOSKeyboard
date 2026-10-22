@@ -9,7 +9,7 @@ import sys
 import torch
 import sentencepiece as spm
 from model import GRUModelConfig, KeyboardGRULM
-from export_coreml import export_tokenizer
+from export_tokenizer import export_tokenizer
 from export_gru_score_coreml import boundary_mask, streamed_score
 
 

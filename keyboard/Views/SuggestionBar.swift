@@ -4,24 +4,27 @@ import UIKit
 
 // Suggestion bar (its own taps) — extracted from Keyboard.swift.
 
-final class SuggestionBar: UIView {
-	var onPick: ((String) -> Void)?
-	/// Tap on the leading clipboard icon — opens the history panel. The panel is the ONLY
-	/// clipboard surface: copies are captured when it opens, never surfaced here (a strip
-	/// chip meant reading UIPasteboard on the type path, which stalls layout and fires
-	/// iOS's paste banner on every copy).
-	var onOpenClipboard: (() -> Void)?
-	/// Tap on the "Paste" offer that replaces the suggestion columns when the field is
-	/// empty and there is fresh clipboard text. The controller reads the pasteboard
-	/// ONLY here (one deliberate paste = one iOS banner); showing the offer uses
-	/// metadata alone, so it never banners.
-	var onPaste: (() -> Void)?
+enum KeyboardTool: String, CaseIterable {
+    case clipboard, emoji, gifs, stickers
+    var title: String {
+        switch self { case .clipboard: "Clipboard"; case .emoji: "Emoji"
+        case .gifs: "GIFs"; case .stickers: "Stickers" }
+    }
+    var symbol: String {
+        switch self { case .clipboard: "list.clipboard"; case .emoji: "face.smiling"
+        case .gifs: "photo.on.rectangle"; case .stickers: "square.on.circle" }
+    }
+}
 
-	private var buttons: [UIButton] = []
-	private let clipButton = UIButton(type: .system)
-	private let pasteButton = UIButton(type: .system)
-	private var showingPasteOffer = false
-	private static let clipWidth: CGFloat = 34
+final class SuggestionBar: UIView {
+    var onPick: ((String) -> Void)?
+    var onSelectTool: ((KeyboardTool) -> Void)?
+    private var buttons: [UIButton] = []
+    private let toolsButton = UIButton(type: .system)
+    private var toolButtons: [UIButton] = []
+    private(set) var showingTools = false
+    private static let toolsWidth: CGFloat = 44
+    private let toolsSeparator = UIView()
 	private let primaryBackground = UIView()
 	private let sep1 = UIView(), sep2 = UIView()
 	private let textColor: UIColor
@@ -34,7 +37,7 @@ final class SuggestionBar: UIView {
 	private var highlightsPrimary = false
 	private var stableGlideResult: (winner: String, alternatives: [String])?
 	private let visualOffsetY: CGFloat = -3
-	private let bottomPassThroughHeight: CGFloat = 6
+	private let bottomPassThroughHeight: CGFloat = 4
 
 	init(theme: KeyboardTheme) {
 		self.textColor = theme.keyText
@@ -52,27 +55,36 @@ final class SuggestionBar: UIView {
 		primaryBackground.layer.borderColor = primaryBorder.cgColor
 		primaryBackground.isHidden = true
 		addSubview(primaryBackground)
-		clipButton.setImage(UIImage(systemName: "list.clipboard",
-			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .regular)), for: .normal)
-		clipButton.tintColor = theme.specialKeyText.withAlphaComponent(0.55)
-		clipButton.accessibilityLabel = "Clipboard"
-		clipButton.accessibilityIdentifier = "suggestion.clipboard"
-		clipButton.addAction(UIAction { [weak self] _ in self?.onOpenClipboard?() }, for: .touchUpInside)
-		addSubview(clipButton)
-
-		var pasteConfig = UIButton.Configuration.plain()
-		pasteConfig.image = UIImage(systemName: "doc.on.clipboard",
-			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
-		pasteConfig.imagePadding = 6
-		pasteConfig.attributedTitle = AttributedString("Paste", attributes: AttributeContainer([
-			.font: UIFont.systemFont(ofSize: 16, weight: .medium)]))
-		pasteConfig.baseForegroundColor = theme.keyText
-		pasteButton.configuration = pasteConfig
-		pasteButton.isHidden = true
-		pasteButton.accessibilityIdentifier = "suggestion.paste"
-		pasteButton.accessibilityLabel = "Paste from clipboard"
-		pasteButton.addAction(UIAction { [weak self] _ in self?.onPaste?() }, for: .touchUpInside)
-		addSubview(pasteButton)
+        toolsButton.tintColor = theme.specialKeyText
+        toolsButton.accessibilityIdentifier = "suggestion.tools"
+        toolsButton.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            self.setShowingTools(!self.showingTools)
+        }, for: .touchUpInside)
+        addSubview(toolsButton)
+        toolsSeparator.backgroundColor = theme.keyText.withAlphaComponent(0.12)
+        addSubview(toolsSeparator)
+        for tool in KeyboardTool.allCases {
+            let button = UIButton(type: .system)
+            // Icon-only: a captioned icon needs ~31pt and crowds the keys in the 32pt
+            // strip. The title stays as the accessibility label.
+            var config = UIButton.Configuration.plain()
+            config.image = UIImage(systemName: tool.symbol,
+                withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular))
+            config.contentInsets = .zero
+            config.baseForegroundColor = theme.keyText
+            button.configuration = config
+            button.accessibilityLabel = tool.title
+            button.accessibilityIdentifier = "tools.\(tool.rawValue)"
+            button.isHidden = true
+            button.addAction(UIAction { [weak self] _ in
+                self?.setShowingTools(false)
+                self?.onSelectTool?(tool)
+            }, for: .touchUpInside)
+            toolButtons.append(button)
+            addSubview(button)
+        }
+        updateToolsButton()
 
 		for i in 0..<3 {
 			let b = UIButton(type: .custom)
@@ -99,15 +111,18 @@ final class SuggestionBar: UIView {
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		// The clipboard icon takes a fixed leading slot; the three suggestion columns
-		// (and the highlight + separators) split the remaining width and start after it.
-		let clipW = Self.clipWidth
-		// Centered in the bar's own bounds (NOT shifted by visualOffsetY, which is a text
-		// baseline nudge): an icon reads centered, and staying inside bounds keeps the
-		// whole 44pt target hittable above the strip's bottom pass-through band.
-		clipButton.frame = CGRect(x: 0, y: 0, width: clipW, height: bounds.height)
-		// The Paste offer, when shown, spans the whole suggestion area (after the icon).
-		pasteButton.frame = CGRect(x: clipW, y: 0, width: max(0, bounds.width - clipW), height: bounds.height)
+        let clipW = Self.toolsWidth
+        // Everything in the strip shares the suggestions' optical center line.
+        toolsButton.frame = CGRect(x: 0, y: visualOffsetY, width: clipW, height: bounds.height)
+        toolsSeparator.frame = CGRect(x: clipW - 0.5, y: 6 + visualOffsetY, width: 0.5,
+            height: max(0, bounds.height - 12))
+        let toolWidth = max(0, (bounds.width - clipW) / 4)
+        // Tool glyphs are taller than text; 1.5pt lower keeps their tops inside our
+        // view, since iOS clips anything drawn above it.
+        for (index, button) in toolButtons.enumerated() {
+            button.frame = CGRect(x: clipW + CGFloat(index) * toolWidth, y: visualOffsetY + 1.5,
+                width: toolWidth, height: bounds.height)
+        }
 		let w = max(0, (bounds.width - clipW) / 3)
 		for (index, button) in buttons.enumerated() {
 			button.frame = CGRect(x: clipW + CGFloat(index) * w, y: visualOffsetY,
@@ -121,42 +136,42 @@ final class SuggestionBar: UIView {
 			height: max(0, bounds.height - highlightInset * 2)
 		)
 		primaryBackground.layer.cornerRadius = max(0, min(15, primaryBackground.bounds.height / 2))
-		let inset: CGFloat = 12
+		let inset: CGFloat = 7
 		let separatorHeight = max(0, bounds.height - inset * 2)
-		sep1.frame = CGRect(x: clipW + w, y: inset, width: 0.5, height: separatorHeight)
-		sep2.frame = CGRect(x: clipW + w * 2, y: inset, width: 0.5, height: separatorHeight)
+		sep1.frame = CGRect(x: clipW + w, y: inset + visualOffsetY, width: 0.5, height: separatorHeight)
+		sep2.frame = CGRect(x: clipW + w * 2, y: inset + visualOffsetY, width: 0.5, height: separatorHeight)
 	}
 
-	/// The strip visually sits close to QWERTY, but the last six points belong to the
-	/// nearest top-row key. VoiceOver keeps the complete 44-point semantic target.
+	/// The strip visually sits close to QWERTY, but the last four points belong to the
+	/// nearest top-row key. VoiceOver keeps the complete strip as its semantic target.
 	override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-		if !UIAccessibility.isVoiceOverRunning,
-			point.y >= bounds.maxY - bottomPassThroughHeight { return false }
+        if !UIAccessibility.isVoiceOverRunning, !showingTools, point.x >= Self.toolsWidth,
+            point.y >= bounds.maxY - bottomPassThroughHeight { return false }
 		return super.point(inside: point, with: event)
 	}
 
-	/// `typedPrefix` (the word the user is mid-typing) turns completions into ghost
-	/// text: the part the user already typed renders solid, the completion remainder
-	/// dims — the closest an iOS keyboard extension can get to in-field grey preview
-	/// (the host text field is off-limits to us).
-	/// Show the "Paste" offer in place of the three suggestion columns (or hide it and
-	/// restore them). The controller drives this from metadata only — see `onPaste`.
-	func setPasteOffer(_ show: Bool) {
-		guard showingPasteOffer != show else { return }
-		showingPasteOffer = show
-		updatePasteVisibility()
-	}
+    func dismissTools() { setShowingTools(false) }
 
-	private func updatePasteVisibility() {
-		pasteButton.isHidden = !showingPasteOffer
-		for b in buttons { b.isHidden = showingPasteOffer }
-		sep1.isHidden = showingPasteOffer
-		sep2.isHidden = showingPasteOffer
-		if showingPasteOffer { setPrimaryHighlighted(false) }
-	}
+    private func setShowingTools(_ show: Bool) {
+        guard showingTools != show else { return }
+        showingTools = show
+        updateToolsButton()
+        toolButtons.forEach { $0.isHidden = !show }
+        buttons.forEach { $0.isHidden = show }
+        sep1.isHidden = show
+        sep2.isHidden = show
+        if show { primaryBackground.isHidden = true }
+        else { renderStablePresentation() }
+    }
+
+    private func updateToolsButton() {
+        toolsButton.setImage(UIImage(systemName: showingTools ? "chevron.left" : "square.grid.2x2",
+            withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)), for: .normal)
+        toolsButton.accessibilityLabel = showingTools ? "Back to suggestions" : "Tools"
+        toolsButton.accessibilityValue = showingTools ? "Expanded" : "Collapsed"
+    }
 
 	func setSuggestions(_ s: [String], typedPrefix: String? = nil, highlightPrimary: Bool = false) {
-		if showingPasteOffer { showingPasteOffer = false; updatePasteVisibility() }
 		stableGlideResult = nil
 		rankedSuggestions = s
 		currentPrefix = typedPrefix
@@ -168,7 +183,6 @@ final class SuggestionBar: UIView {
 	/// crossed letters occupy the primary (middle) slot until decoding replaces them.
 	func setGlidePreview(_ preview: String?, alternatives: [String] = [],
 		confident: Bool = true) {
-		if showingPasteOffer { showingPasteOffer = false; updatePasteVisibility() }
 		guard let preview, !preview.isEmpty else {
 			renderStablePresentation()
 			return
@@ -189,7 +203,6 @@ final class SuggestionBar: UIView {
 	/// Keep the word that was actually committed in the shaded middle slot. The two
 	/// nearest alternatives remain available on either side for one-tap correction.
 	func setGlideResult(_ winner: String, alternatives: [String]) {
-		if showingPasteOffer { showingPasteOffer = false; updatePasteVisibility() }
 		stableGlideResult = (winner, alternatives)
 		renderGlideResult(winner, alternatives: alternatives)
 	}
@@ -245,7 +258,7 @@ final class SuggestionBar: UIView {
 	}
 
 	private func setPrimaryHighlighted(_ on: Bool) {
-		primaryBackground.isHidden = !on
+		primaryBackground.isHidden = showingTools || !on
 		if !on { primaryBackground.alpha = 1 }
 		buttons.indices.forEach { index in
 			buttons[index].accessibilityTraits = index == 1 && on ? [.button, .selected] : .button

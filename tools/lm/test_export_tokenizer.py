@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import export_coreml
+import export_tokenizer
 
 
 def varint(value: int) -> bytes:
@@ -44,7 +44,7 @@ class CoreMLTokenizerExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as value:
             source = Path(value) / "spm.model"
             source.write_bytes(model)
-            pieces, scores, unknown_id = export_coreml._read_sentencepiece_model(source)
+            pieces, scores, unknown_id = export_tokenizer._read_sentencepiece_model(source)
         self.assertEqual(pieces, ["<unk>", "<pad>", "▁hello"])
         self.assertEqual(unknown_id, 0)
         self.assertEqual(scores, [0.0, -0.5, -1.25])
@@ -56,7 +56,7 @@ class CoreMLTokenizerExportTests(unittest.TestCase):
             output = Path(value) / "tokenizer.bin"
             source.write_bytes(model)
             with mock.patch.dict(sys.modules, {"sentencepiece": None}):
-                export_coreml.export_tokenizer(source, output)
+                export_tokenizer.export_tokenizer(source, output)
             header = struct.unpack_from("<4I", output.read_bytes(), 0)
         self.assertEqual(header, (0x4B42544B, 1, 2, 0))
 

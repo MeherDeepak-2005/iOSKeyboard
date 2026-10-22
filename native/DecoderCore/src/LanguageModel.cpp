@@ -83,20 +83,30 @@ void LanguageModel::prepareMKN() {
     for (const auto& [word, count] : unigrams_) { (void)word; sum += count; }
     total_ = double(sum) + 0.5;
 }
-std::optional<LanguageModel::Context> LanguageModel::prepare(const std::optional<Continuations>& row) const {
+std::optional<LanguageModel::Context> LanguageModel::prepare(const std::optional<Continuations>& row,
+        std::span<const std::int32_t> wanted) const {
     if (!row || !row->total || row->entries.empty()) return {};
     if (smoothing_ == Smoothing::modifiedKneserNey) return discounted(row->entries, triDiscounts_);
     Context out;
+    // One pass: whole-row evidence, counts kept only for scored words (no row-sized map).
+    std::uint64_t retained = 0; double sum = 0;
+    std::vector<std::pair<std::int32_t, std::uint32_t>> hits;
+    for (const auto& e : row->entries) {
+        retained += e.count; sum += double(e.count);
+        if (std::binary_search(wanted.begin(), wanted.end(), e.word)) hits.emplace_back(e.word, e.count);
+    }
     if (smoothing_ == Smoothing::wittenBell) {
         auto n = double(row->total), t = double(row->entries.size());
         auto weight = n / (n + t) * n / (n + 8);
-        out.evidence = {n, n * (1 - weight)};
-        for (const auto& e : row->entries) out.counts.emplace(e.word, weight * double(e.count));
+        // A pruned context's total exceeds its retained counts; that unretained mass
+        // belongs to the backoff, not to nothing. Identical to n * (1 - weight) when
+        // nothing was pruned.
+        out.evidence = {n, n - weight * double(std::min<std::uint64_t>(retained, row->total))};
+        for (const auto& [word, count] : hits) out.counts.emplace(word, weight * double(count));
     } else {
-        double n = 0; for (const auto& e : row->entries) n += double(e.count);
         auto prior = double(row->entries.size()) + 8;
-        out.evidence = {n + prior, prior};
-        for (const auto& e : row->entries) out.counts.emplace(e.word, double(e.count));
+        out.evidence = {sum + prior, prior};
+        for (const auto& [word, count] : hits) out.counts.emplace(word, double(count));
     }
     return out;
 }
@@ -105,16 +115,25 @@ std::vector<double> LanguageModel::scores(std::span<const std::string> words, st
     const auto n = context.size();
     auto previous = data_ && n ? data_->wordID(context[n - 1]) : std::nullopt;
     auto first = data_ && n >= 2 ? data_->wordID(context[n - 2]) : std::nullopt;
+    std::vector<std::optional<std::int32_t>> ids;
+    ids.reserve(words.size());
+    std::vector<std::int32_t> wanted;
+    for (const auto& word : words) {
+        ids.push_back(data_ ? data_->wordID(word) : std::nullopt);
+        if (ids.back()) wanted.push_back(*ids.back());
+    }
+    std::sort(wanted.begin(), wanted.end());
     std::optional<Context> bi, tri;
     if (previous) {
         if (smoothing_ == Smoothing::modifiedKneserNey) {
             if (auto found = bigrams_.find(*previous); found != bigrams_.end()) bi = found->second;
-        } else bi = prepare(data_->bigrams(*previous));
+        } else bi = prepare(data_->bigrams(*previous), wanted);
     }
-    if (first && previous) tri = prepare(data_->trigrams(*first, *previous));
+    if (first && previous) tri = prepare(data_->trigrams(*first, *previous), wanted);
     std::vector<LanguageEvidence> rows;
-    for (const auto& word : words) {
-        auto id = data_ ? data_->wordID(word) : std::nullopt;
+    for (std::size_t index = 0; index < words.size(); ++index) {
+        const auto& word = words[index];
+        const auto id = ids[index];
         double mass = 0.5;
         if (id) {
             if (smoothing_ == Smoothing::modifiedKneserNey) {

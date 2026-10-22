@@ -197,17 +197,25 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 
 	private func copy(_ item: KlipyMediaItem) {
 		showToast("Loading…", persistent: true)
-		KBMediaCache.fetch(item.sendURL) { [weak self] file in
-			guard let self, let file,
+		Self.copyToPasteboard(item) { [weak self] copied in
+			self?.showToast(copied ? "Copied · Paste to send" : "Couldn’t copy")
+		}
+	}
+
+	/// Fetch the sendable GIF and put it on the pasteboard (keyboards can't insert
+	/// images into the host directly). Shared by the panel and the search strip.
+	static func copyToPasteboard(_ item: KlipyMediaItem, completion: @escaping (Bool) -> Void) {
+		KBMediaCache.fetch(item.sendURL) { file in
+			guard let file,
 				let data = try? Data(contentsOf: file, options: .alwaysMapped),
 				data.count <= KBMediaCache.individualFileCap,
 				let source = CGImageSourceCreateWithData(data as CFData, nil),
 				CGImageSourceGetType(source) as String? == UTType.gif.identifier else {
-				self?.showToast("Couldn’t copy")
+				completion(false)
 				return
 			}
 			UIPasteboard.general.setData(data, forPasteboardType: UTType.gif.identifier)
-			self.showToast("Copied · Paste to send")
+			completion(true)
 		}
 	}
 
@@ -240,6 +248,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		searchButton.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10)
 			: UIColor(white: 1, alpha: 0.58)
 		searchButton.layer.cornerRadius = 10
+		searchButton.accessibilityIdentifier = "media.search"
 		searchButton.addAction(UIAction { [weak self] _ in
 			guard let self else { return }; self.onSearch?(self.kind)
 		}, for: .touchUpInside)
@@ -293,6 +302,135 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		UIView.animate(withDuration: 0.15) { self.toast.alpha = 1 }
 		guard !persistent else { return }
 		UIView.animate(withDuration: 0.25, delay: 1.35) { self.toast.alpha = 0 }
+	}
+}
+
+/// Live results row for GIF/sticker search. Sits in the search header's second row
+/// while the real letter deck types the query: results refresh as you type (debounced),
+/// a tap copies that item, and the Search key opens the full grid for the query.
+final class MediaSearchStrip: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
+	static let debounce: TimeInterval = 0.35
+
+	private let theme: KeyboardTheme
+	private let kind: KlipyKind
+	private let hasFullAccess: Bool
+	private let collection: UICollectionView
+	private let statusLabel = UILabel()
+	private var items: [KlipyMediaItem] = []
+	private var query = ""
+	private var request: URLSessionDataTask?
+	private var pending: DispatchWorkItem?
+	private var generation = 0
+	private var released = false
+
+	init(theme: KeyboardTheme, kind: KlipyKind, hasFullAccess: Bool) {
+		self.theme = theme
+		self.kind = kind
+		self.hasFullAccess = hasFullAccess
+		let layout = UICollectionViewFlowLayout()
+		layout.scrollDirection = .horizontal
+		layout.itemSize = CGSize(width: kind == .stickers ? 44 : 64, height: 44)
+		layout.minimumLineSpacing = 4
+		self.collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+		super.init(frame: .zero)
+		collection.backgroundColor = .clear
+		collection.showsHorizontalScrollIndicator = false
+		collection.dataSource = self
+		collection.delegate = self
+		collection.register(MediaCell.self, forCellWithReuseIdentifier: "media")
+		addSubview(collection)
+		statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
+		statusLabel.textColor = theme.specialKeyText.withAlphaComponent(0.5)
+		addSubview(statusLabel)
+		search("")
+	}
+	required init?(coder: NSCoder) { fatalError() }
+	deinit { request?.cancel(); pending?.cancel() }
+
+	override func layoutSubviews() {
+		super.layoutSubviews()
+		collection.frame = bounds.insetBy(dx: 0, dy: 2)
+		statusLabel.frame = bounds.insetBy(dx: 10, dy: 0)
+	}
+
+	/// Debounced: each keystroke restarts the timer, so a typed word costs one request.
+	func search(_ next: String) {
+		guard !released else { return }
+		let trimmed = next.trimmingCharacters(in: .whitespacesAndNewlines)
+		// A trailing space doesn't change the query; let any in-flight search finish.
+		guard trimmed != query || (items.isEmpty && pending == nil && request == nil) else { return }
+		pending?.cancel()
+		query = trimmed
+		guard hasFullAccess else { return setStatus("Full Access is required for \(kind.displayName).") }
+		guard KlipyClient.shared.hasKey else { return setStatus("\(kind.displayName) are unavailable in this build.") }
+		guard !trimmed.isEmpty else {
+			cancelRequest(); items = []; collection.reloadData()
+			return setStatus("Type, then tap search for more")
+		}
+		let work = DispatchWorkItem { [weak self] in self?.load() }
+		pending = work
+		DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounce, execute: work)
+	}
+
+	private func load() {
+		cancelRequest()
+		let current = generation
+		setStatus("Searching…")
+		request = KlipyClient.shared.fetch(kind, query: query, page: 1) { [weak self] found, _ in
+			guard let self, !self.released, current == self.generation else { return }
+			self.request = nil
+			self.items = found
+			self.collection.reloadData()
+			self.collection.setContentOffset(.zero, animated: false)
+			self.setStatus(found.isEmpty ? "No \(self.kind.displayName.lowercased()) found" : nil)
+		}
+	}
+
+	private func cancelRequest() {
+		generation &+= 1
+		request?.cancel()
+		request = nil
+	}
+
+	private func setStatus(_ text: String?) {
+		statusLabel.text = text
+		statusLabel.isHidden = text == nil
+		collection.isHidden = text != nil
+	}
+
+	func prepareForDismissal() {
+		guard !released else { return }
+		released = true
+		pending?.cancel(); pending = nil
+		cancelRequest()
+		for case let cell as MediaCell in collection.visibleCells { cell.releaseMedia() }
+		items.removeAll(keepingCapacity: false)
+		collection.dataSource = nil
+		collection.delegate = nil
+	}
+
+	func collectionView(_ collectionView: UICollectionView,
+		numberOfItemsInSection section: Int) -> Int { items.count }
+
+	func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath)
+		-> UICollectionViewCell {
+		let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "media",
+			for: indexPath) as! MediaCell
+		cell.configure(items[indexPath.item], theme: theme)
+		return cell
+	}
+
+	func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+		let item = items[indexPath.item]
+		setStatus("Copying…")
+		MediaPanelView.copyToPasteboard(item) { [weak self] copied in
+			guard let self, !self.released else { return }
+			self.setStatus(copied ? "Copied · Paste to send" : "Couldn’t copy")
+			DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
+				guard let self, !self.released, !self.items.isEmpty else { return }
+				self.setStatus(nil)
+			}
+		}
 	}
 }
 

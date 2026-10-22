@@ -2,6 +2,9 @@
 #include "LanguageModel.hpp"
 #include <unordered_set>
 namespace kb {
+// Shared with EngineWire: anything learned must survive export -> import, so writes
+// enforce the same limits the snapshot decoder checks.
+inline constexpr std::size_t maxPersonalWordBytes = 1024, maxPersonalContextBytes = 1040;
 struct PersonalizationSnapshot {
     PersonalCounts counts;
     std::unordered_map<std::string, std::int64_t> confirmed;

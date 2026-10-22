@@ -24,7 +24,8 @@ extension KBAccent {
 // MARK: - Settings store (publishes the shared App Group values to SwiftUI)
 
 final class SettingsStore: ObservableObject {
-	@Published var accentID: String     { didSet { KBSettings.accentID = accentID } }
+    private var reloading = false
+	@Published var accentID: String { didSet { if !reloading { KBSettings.accentID = accentID } } }
 	@Published var haptics:  Bool       { didSet { KBSettings.haptics = haptics } }
 	@Published var languageMode: KBLanguageMode { didSet { KBSettings.preferredLanguageMode = languageMode } }
 
@@ -35,6 +36,8 @@ final class SettingsStore: ObservableObject {
 	}
 
 	func reload() {
+        reloading = true
+        defer { reloading = false }
 		accentID = KBSettings.accentID
 		haptics = KBSettings.haptics
 		languageMode = KBSettings.preferredLanguageMode
@@ -142,7 +145,7 @@ struct ContentView: View {
 				}
 			}
 
-				#if DEBUG || INTERNAL_NEURAL
+				#if DEBUG || INTERNAL_GRU
 				Section("Developer") {
 					NavigationLink {
 						DiagnosticsView()
@@ -446,11 +449,6 @@ struct DiagnosticsView: View {
 	@State private var snap = KBDiagnostics.read()
 	@State private var verbose = KBDiagnostics.verbose
 	@State private var glideCapture = KBSettings.glideCapture
-	// NEURAL_DEBUG_TELEMETRY_REMOVE
-	#if DEBUG || INTERNAL_NEURAL
-	@State private var neural = KBDiagnostics.readNeuralDebug()
-	@State private var neuralEnabled = KBSettings.neuralEnabled
-	#endif
 	private let log = Logger(subsystem: KBSettings.appGroup, category: "diag-app")
 
 	var body: some View {
@@ -496,50 +494,6 @@ struct DiagnosticsView: View {
 				row("Glide final p95", latency(snap.glideFinalLatencyBins, 0.95))
 				row("Lift to insert p95", latency(snap.glideCommitLatencyBins, 0.95))
 			}
-
-			// NEURAL_DEBUG_TELEMETRY_REMOVE
-			#if DEBUG || INTERNAL_NEURAL
-			Section {
-				Toggle(isOn: $neuralEnabled) {
-					iconLabel("brain", tint: .purple, title: "Neural rescorer")
-				}
-				.onChange(of: neuralEnabled) { _, on in KBSettings.neuralEnabled = on }
-				if let neural {
-					row("State", neural.state)
-					if let detail = neural.detail, !detail.isEmpty {
-						Text(detail)
-							.font(.caption)
-							.foregroundStyle(.secondary)
-							.textSelection(.enabled)
-					}
-					row("Tier", neural.modelTier)
-					row("Active", neural.isActive ? "Yes" : "No")
-					row("Model ready", neural.isReady ? "Yes" : "No")
-					row("Top-pick changes", "\(neural.topPickChangeCount)")
-					row("Last ranking", neural.updated.formatted(
-						date: .abbreviated, time: .standard))
-					if let ngram = neural.ngramTopPick, let final = neural.finalTopPick {
-						row("Top pick", ngram == final ? ngram : "\(ngram) → \(final)")
-					}
-					if !neural.rows.isEmpty {
-						NavigationLink {
-							NeuralRankingDetailView(snapshot: neural)
-						} label: {
-							Label("Last-word candidate ranking (\(neural.rows.count))",
-								systemImage: "list.number")
-						}
-					}
-				} else {
-					Text("No neural ranking has been recorded in this Debug build.")
-						.foregroundStyle(.secondary)
-				}
-			} header: {
-				Text("Neural model (DEBUG)")
-			} footer: {
-				Text("Debug-only App Group telemetry. It stores the latest input, short context, and candidate scores locally. Remove this section and the marked DEBUG hooks before model promotion.")
-					.textSelection(.enabled)
-			}
-			#endif
 
 			Section {
 				Toggle("Verbose ranking log", isOn: $verbose)
@@ -589,10 +543,6 @@ struct DiagnosticsView: View {
 
 	private func reload() {
 		snap = KBDiagnostics.read()
-		// NEURAL_DEBUG_TELEMETRY_REMOVE
-		#if DEBUG || INTERNAL_NEURAL
-		neural = KBDiagnostics.readNeuralDebug()
-		#endif
 		log.notice("diag peakMB=\(Int(snap.peakFootprintMB)) limitMB=\(Int(snap.limitMB)) warn=\(snap.warningCount) crit=\(snap.criticalCount)")
 	}
 	private func resetDiagnostics() {
@@ -629,76 +579,6 @@ struct DiagnosticsView: View {
 		return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
 	}
 }
-
-// NEURAL_DEBUG_TELEMETRY_REMOVE
-#if DEBUG || INTERNAL_NEURAL
-/// Full candidate table for the LAST decoded word: what the neural model scored and how
-/// its blend reordered the n-gram ranking. Debug-only; reads App Group telemetry.
-private struct NeuralRankingDetailView: View {
-	let snapshot: KBDiagnostics.NeuralDebugSnapshot
-
-	var body: some View {
-		List {
-			Section {
-				row("Typed", snapshot.typedWord ?? "—")
-				row("Context", snapshot.contextTail.isEmpty
-					? "—" : snapshot.contextTail.joined(separator: " "))
-				if let ngram = snapshot.ngramTopPick, let final = snapshot.finalTopPick {
-					row("Top pick", ngram == final
-						? "\(final) (unchanged)" : "\(ngram) → \(final)")
-				}
-				row("Tier", snapshot.modelTier)
-				row("Recorded", snapshot.updated.formatted(date: .abbreviated, time: .standard))
-			} header: {
-				Text("Last word")
-			}
-
-			Section {
-				ForEach(snapshot.rows) { candidate in
-					VStack(alignment: .leading, spacing: 4) {
-						HStack(spacing: 8) {
-							rankBadge(candidate)
-							Text(candidate.word)
-								.font(.subheadline.weight(.semibold))
-							Spacer()
-							Text("n-gram #\(candidate.ngramRank) → #\(candidate.finalRank)")
-								.font(.caption.monospacedDigit())
-								.foregroundStyle(.secondary)
-						}
-						Text(String(format:
-							"score %.2f → %.2f · spatial %.2f · LM %.2f · neural %.2f",
-							candidate.ngramScore, candidate.finalScore,
-							candidate.spatialCost, candidate.ngramLogProbability,
-							candidate.neuralLogProbability))
-							.font(.caption2.monospacedDigit())
-							.foregroundStyle(.secondary)
-					}
-				}
-			} header: {
-				Text("Candidates (final order)")
-			} footer: {
-				Text("Every candidate the neural model rescored for the last word, in final rank order. “n-gram #” is the rank before rescoring; the score line is spatial cost, n-gram log-prob, neural log-prob, and the blended score before → after (blend = 0.7·neural + 0.3·n-gram).")
-			}
-		}
-		.navigationTitle("Neural ranking")
-		.navigationBarTitleDisplayMode(.inline)
-	}
-
-	@ViewBuilder
-	private func rankBadge(_ c: KBDiagnostics.NeuralRankRowSnapshot) -> some View {
-		let delta = c.ngramRank - c.finalRank        // > 0 = neural moved it up
-		let symbol = delta > 0 ? "arrow.up" : (delta < 0 ? "arrow.down" : "equal")
-		let tint: Color = delta > 0 ? .green : (delta < 0 ? .red : .secondary)
-		Image(systemName: symbol)
-			.font(.caption2.weight(.bold))
-			.foregroundStyle(tint)
-	}
-
-	private func row(_ title: String, _ value: String) -> some View {
-		HStack { Text(title); Spacer(); Text(value).foregroundStyle(.secondary) }
-	}
-}
-#endif
 
 // MARK: - Reusable rows
 

@@ -1,10 +1,9 @@
-"""Keyboard language-model definitions used by training and Core ML export.
+"""Keyboard language-model definitions used by training, distillation and export.
 
-``TinyLM`` is the legacy 4-layer decoder (~4.7M parameters). The production
-exporter also understands ``KeyboardStudentLM``, the 6-layer/384-wide model
-from ``qwen_lm_distil`` (10,601,472 unique parameters). Keeping both loaders in
-one module lets old checkpoints remain reproducible while the keyboard ships the
-larger model without an unsafe state-dict rename.
+``KeyboardGRULM`` is the neural-search-space model: its fixed-size recurrent state
+lets the decoder score partial hypotheses at every trie depth. ``TinyLM`` (~4.7M)
+and ``KeyboardStudentLM`` (6-layer/384-wide, 10,601,472 parameters) remain only as
+offline teachers and reproducible baselines; neither is exported to the keyboard.
 
 Explicit attention (not nn.TransformerEncoder) for two reasons:
   1. MPS hangs on TransformerEncoder + float causal mask (nested-tensor path).
@@ -384,62 +383,6 @@ class KeyboardGRULM(nn.Module):
         return self.head(states[:, -1, :]), new_state              # [B, vocab]
 
 
-class SmoothLinear(nn.Linear):
-    """Inference-only linear with an exactly compensating input-channel scale."""
-
-    def __init__(self, source, scale):
-        super().__init__(
-            source.in_features,
-            source.out_features,
-            bias=source.bias is not None,
-            device=source.weight.device,
-            dtype=source.weight.dtype,
-        )
-        with torch.no_grad():
-            self.weight.copy_(source.weight * scale.unsqueeze(0))
-            if source.bias is not None:
-                self.bias.copy_(source.bias)
-        self.weight.requires_grad_(source.weight.requires_grad)
-        if self.bias is not None:
-            self.bias.requires_grad_(source.bias.requires_grad)
-        self.register_buffer("inverse_input_scale", scale.reciprocal())
-
-    def forward(self, inputs):
-        return F.linear(inputs * self.inverse_input_scale, self.weight, self.bias)
-
-
-def apply_smooth_quant(model, input_absmax, alpha=0.5):
-    """Balance transformer activations and weight columns without changing outputs.
-
-    ``input_absmax`` maps module names to per-input-channel calibration maxima.
-    The tied vocabulary head is deliberately excluded so its embedding matrix is
-    neither altered nor duplicated in the exported package.
-    """
-    if not 0 <= alpha <= 1:
-        raise ValueError("SmoothQuant alpha must be between 0 and 1")
-
-    summaries = {}
-    modules = list(model.named_modules())
-    for name, module in modules:
-        if not name or name == "head" or not isinstance(module, nn.Linear):
-            continue
-        activation = input_absmax.get(name)
-        if activation is None or activation.numel() != module.in_features:
-            raise ValueError(f"missing SmoothQuant calibration for {name}")
-        activation = activation.to(device=module.weight.device, dtype=module.weight.dtype)
-        weight = module.weight.detach().abs().amax(dim=0)
-        scale = activation.clamp_min(1e-5).pow(alpha) / weight.clamp_min(1e-5).pow(1 - alpha)
-        scale = scale.clamp(1e-4, 1e4)
-        parent_name, _, child_name = name.rpartition(".")
-        parent = model.get_submodule(parent_name) if parent_name else model
-        setattr(parent, child_name, SmoothLinear(module, scale))
-        summaries[name] = {
-            "minimum": float(scale.min()),
-            "maximum": float(scale.max()),
-        }
-    return summaries
-
-
 def count_parameters(model):
     """Count unique trainable parameters; tied embedding/head weights count once."""
     return sum(parameter.numel() for parameter in model.parameters())
@@ -462,46 +405,3 @@ def load_inference_checkpoint(path):
         model = TinyLM(vocab=checkpoint["vocab"])
     model.load_state_dict(checkpoint["model"])
     return model.eval(), checkpoint
-
-
-class KeyboardInferenceModel(nn.Module):
-    """Memory-bounded Core ML interface used by the keyboard extension.
-
-    The old export returned [B, 32, vocab] even though candidate scoring needs at
-    most a handful of positions and next-word search needs one. This wrapper first
-    gathers the requested hidden states and only then applies the tied LM head.
-
-    A single model/function serves both call sites so the 4.7M weights are not
-    duplicated in the extension bundle:
-
-      candidate_log_probs [B]       exact sum of selected-token log probabilities
-      next_logits          [B, V]    distribution at one requested position
-
-    ``score_mask`` makes unused slots in the fixed K=8 candidate array inert.
-    """
-    score_slots = 8
-
-    def __init__(self, lm):
-        super().__init__()
-        self.lm = lm
-        embedding = lm.emb if hasattr(lm, "emb") else lm.embedding
-        self.d = embedding.embedding_dim
-
-    def _gather_hidden(self, hidden, positions):
-        index = positions.to(torch.int64).unsqueeze(-1).expand(-1, -1, self.d)
-        return torch.gather(hidden, dim=1, index=index)
-
-    def forward(self, tokens, score_positions, target_ids, score_mask, next_positions):
-        hidden = self.lm.hidden(tokens)
-
-        score_hidden = self._gather_hidden(hidden, score_positions)
-        score_logits = self.lm.head(score_hidden)       # [B, K, V], not [B, L, V]
-        score_log_probs = F.log_softmax(score_logits, dim=-1)
-        selected = torch.gather(
-            score_log_probs, dim=2, index=target_ids.to(torch.int64).unsqueeze(-1)
-        ).squeeze(-1)
-        candidate_log_probs = (selected * score_mask).sum(dim=1)
-
-        next_hidden = self._gather_hidden(hidden, next_positions)
-        next_logits = self.lm.head(next_hidden).squeeze(1)  # [B, V]
-        return candidate_log_probs, next_logits

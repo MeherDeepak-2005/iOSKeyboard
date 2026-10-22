@@ -46,9 +46,11 @@ Release inputs are deliberately immutable and checksum-verified:
     (MIT-like/BSD-compatible combined work).
   - Vocabulary frequency: hermitdave/FrequencyWords at a pinned Git commit
     (CC BY-SA 4.0).
-  - Bi/trigrams: the vendored Tatoeba English CC0 sentence export snapshot dated
-    2026-07-18. It is committed under tools/data so a rebuild never silently
-    changes when an upstream nightly export changes.
+  - Bi/trigrams (default): every Tatoeba English sentence (CC BY 2.0 FR) vendored
+    as tools/data/tatoeba-eng-2026-10-20.tsv.bz2, plus the WikiText-103 raw train
+    split (CC BY-SA 3.0) fetched from a pinned Hugging Face revision; see
+    ngram_corpus.py. --legacy-ngrams reproduces the previous pack, counted over the
+    vendored 41,502-sentence Tatoeba English CC0 snapshot dated 2026-07-18.
 
 See ARTIFACTS.json and THIRD_PARTY_NOTICES.md for provenance and licensing.
 """
@@ -123,6 +125,17 @@ EXPANSION_MANIFEST = ROOT / "data" / "english-expansion-v1.manifest.json"
 LANGDATA_CAP = 11_000_000
 COREV4_LANGDATA_CAP = 20_000_000
 COREV4_MANIFEST = ROOT / "data" / "corev4" / "english" / "manifest.json"
+# Large-corpus n-grams (default build). Both inputs are immutable and hash-checked.
+TATOEBA_FULL = ROOT / "data" / "tatoeba-eng-2026-10-20.tsv.bz2"
+TATOEBA_FULL_SHA256 = "bb3dcc28a8984a26dc466ee14eb53c4210b0dd9bb111b9d686d1efc83ecf091c"
+WIKITEXT_REVISION = "b08601e04326c79dfdd32d625aee71d232d685c3"
+WIKITEXT_FILES = [
+    ("train-00000-of-00002", "74da360f23826045b3e6ac6375411fdb15f003030aa74f2596ed08b857cb9212"),
+    ("train-00001-of-00002", "ba090ac30dbf5461e8dcbdd1a1b8e6f3cf9c2c756d64f0c1220450acd514f720"),
+]
+LARGE_LANGDATA_CAP = 32_000_000
+LARGE_BI_MIN_COUNT, LARGE_BI_PER_CTX = 4, 1_024
+LARGE_TRI_MIN_COUNT, LARGE_TRI_PER_CTX = 8, 64
 
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
@@ -331,6 +344,8 @@ def write_bin(vocab, bigrams, trigrams, starters, *, output=None, context_totals
         total = context_totals["bigrams"].get(ctx, sum(c for _, c in ent))
         if total < sum(c for _, c in ent):
             raise ValueError(f"bigram context {ctx}: total below retained counts")
+        if total > 0xFFFFFFFF:
+            raise ValueError(f"bigram context {ctx}: total exceeds u32")
         kept = ent if BI_PER_CTX is None else ent[:BI_PER_CTX]
         if version == 5 and len(kept) > EMPTY16:
             sys.exit(f"bigram context {ctx} has too many continuations: {len(kept)}")
@@ -343,6 +358,8 @@ def write_bin(vocab, bigrams, trigrams, starters, *, output=None, context_totals
         total = context_totals["trigrams"].get((a, b), sum(c for _, c in ent))
         if total < sum(c for _, c in ent):
             raise ValueError(f"trigram context {(a, b)}: total below retained counts")
+        if total > 0xFFFFFFFF:
+            raise ValueError(f"trigram context {(a, b)}: total exceeds u32")
         kept = ent if TRI_PER_CTX is None else ent[:TRI_PER_CTX]
         if version == 5:
             tri_rows.append(((a << 16) | b, min(total, 0xFFFFFFFF), len(tri_ent)))
@@ -493,11 +510,13 @@ def merge_expansion(vocab, snapshot):
     return sorted(merged.items(), key=lambda entry: (-entry[1], entry[0]))
 
 
-def merge_contexts(ids, bigrams, trigrams, snapshot):
+def merge_contexts(ids, bigrams, trigrams, snapshot, totals=None):
     maps = {"bigrams": {ctx: Counter(dict(entries)) for ctx, entries in bigrams.items()},
             "trigrams": {ctx: Counter(dict(entries)) for ctx, entries in trigrams.items()}}
-    totals = {kind: {ctx: sum(entries.values()) for ctx, entries in data.items()}
-              for kind, data in maps.items()}
+    measured = {kind: {ctx: sum(entries.values()) for ctx, entries in data.items()}
+                for kind, data in maps.items()}
+    # Pruned inputs pass their pre-pruning totals so probabilities stay honest.
+    totals = {kind: {**measured[kind], **(totals or {}).get(kind, {})} for kind in measured}
     for source, distribution in snapshot["sources"].items():
         if source not in {"masc", "project"}:
             raise ValueError(f"unapproved context source: {source}")
@@ -561,16 +580,47 @@ def merge_corev4(vocab, bigrams, trigrams, starters, totals):
     return expanded, bi, tri, starters, totals
 
 
+def build_large_ngrams(ids):
+    """Count Tatoeba (all English) + WikiText-103 train, then prune per LARGE_* limits."""
+    import ngram_corpus
+    require_hash(TATOEBA_FULL, TATOEBA_FULL_SHA256)
+    wiki = [fetch("https://huggingface.co/datasets/Salesforce/wikitext/resolve/"
+                  f"{WIKITEXT_REVISION}/wikitext-103-raw-v1/{name}.parquet",
+                  f"wikitext-103-raw-{name}.parquet", sha) for name, sha in WIKITEXT_FILES]
+    print("counting bi/trigrams over Tatoeba English + WikiText-103 ...", flush=True)
+    tokens, bi, tri = ngram_corpus.count([ngram_corpus.tatoeba_lines(TATOEBA_FULL),
+                                          ngram_corpus.wikitext_lines(wiki)], ids)
+    bigrams, bi_totals = ngram_corpus.prune(*bi, LARGE_BI_MIN_COUNT, LARGE_BI_PER_CTX)
+    packed, tri_packed_totals = ngram_corpus.prune(*tri, LARGE_TRI_MIN_COUNT, LARGE_TRI_PER_CTX)
+    trigrams = {ngram_corpus.split_trigram_context(k): v for k, v in packed.items()}
+    tri_totals = {ngram_corpus.split_trigram_context(k): v for k, v in tri_packed_totals.items()}
+    print(f"counted {tokens:,} in-vocabulary tokens", flush=True)
+    starters = [(ids[word], n) for word, n in COLD_START_PRIORS if word in ids][:STARTERS_KEEP]
+    return bigrams, trigrams, starters, {"bigrams": bi_totals, "trigrams": tri_totals}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Build checksum-verified English KBLM v6 data")
     parser.add_argument("--output", type=Path, default=OUT)
     parser.add_argument("--baseline", action="store_true", help="reproduce the pre-expansion vocabulary/context pipeline")
     parser.add_argument("--manifest", type=Path, default=EXPANSION_MANIFEST)
     parser.add_argument("--without-corev4", action="store_true", help="reproduce the expanded v5 pack without CoreV4")
+    parser.add_argument("--legacy-ngrams", action="store_true", help="reproduce the Tatoeba-CC0-only n-gram pack")
     args = parser.parse_args()
     if not args.output.parent.is_dir():
         parser.error(f"output folder does not exist: {args.output.parent}")
     vocab = merge_contractions(build_vocab())
+    if not (args.legacy_ngrams or args.baseline or args.without_corev4):
+        # Count over the FINAL vocabulary so every shipped form can carry context.
+        manifest, vocabulary, contexts = load_expansion(args.manifest)
+        vocab = merge_expansion(vocab, vocabulary)
+        vocab, *_ = merge_corev4(vocab, {}, {}, [], None)
+        ids = {word: index for index, (word, _) in enumerate(vocab)}
+        bi, tri, starters, totals = build_large_ngrams(ids)
+        bi, tri, totals = merge_contexts(ids, bi, tri, contexts, totals)
+        write_bin(vocab, bi, tri, starters, output=args.output, context_totals=totals,
+                  version=6, max_bytes=LARGE_LANGDATA_CAP)
+        return
     contexts = None
     if not args.baseline:
         manifest, vocabulary, contexts = load_expansion(args.manifest)

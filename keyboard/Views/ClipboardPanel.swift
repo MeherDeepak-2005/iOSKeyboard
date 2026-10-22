@@ -9,6 +9,7 @@ import UIKit
 
 final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelegate {
 	var onPick: ((String) -> Void)?
+	var onPasteCurrent: (() -> Void)?
 	var onABC: (() -> Void)?
 	var onNextKeyboard: (() -> Void)?
 
@@ -22,6 +23,7 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 
 	private let table = UITableView(frame: .zero, style: .insetGrouped)
 	private let bottomBar = UIView()
+    private let pasteCurrentButton = UIButton(type: .system)
 	private let emptyLabel = UILabel()
 	private let barHeight: CGFloat = 42
 
@@ -48,6 +50,17 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		emptyLabel.numberOfLines = 3
 		table.backgroundView = emptyLabel
 
+        pasteCurrentButton.setTitle("Paste current clipboard", for: .normal)
+        pasteCurrentButton.setImage(UIImage(systemName: "doc.on.clipboard"), for: .normal)
+        pasteCurrentButton.tintColor = theme.keyText
+        pasteCurrentButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
+        pasteCurrentButton.accessibilityIdentifier = "clipboard.pasteCurrent"
+        pasteCurrentButton.isEnabled = hasFullAccess
+        pasteCurrentButton.addAction(UIAction { [weak self] _ in
+            self?.onPasteCurrent?()
+            self?.reload()
+        }, for: .touchUpInside)
+        addSubview(pasteCurrentButton)
 		buildBottomBar()
 		addSubview(bottomBar)
 		reload()
@@ -56,19 +69,20 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		table.frame = CGRect(x: 0, y: 0, width: bounds.width,
-							 height: max(0, bounds.height - barHeight))
+        pasteCurrentButton.frame = CGRect(x: 8, y: 0, width: max(0, bounds.width - 16), height: 44)
+        table.frame = CGRect(x: 0, y: 44, width: bounds.width,
+            height: max(0, bounds.height - barHeight - 44))
 		bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight,
 								 width: bounds.width, height: barHeight)
 	}
 
 	private func reload() {
-		let items = injectedItems ?? KBClipboard.all()
+		let items = hasFullAccess ? (injectedItems ?? KBClipboard.all()) : []
 		pinnedItems = items.filter(\.pinned)
 		recentItems = items.filter { !$0.pinned }
 		if items.isEmpty {
 			emptyLabel.text = hasFullAccess
-				? "Nothing saved yet.\nCopy text anywhere, then tap the\nclipboard icon in the suggestion bar."
+				? "Nothing saved yet.\nCopy text, then open Clipboard\nfrom the Tools row."
 				: "Allow Full Access in Settings\nto use the clipboard."
 			emptyLabel.isHidden = false
 		} else {

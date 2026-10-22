@@ -13,7 +13,7 @@ Android dictionary.
 | Neutral core | C++20 | `native/DecoderCore/` | Checked packed vocabulary, ASCII English tap candidate generation, mutable tries, packed completions, terminal/prefix funding, spatial costs, immutable boosted seed preparation, retained DP, batched language-score mathematics |
 | iOS adapter | Objective-C++ | `native/iOS/KBDecoderBridge.h/.mm` | Retain immutable NSData mapping, numeric/UTF-8 transport, whole-batch conversion, native error translation |
 | iOS application | Swift | `keyboard/`, `demo_keyboard/` | UI, document insertion, resource discovery, scheduling/revisions, settings, personal storage and existing language routing |
-| Android adapter | C++ with JNI | `native/android/DecoderJni.cpp` | Read-only file mapping, lifetime-safe opaque handles, serialized sessions, Kotlin/native input and owned output conversion |
+| Android adapter | C++ with JNI | `native/android/SharedEngineJni.cpp` | Read-only file mapping, lifetime-safe opaque handles, one serialized engine lane per handle, byte-array input and versioned `EngineWire` output |
 | Android application/library façade | Kotlin | `android/decoder/` | Asset extraction, checksum/version lifecycle, worker scheduling boundary, resource closing; future InputMethodService/UI/personal persistence |
 
 Kotlin follows Android's [Kotlin-first guidance](https://developer.android.com/kotlin/first).

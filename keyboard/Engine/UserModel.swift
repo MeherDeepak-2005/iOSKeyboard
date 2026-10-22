@@ -19,9 +19,6 @@ final class UserModel {
         locked { if let nativeCountsCache { return nativeCountsCache }; let value = state.snapshot(); nativeCountsCache = value; return value }
     }
     func uniCount(_ word: String) -> Int { locked { state.count(word) } }
-    func uniBackoff(_ word: String) -> (count: Int, total: Int, distinct: Int) {
-        locked { let row = state.unigrams; return (state.count(word), row.values.reduce(0) { $0 + $1.intValue }, row.count) }
-    }
     func biLookup(_ previous: String, _ word: String) -> (count: Int, total: Int) {
         locked { let row = state.bigrams[previous] ?? [:]; return (row[word]?.intValue ?? 0, row.values.reduce(0) { $0 + $1.intValue }) }
     }
@@ -30,19 +27,16 @@ final class UserModel {
     }
     func biDist(_ previous: String) -> [String: Int] { locked { (state.bigrams[previous] ?? [:]).mapValues(\.intValue) } }
     func triDist(_ context: String) -> [String: Int] { locked { (state.trigrams[context] ?? [:]).mapValues(\.intValue) } }
-    func topUnigrams(_ limit: Int) -> [String] {
-        locked { state.unigrams.sorted { $0.value == $1.value ? $0.key.utf8.lexicographicallyPrecedes($1.key.utf8) : $0.value.intValue > $1.value.intValue }.prefix(max(0, limit)).map(\.key) }
-    }
     func unigramsSnapshot() -> [String: Int] { locked { state.unigrams.mapValues(\.intValue) } }
-    func spellingConfirmationCount(_ word: String) -> Int { locked { state.confirmationCount(word) } }
-    func contextDiversity(for word: String, stoppingAt limit: Int = 2) -> Int { locked { Int(state.diversity(word, limit: UInt(max(0, limit)))) } }
     func isKept(_ word: String) -> Bool { locked { state.kept(word) } }
     func releaseKeep(_ word: String) { locked { state.releaseKeep(word) } }
     func allowsAdoption(_ word: String, count: Int, lexicon: KBGenerationLexicon) -> Bool { locked { state.allowsAdoption(word, count: count, lexicon: lexicon) } }
     func confirmSpelling(_ word: String) { locked { ensureEpoch(); state.confirm(word) } }
-    @discardableResult func pruneIfNeeded() -> Bool { locked { let changed = state.prune(); if changed { nativeCountsCache = nil }; return changed } }
-    func learn(context: [String], word: String) { locked { ensureEpoch(); state.learn(word, context: context); nativeCountsCache = nil } }
-    func demote(_ word: String) { locked { let priorEpoch = state.epoch; ensureEpoch(); if priorEpoch == state.epoch { state.demote(word) }; nativeCountsCache = nil } }
+    // Drop the cached snapshot BEFORE mutating: while it is held, native copy-on-write
+    // must deep-copy the whole personal model on every learning event.
+    @discardableResult func pruneIfNeeded() -> Bool { locked { nativeCountsCache = nil; return state.prune() } }
+    func learn(context: [String], word: String) { locked { ensureEpoch(); nativeCountsCache = nil; state.learn(word, context: context) } }
+    func demote(_ word: String) { locked { let priorEpoch = state.epoch; ensureEpoch(); nativeCountsCache = nil; if priorEpoch == state.epoch { state.demote(word) } } }
 
     private func storeURL(for epoch: UInt64) -> URL? { storageURLOverride ?? KBPersonalData.modelURL(for: epoch) }
     private var legacyStoreURL: URL? { storageURLOverride == nil ? KBPersonalData.legacyModelURL : nil }
@@ -85,8 +79,9 @@ final class UserModel {
             bigramWords: bi.mapValues { Array($0.keys) }, bigramCounts: bi.mapValues { $0.values.map { NSNumber(value: $0) } },
             trigramWords: tri.mapValues { Array($0.keys) }, trigramCounts: tri.mapValues { $0.values.map { NSNumber(value: $0) } })
         let changed: Bool = locked {
+            nativeCountsCache = nil
             state.install(counts, confirmed: (snapshot.confirmed ?? [:]).filter { valid($0.key) && $0.value > 0 }.mapValues { NSNumber(value: $0) }, epoch: current)
-            nativeCountsCache = nil; return state.prune()
+            return state.prune()
         }
         if changed || migratedLegacy { save() }
     }

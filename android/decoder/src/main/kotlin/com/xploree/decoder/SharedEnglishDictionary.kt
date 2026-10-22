@@ -10,9 +10,6 @@ import java.security.MessageDigest
  */
 object SharedEnglishDictionary {
     @Synchronized
-    fun open(context: Context): NativeChannelDecoder = NativeChannelDecoder(install(context).absolutePath)
-
-    @Synchronized
     fun openEngine(context: Context): NativeKeyboardEngine = NativeKeyboardEngine(install(context).absolutePath, context.assets.open("safety.kbguard").use { it.readBytes() })
 
     private fun install(context: Context): File {

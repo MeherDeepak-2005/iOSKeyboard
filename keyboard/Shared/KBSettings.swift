@@ -75,13 +75,18 @@ struct KBAccent: Identifiable, Hashable {
 /// keyboard (and the Themes preview) automatically render the variant for the user's
 /// current Light/Dark mode. Grouped by colour family for easy browsing.
 enum KBPalette {
-	static let `default` = emerald
+	static let `default` = system
+
+    static let system = KBAccent(id: "system", name: "System",
+        light: KBGradient(start: 0x007AFF, end: 0x007AFF),
+        dark: KBGradient(start: 0x0A84FF, end: 0x0A84FF))
 
 	static let emerald = KBAccent(id: "emerald", name: "Emerald",
 		light: KBGradient(start: 0x37C26B, end: 0x1E9E5A),
 		dark:  KBGradient(start: 0x33B566, end: 0x18854C))
 
 	static let groups: [(title: String, accents: [KBAccent])] = [
+        ("System", [system]),
 		("Greens", [
 			emerald,
 			KBAccent(id: "leaf", name: "Leaf",
@@ -200,7 +205,6 @@ enum KBSettings {
 		static let haptics  = "kb.haptics"
 		static let language = "kb.language"
 		static let glideCap = "kb.glidecapture"
-		static let neuralEnabled = "kb.neural.enabled"
 		static let hasUsed  = "kb.hasused"
 		static let lastSeen = "kb.keyboard.lastSeen"
 		static let fullAccess = "kb.fullaccess"
@@ -231,9 +235,13 @@ enum KBSettings {
 	}
 
 	static var accentID: String {
-		get { store.string(forKey: Key.accent) ?? KBPalette.default.id }
+		get { resolvedAccentID(in: store) }
 		set { store.set(newValue, forKey: Key.accent) }
 	}
+    /// Read-only fallback: loading settings never turns a default into a selection.
+    static func resolvedAccentID(in defaults: UserDefaults) -> String {
+        KBPalette.accent(id: defaults.string(forKey: Key.accent) ?? "system").id
+    }
 	static var accent: KBAccent { KBPalette.accent(id: accentID) }
 	/// The user's durable selection. A temporarily missing or rejected extension pack
 	/// must not rewrite this preference to English.
@@ -362,22 +370,6 @@ enum KBSettings {
 	static var glideCapture: Bool {
 		get { store.object(forKey: Key.glideCap) as? Bool ?? false }
 		set { store.set(newValue, forKey: Key.glideCap) }
-	}
-
-	/// On/off switch for the neural rescorer. Default on, but inert unless a build
-	/// actually loads a neural prior. This edition ships none: Release and ordinary Debug
-	/// builds are n-gram + in-trie search prior only, so the tier is always n-gram and
-	/// this flag has no effect. It matters solely in `INTERNAL_NEURAL` / `INTERNAL_GRU`
-	/// builds (see `KeyboardEngine.shared`). The engine reads it fresh at each word-session
-	/// boundary, so toggling it takes effect on the next word — no rebuild.
-	static var neuralEnabled: Bool {
-		get { store.object(forKey: Key.neuralEnabled) as? Bool ?? true }
-		set {
-			store.set(newValue, forKey: Key.neuralEnabled)
-			// Wake the extension process so the next word session re-reads the flag,
-			// instead of waiting for a keyboard restart / lazy cross-process sync.
-			postConfigurationChange()
-		}
 	}
 
 	/// URL of the on-device personalisation model in the shared App Group container.

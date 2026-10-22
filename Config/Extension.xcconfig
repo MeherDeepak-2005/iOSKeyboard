@@ -3,16 +3,13 @@
 KLIPY_API_KEY =
 KLIPY_CONTENT_FILTER_APPROVED = NO
 KLIPY_MEDIA_ENABLED = NO
-INTERNAL_NEURAL_MODEL_PACKAGE =
-INTERNAL_NEURAL_TOKENIZER_MODEL =
-// Set only for an explicitly opt-in, optimized internal profiling build.
-// Ordinary Release builds remain n-gram-only and the artifact verifier rejects
-// any accidentally bundled neural files.
-INTERNAL_NEURAL_ENABLED = NO
 
-// GRU streaming search prior (NN-LM in the trie). Independent of the W8 rescorer
-// above: pair INTERNAL_GRU_ENABLED = YES with the INTERNAL_GRU Swift compile flag
-// to both bundle gru.mlpackage and wire GRULanguagePrior into contextSearchPrior.
+// GRU neural search space (NN-LM in the trie) — the decoder's only neural model.
+// Set only for an explicitly opt-in, optimized internal profiling build: pair
+// INTERNAL_GRU_ENABLED = YES with the INTERNAL_GRU Swift compile flag to both bundle
+// gru.mlpackage and wire GRULanguagePrior into the engine. Ordinary Release builds
+// remain n-gram-only and the artifact verifier rejects any accidentally bundled
+// neural files.
 INTERNAL_GRU_MODEL_PACKAGE =
 INTERNAL_GRU_TOKENIZER_MODEL =
 // Optional batched scorer (export_gru_score_coreml.py → gru_score.mlpackage). When set, one [B,T]

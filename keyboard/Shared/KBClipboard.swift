@@ -6,7 +6,7 @@ import Foundation
 //
 // Text only, size-capped, App Group-backed (a small JSON file — items are too big
 // for UserDefaults churn). Privacy contract: pasteboard CONTENTS are read only on
-// an explicit user tap (the strip's clipboard icon); detection of "something new was
+// an explicit user tap (Clipboard in the tools row); detection of "something new was
 // copied" uses metadata alone (changeCount / hasStrings), which iOS does not surface
 // as a paste. Add this file to BOTH targets.
 //

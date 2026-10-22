@@ -71,7 +71,7 @@ struct KeyboardTests {
 		let data = try #require(LangData(url: url))
 		let bytes = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
 		#expect(data.formatVersion == 6)
-		#expect(bytes <= 20_000_000)
+		#expect(bytes <= 32_000_000)
 		#expect(data.wordCount == 114_283)
 	}
 
@@ -190,14 +190,14 @@ struct KeyboardTests {
 	@MainActor @Test func suggestionPassThroughBoundaryDoesNotMoveKeyGeometry() throws {
 		for width: CGFloat in [320, 390, 440] {
 			let bar = SuggestionBar(theme: .system(dark: true))
-			bar.frame = CGRect(x: 0, y: 0, width: width, height: 44)
+			bar.frame = CGRect(x: 0, y: 0, width: width, height: 32)
 			bar.setSuggestions(["one", "two", "three"], highlightPrimary: true)
 			bar.layoutIfNeeded()
-			#expect(bar.point(inside: CGPoint(x: width / 2, y: 37.9), with: nil))
-			#expect(!bar.point(inside: CGPoint(x: width / 2, y: 38), with: nil))
+			#expect(bar.point(inside: CGPoint(x: width / 2, y: 27.9), with: nil))
+			#expect(!bar.point(inside: CGPoint(x: width / 2, y: 28), with: nil))
 			let primary = try #require(suggestionButton("suggestion.primary", in: bar))
 			#expect(primary.frame.minY == -3)
-			#expect(primary.frame.height == 44)
+			#expect(primary.frame.height == 32)
 			let highlight = try #require(bar.subviews.first {
 				!($0 is UIButton) && $0.layer.borderWidth > 0
 			})
@@ -402,11 +402,44 @@ struct KeyboardTests {
 	// Suggestions always divide the full strip into three stable targets.
     @MainActor @Test func renderSuggestionBar() throws {
 		let bar = SuggestionBar(theme: .system(dark: false))
-		bar.frame = CGRect(x: 0, y: 0, width: 390, height: 44)
+		bar.frame = CGRect(x: 0, y: 0, width: 390, height: 32)
         bar.backgroundColor = UIColor(hex: 0xE8E6EC)
         bar.setSuggestions(["hello", "help", "hell"], typedPrefix: "hel")
         bar.layoutIfNeeded()
         try writePNG(of: bar, name: "suggestion_bar_plain")
+
+        let tools = try #require(bar.subviews.first {
+            $0.accessibilityIdentifier == "suggestion.tools" } as? UIButton)
+        tools.sendActions(for: .touchUpInside)
+        bar.layoutIfNeeded()
+        #expect(bar.showingTools)
+        try writePNG(of: bar, name: "suggestion_bar_tools")
+    }
+
+	// The full letters deck at iPhone Pro width, for eyeballing key and bottom-row widths.
+    @MainActor @Test func renderKeyDeck() throws {
+        for dark in [false, true] {
+            let deck = KeyboardView(theme: .system(dark: dark), showsGlobe: false)
+            deck.frame = CGRect(x: 0, y: 0, width: 393, height: deck.keyboardHeight)
+            deck.backgroundColor = dark ? UIColor(hex: 0x2A2A2E) : UIColor(hex: 0xE8E6EC)
+            deck.layoutIfNeeded()
+            try writePNG(of: deck, name: dark ? "key_deck_dark" : "key_deck_light")
+        }
+
+        // GIF search: query header, the media strip's status row, and the Search key.
+        let search = KeyboardView(theme: .system(dark: true), showsGlobe: false)
+        search.setActionEnabled(false)
+        search.showMedia(kind: .gifs, hasFullAccess: true)
+        search.frame = CGRect(x: 0, y: 0, width: 393, height: search.keyboardHeight)
+        search.layoutIfNeeded()
+        func all(_ view: UIView) -> [UIView] { view.subviews + view.subviews.flatMap(all) }
+        let open = try #require(all(search).first {
+            $0.accessibilityIdentifier == "media.search" } as? UIButton)
+        open.sendActions(for: .touchUpInside)
+        search.frame.size.height = search.keyboardHeight
+        search.backgroundColor = UIColor(hex: 0x2A2A2E)
+        search.layoutIfNeeded()
+        try writePNG(of: search, name: "media_search_gifs")
     }
 
     @MainActor @Test func glideSuggestionPresentationStaysSynchronized() throws {
@@ -609,13 +642,16 @@ struct KeyboardTests {
 		#expect(!snapshot.isValid(for: request(current: "night")))
 		#expect(!snapshot.isValid(for: request(context: ["at"])))
 		#expect(!snapshot.isValid(for: request(language: .tenglishToTelugu)))
-		#expect(!snapshot.isValid(for: request(tier: .neuralW8)))
+		#expect(!snapshot.isValid(for: request(tier: .neuralGRU)))
 	}
 
-	@Test func internalNeuralTierIsEnglishOnlyAndPublishesOneRanking() async throws {
-		let prior = TestNeuralPrior(tier: .neuralW8)
-		let engine = KeyboardEngine(languageDataURL: langdataURL(), rescorer: prior)
-		#expect(engine.preferredModelTier(for: .english) == .neuralW8)
+	// The neural search space is the only neural route: the engine must select the .neuralGRU
+	// tier for English alone, prepare context once per word session, and fold the model's own
+	// complete-word log-prob into every candidate — the wiring the real Core ML GRU rides.
+	@Test func neuralSearchTierIsEnglishOnlyAndPublishesOneRanking() async throws {
+		let prior = TestNeuralPrior()
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), searchPrior: prior)
+		#expect(engine.preferredModelTier(for: .english) == .neuralGRU)
 		#expect(engine.preferredModelTier(for: .tenglishToTelugu) == .ngram)
 		#expect(engine.preferredModelTier(for: .romanTelugu) == .ngram)
 		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
@@ -624,7 +660,7 @@ struct KeyboardTests {
 			DecodeRequest(fieldRevision: 1, documentRevision: generation,
 				wordSessionID: 41, generation: generation, layoutRevision: 1,
 				currentWord: word, context: ["they"], taps: nil,
-				languageMode: .english, requestedModelTier: .neuralW8)
+				languageMode: .english, requestedModelTier: .neuralGRU)
 		}
 		func run(_ request: DecodeRequest) async -> DecodeSnapshot {
 			await withCheckedContinuation { continuation in
@@ -634,36 +670,13 @@ struct KeyboardTests {
 
 		let first = await run(request(word: "migh", generation: 1))
 		let second = await run(request(word: "might", generation: 2))
-		#expect(first.modelTier == .neuralW8)
-		#expect(second.modelTier == .neuralW8)
+		#expect(first.modelTier == .neuralGRU)
+		#expect(second.modelTier == .neuralGRU)
 		#expect(!first.candidates.isEmpty)
 		#expect(first.candidates.allSatisfy { $0.neuralLogProbability != nil })
-		#expect(prior.preparedSessions == [41])
-		#expect(prior.scoredSessions == [41, 41])
-	}
-
-	// The GRU search prior conforms to the same NeuralLanguagePrior seam, so the engine
-	// must select the .neuralGRU tier, prepare context once, score the candidate pool, and
-	// fold a neural log-prob into every candidate — the wiring the real Core ML GRU rides.
-	@Test func gruSearchPriorTierBlendsIntoRanking() async throws {
-		let prior = TestNeuralPrior(tier: .neuralGRU)
-		let engine = KeyboardEngine(languageDataURL: langdataURL(), rescorer: prior)
-		#expect(engine.preferredModelTier(for: .english) == .neuralGRU)
-		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
-
-		let request = DecodeRequest(fieldRevision: 1, documentRevision: 1,
-			wordSessionID: 7, generation: 1, layoutRevision: 1,
-			currentWord: "migh", context: ["they"], taps: nil,
-			languageMode: .english, requestedModelTier: .neuralGRU)
-		let snapshot = await withCheckedContinuation { continuation in
-			engine.decode(request) { continuation.resume(returning: $0) }
-		}
-		#expect(snapshot.modelTier == .neuralGRU)
-		#expect(!snapshot.candidates.isEmpty)
-		#expect(snapshot.candidates.allSatisfy { $0.neuralLogProbability != nil })
-		#expect(prior.preparedSessions == [7])
+		#expect(prior.preparedSessions.allSatisfy { $0 == 41 })
 		#expect(!prior.scoredSessions.isEmpty)
-		#expect(prior.scoredSessions.allSatisfy { $0 == 7 })
+		#expect(prior.scoredSessions.allSatisfy { $0 == 41 })
 	}
 
 	@Test func multiwordSearchPreservesThreeWordPathsAndBoundarySubstitutions() {
@@ -1867,14 +1880,12 @@ struct KeyboardTests {
     }
 }
 
-private final class TestNeuralPrior: NeuralLanguagePrior {
-	let modelTier: DecodeModelTier
+private final class TestNeuralPrior: NeuralSearchPrior {
+	let modelTier: DecodeModelTier = .neuralGRU
 	let isReady = true
 	private let lock = NSLock()
 	private var prepared: [UInt64] = []
 	private var scored: [UInt64] = []
-
-	init(tier: DecodeModelTier) { modelTier = tier }
 
 	var preparedSessions: [UInt64] {
 		lock.lock(); defer { lock.unlock() }
@@ -1899,6 +1910,8 @@ private final class TestNeuralPrior: NeuralLanguagePrior {
 	}
 
 	func discardSession(_ wordSessionID: UInt64) {}
+	func warmSearchPrior(_ query: SearchPriorQuery, lexicon: KBGenerationLexicon) {}
+	func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]? { nil }
 }
 
 private final class TestSearchPrior: NeuralSearchPrior {

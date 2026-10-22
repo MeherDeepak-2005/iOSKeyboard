@@ -28,8 +28,14 @@ These experimental rules are separate from the production default.
 The scripts preserve earlier PyTorch, tokenizer, probing, and Core ML experiments
 so a future model can be evaluated reproducibly. Their outputs are development
 artifacts, not production deliverables. In particular, do not add
-`rescorer.mlpackage`, `tokenizer.bin`, or an export manifest to an Xcode target
+`gru.mlpackage`, `gru_tokenizer.bin`, or an export manifest to an Xcode target
 without completing the promotion gates below.
+
+The decoder is a neural search space (NSS): one streaming model scores hypotheses
+inside the spatial trie search, and those same complete-word scores rank the
+result. There is no separate rescoring model or post-search reranking pass. The
+earlier W8/W8A8 transformer rescorer and its exporter were removed; `TinyLM` and
+`KeyboardStudentLM` remain in `model.py` only as offline distillation teachers.
 
 ## Research inputs
 
@@ -48,8 +54,8 @@ artifact manifest:
    tokenizer, calibration sample, and generated artifact.
 2. A user-separated, blind typo and next-word evaluation showing a statistically
    reliable gain over the shipping n-gram decoder, including false-correction rate.
-3. Candidate-oracle recall proving the correct word reaches the rescorer; a larger
-   model cannot recover candidates discarded before scoring.
+3. Candidate-oracle recall proving the correct word survives the search beam; a
+   larger model cannot recover hypotheses pruned before they are scored.
 4. Core ML graph inspection, fixed or explicitly flexible input shapes, conversion
    parity, quantization details, and deterministic source hashes.
 5. Physical-device measurements across supported devices for p50/p95/p99 latency,
@@ -71,8 +77,7 @@ python train_lm.py
 python eval_harness.py --dataset /path/to/user-separated.jsonl --require-user-separated
 python train_ranker.py /path/to/candidate-traces.jsonl --output artifacts/ranker.json
 python compare_scorers.py --help
-python export_coreml.py --help
-python verify_coreml.py --help
+python export_tokenizer.py --help
 python -m unittest discover -s . -p 'test_*.py'
 ```
 

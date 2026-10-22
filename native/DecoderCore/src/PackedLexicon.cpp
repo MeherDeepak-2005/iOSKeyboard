@@ -198,11 +198,10 @@ void PackedLexicon::validate() {
         require(end >= previous && end <= bytes_.size() - blob_, "invalid word offsets");
         previous = end;
     }
-    for (auto [base, count] : {std::pair{biData_, biEntries_}, std::pair{triData_, triEntries_},
-                               std::pair{starterData_, starters_}}) {
-        for (std::size_t i = 0; i < count; ++i)
-            require(idAt(base + entrySize_ * i) < words_, "invalid continuation/starter ID");
-    }
+    // Continuation IDs are checked in readRange as rows are read. Scanning all of them
+    // here faulted in nearly the whole mapped pack before the first keystroke.
+    for (std::size_t i = 0; i < starters_; ++i)
+        require(idAt(starterData_ + starterSize_ * i) < words_, "invalid starter ID");
     if (version_ < 5) {
         for (auto count : {biBuckets_, triBuckets_})
             require(count == 0 || (count & (count - 1)) == 0, "hash table size is not a power of two");
@@ -488,7 +487,9 @@ Continuations PackedLexicon::readRange(std::size_t base, Range range, std::size_
     out.entries.reserve(count);
     for (std::size_t i = range.start; i < std::size_t(range.start) + count; ++i) {
         auto offset = base + entrySize_ * i;
-        out.entries.push_back({static_cast<std::int32_t>(idAt(offset)), u32(offset + (version_ == 5 ? 2 : 4))});
+        auto id = idAt(offset);
+        require(id < words_, "invalid continuation ID");
+        out.entries.push_back({static_cast<std::int32_t>(id), u32(offset + (version_ == 5 ? 2 : 4))});
     }
     return out;
 }

@@ -39,7 +39,7 @@
    },
    {
     "cost": 1.1,
-    "score": -27.571136655917297,
+    "score": -28.059934412157627,
     "source": "splitCorrection",
     "word": "hel lp"
    }
@@ -55,43 +55,43 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -6.891046372649675,
+    "score": -4.708492043147473,
     "source": "fuzzyLexicon",
     "word": "hello"
    },
    {
-    "cost": 1.6,
-    "score": -9.421578052827321,
-    "source": "fuzzyLexicon",
-    "word": "help"
-   },
-   {
     "cost": 2,
-    "score": -13.117395290045696,
+    "score": -9.62586524249381,
     "source": "fuzzyLexicon",
     "word": "he'll"
    },
    {
+    "cost": 1.6,
+    "score": -10.486189521418408,
+    "source": "fuzzyLexicon",
+    "word": "help"
+   },
+   {
     "cost": 2.4000000000000004,
-    "score": -18.855097242755363,
+    "score": -19.919708711346452,
     "source": "fuzzyLexicon",
     "word": "hellos"
    },
    {
     "cost": 0,
-    "score": -22.724566830309346,
+    "score": -23.789178298900435,
     "source": "typed",
     "word": "hellp"
    },
    {
     "cost": 2.725,
-    "score": -23.905295758947744,
+    "score": -24.969907227538833,
     "source": "fuzzyLexicon",
     "word": "hallo"
    },
    {
     "cost": 1.1,
-    "score": -29.228325946403302,
+    "score": -30.781735171234722,
     "source": "splitCorrection",
     "word": "hel lp"
    }
@@ -164,49 +164,49 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -7.916924985109891,
+    "score": -3.730049758503367,
     "source": "fuzzyLexicon",
     "word": "world"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -10.344635722169294,
+    "score": -11.287172358854397,
     "source": "fuzzyLexicon",
     "word": "word"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -11.094039750879752,
+    "score": -12.036576387564855,
     "source": "fuzzyLexicon",
     "word": "works"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -13.472559064649761,
+    "score": -14.415095701334865,
     "source": "fuzzyLexicon",
     "word": "worlds"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -15.772071885423852,
+    "score": -16.714608522108954,
     "source": "fuzzyLexicon",
     "word": "weld"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -17.813557556927258,
+    "score": -18.756094193612363,
     "source": "fuzzyLexicon",
     "word": "wold"
    },
    {
     "cost": 0,
-    "score": -21.42090617807271,
+    "score": -22.363442814757814,
     "source": "typed",
     "word": "wprld"
    },
    {
     "cost": 2.8,
-    "score": -22.676635106711107,
+    "score": -23.619171743396212,
     "source": "fuzzyLexicon",
     "word": "work's"
    }
@@ -239,7 +239,7 @@
    },
    {
     "cost": 1.1,
-    "score": -27.97258851803321,
+    "score": -28.824219302627927,
     "source": "splitCorrection",
     "word": "se bd"
    }
@@ -255,25 +255,25 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -4.58831510118659,
+    "score": -5.454269520420257,
     "source": "fuzzyLexicon",
     "word": "send"
    },
    {
     "cost": 1.6,
-    "score": -20.334179113535882,
+    "score": -21.209355767733584,
     "source": "fuzzyLexicon",
     "word": "sens"
    },
    {
     "cost": 0,
-    "score": -24.63065543474008,
+    "score": -25.505832088937787,
     "source": "typed",
     "word": "sebd"
    },
    {
     "cost": 1.1,
-    "score": -31.535866412949947,
+    "score": -33.26267385174237,
     "source": "splitCorrection",
     "word": "se bd"
    }
@@ -323,25 +323,25 @@
   "candidates": [
    {
     "cost": 0.925,
-    "score": -13.289031476903345,
+    "score": -14.204324688831285,
     "source": "fuzzyLexicon",
     "word": "correction"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -15.213893950036898,
+    "score": -16.129187161964836,
     "source": "fuzzyLexicon",
     "word": "corrections"
    },
    {
     "cost": 0,
-    "score": -21.428717843022568,
+    "score": -22.344011054950506,
     "source": "typed",
     "word": "correcgion"
    },
    {
     "cost": 2.9250000000000003,
-    "score": -22.809446771660966,
+    "score": -23.724739983588904,
     "source": "fuzzyLexicon",
     "word": "correction's"
    }
@@ -385,19 +385,19 @@
   "candidates": [
    {
     "cost": 1.6,
-    "score": -10.011969966891941,
+    "score": -3.8479127572998753,
     "source": "fuzzyLexicon",
     "word": "tomorrow"
    },
    {
     "cost": 3.2,
-    "score": -19.960308044115777,
+    "score": -21.858092276139836,
     "source": "broadRecovery",
     "word": "tomorrows"
    },
    {
     "cost": 0,
-    "score": -23.846397124199548,
+    "score": -25.744181356223603,
     "source": "typed",
     "word": "tomorow"
    }
@@ -416,12 +416,6 @@
     "score": -10.514004971935444,
     "source": "fuzzyLexicon",
     "word": "address"
-   },
-   {
-    "cost": 1.1,
-    "score": -12.788010757625019,
-    "source": "splitCorrection",
-    "word": "a dress"
    },
    {
     "cost": 2.4000000000000004,
@@ -452,6 +446,12 @@
     "score": -14.36323574525829,
     "source": "broadRecovery",
     "word": "acres"
+   },
+   {
+    "cost": 1.1,
+    "score": -14.695716100125836,
+    "source": "splitCorrection",
+    "word": "a dress"
    },
    {
     "cost": 2.725,
@@ -524,117 +524,117 @@
   "id": "c010",
   "suggestions": [
    "address",
-   "a dress",
-   "areas"
+   "areas",
+   "actress"
   ]
  },
  {
   "candidates": [
    {
     "cost": 1.6,
-    "score": -12.085488681853402,
+    "score": -7.884034169164743,
     "source": "fuzzyLexicon",
     "word": "address"
    },
    {
-    "cost": 1.1,
-    "score": -14.359494467542977,
-    "source": "splitCorrection",
-    "word": "a dress"
-   },
-   {
     "cost": 2.4000000000000004,
-    "score": -14.468648142462753,
+    "score": -14.622401819000332,
     "source": "fuzzyLexicon",
     "word": "areas"
    },
    {
     "cost": 2.9000000000000004,
-    "score": -14.80187630045827,
+    "score": -14.955629976995851,
     "source": "broadRecovery",
     "word": "actress"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -15.732170665238579,
+    "score": -15.885924341776159,
     "source": "fuzzyLexicon",
     "word": "andrews"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -15.89376376344791,
+    "score": -16.047517439985487,
     "source": "fuzzyLexicon",
     "word": "arrests"
    },
    {
     "cost": 2.9000000000000004,
-    "score": -15.93471945517625,
+    "score": -16.088473131713826,
     "source": "broadRecovery",
     "word": "acres"
    },
    {
+    "cost": 1.1,
+    "score": -16.42095348658138,
+    "source": "splitCorrection",
+    "word": "a dress"
+   },
+   {
     "cost": 2.725,
-    "score": -16.562476978631075,
+    "score": -16.716230655168655,
     "source": "fuzzyLexicon",
     "word": "assess"
    },
    {
     "cost": 3.2,
-    "score": -17.28054551684315,
+    "score": -17.43429919338073,
     "source": "broadRecovery",
     "word": "ares"
    },
    {
     "cost": 3.2,
-    "score": -17.41727139120979,
+    "score": -17.57102506774737,
     "source": "broadRecovery",
     "word": "adores"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -17.475628717739696,
+    "score": -17.62938239427728,
     "source": "fuzzyLexicon",
     "word": "arses"
    },
    {
     "cost": 3.2,
-    "score": -17.686265132061084,
+    "score": -17.840018808598664,
     "source": "broadRecovery",
     "word": "andres"
    },
    {
     "cost": 3.2,
-    "score": -19.382691695099965,
+    "score": -19.536445371637544,
     "source": "broadRecovery",
     "word": "arras"
    },
    {
     "cost": 3.2,
-    "score": -19.509784761759516,
+    "score": -19.663538438297095,
     "source": "broadRecovery",
     "word": "arsed"
    },
    {
     "cost": 2.85,
-    "score": -20.471863726122724,
+    "score": -20.625617402660303,
     "source": "broadRecovery",
     "word": "adders"
    },
    {
     "cost": 0,
-    "score": -22.6388612497413,
+    "score": -22.79261492627888,
     "source": "typed",
     "word": "adress"
    },
    {
     "cost": 2,
-    "score": -23.094590178379697,
+    "score": -23.248343854917277,
     "source": "fuzzyLexicon",
     "word": "andres's"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -23.494590178379696,
+    "score": -23.64834385491728,
     "source": "fuzzyLexicon",
     "word": "andreas"
    }
@@ -643,8 +643,8 @@
   "id": "c011",
   "suggestions": [
    "address",
-   "a dress",
-   "areas"
+   "areas",
+   "actress"
   ]
  },
  {
@@ -735,7 +735,7 @@
    },
    {
     "cost": 0.72,
-    "score": -24.82559306190663,
+    "score": -24.705936421648115,
     "source": "splitCorrection",
     "word": "co ming"
    }
@@ -752,91 +752,91 @@
   "candidates": [
    {
     "cost": 1.6,
-    "score": -11.416286250878564,
+    "score": -8.24798087789411,
     "source": "fuzzyLexicon",
     "word": "coming"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -14.63557733089694,
+    "score": -14.250451104996339,
     "source": "fuzzyLexicon",
     "word": "common"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -15.618218847588205,
+    "score": -15.233092621687604,
     "source": "fuzzyLexicon",
     "word": "commit"
    },
    {
     "cost": 1.6,
-    "score": -18.244886503105008,
+    "score": -17.859760277204405,
     "source": "fuzzyLexicon",
     "word": "conning"
    },
    {
     "cost": 2.3,
-    "score": -18.408760134996292,
+    "score": -18.02363390909569,
     "source": "fuzzyLexicon",
     "word": "combing"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -21.572924781054382,
+    "score": -21.187798555153783,
     "source": "fuzzyLexicon",
     "word": "clamming"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -21.60139675799297,
+    "score": -21.21627053209237,
     "source": "fuzzyLexicon",
     "word": "coking"
    },
    {
     "cost": 0,
-    "score": -22.62793624922418,
+    "score": -22.242810023323578,
     "source": "completion",
     "word": "commingle"
    },
    {
     "cost": 0,
-    "score": -22.62793624922418,
+    "score": -22.242810023323578,
     "source": "completion",
     "word": "commingled"
    },
    {
     "cost": 0,
-    "score": -22.62793624922418,
+    "score": -22.242810023323578,
     "source": "completion",
     "word": "commingles"
    },
    {
     "cost": 0,
-    "score": -22.62793624922418,
+    "score": -22.242810023323578,
     "source": "completion",
     "word": "commingling"
    },
    {
     "cost": 0,
-    "score": -24.172207320585784,
+    "score": -23.78708109468518,
     "source": "typed",
     "word": "comming"
    },
    {
     "cost": 1.6,
-    "score": -24.227936249224182,
+    "score": -23.84281002332358,
     "source": "fuzzyLexicon",
     "word": "conking"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -25.027936249224183,
+    "score": -24.642810023323577,
     "source": "fuzzyLexicon",
     "word": "coning"
    },
    {
     "cost": 0.72,
-    "score": -27.93042284266907,
+    "score": -27.42563997650996,
     "source": "splitCorrection",
     "word": "co ming"
    }
@@ -881,19 +881,19 @@
   "candidates": [
    {
     "cost": 3,
-    "score": -15.006261628807172,
+    "score": -10.216139704153246,
     "source": "fuzzyLexicon",
     "word": "definitely"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -21.01101827901228,
+    "score": -21.49232818421032,
     "source": "fuzzyLexicon",
     "word": "defiantly"
    },
    {
     "cost": 0,
-    "score": -24.627095570985386,
+    "score": -25.108405476183417,
     "source": "typed",
     "word": "definately"
    }
@@ -962,43 +962,43 @@
   "candidates": [
    {
     "cost": 1.925,
-    "score": -13.829461462972313,
+    "score": -11.248841158185904,
     "source": "fuzzyLexicon",
     "word": "separate"
    },
    {
     "cost": 3.5250000000000004,
-    "score": -16.079389949759243,
+    "score": -16.913944817832917,
     "source": "fuzzyLexicon",
     "word": "separated"
    },
    {
     "cost": 3.5250000000000004,
-    "score": -18.132465604314564,
+    "score": -18.96702047238824,
     "source": "fuzzyLexicon",
     "word": "separates"
    },
    {
     "cost": 3.325,
-    "score": -20.479401699371962,
+    "score": -21.313956567445633,
     "source": "fuzzyLexicon",
     "word": "seepage"
    },
    {
     "cost": 0,
-    "score": -23.126086283346215,
+    "score": -23.960641151419885,
     "source": "typed",
     "word": "seperate"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -23.98181521198461,
+    "score": -24.816370080058284,
     "source": "fuzzyLexicon",
     "word": "serrate"
    },
    {
     "cost": 3.2,
-    "score": -24.78181521198461,
+    "score": -25.61637008005828,
     "source": "fuzzyLexicon",
     "word": "seerat"
    }
@@ -1057,7 +1057,7 @@
    },
    {
     "cost": 1.1,
-    "score": -24.806359127866763,
+    "score": -25.980963593613037,
     "source": "splitCorrection",
     "word": "ap le"
    }
@@ -1074,49 +1074,49 @@
   "candidates": [
    {
     "cost": 1.6,
-    "score": -8.57089218133063,
+    "score": -7.325704619399808,
     "source": "fuzzyLexicon",
     "word": "apple"
    },
    {
     "cost": 1.6,
-    "score": -8.622950041571233,
+    "score": -14.945969763472577,
     "source": "fuzzyLexicon",
     "word": "ape"
    },
    {
     "cost": 1.6,
-    "score": -14.85808008395668,
+    "score": -15.265007471752268,
     "source": "fuzzyLexicon",
     "word": "ale"
    },
    {
     "cost": 1.725,
-    "score": -15.663557686235619,
+    "score": -16.07048507403121,
     "source": "fuzzyLexicon",
     "word": "alps"
    },
    {
     "cost": 1.6,
-    "score": -15.724856999020918,
+    "score": -16.13178438681651,
     "source": "fuzzyLexicon",
     "word": "ample"
    },
    {
     "cost": 0,
-    "score": -16.222487264170603,
+    "score": -16.629414651966194,
     "source": "completion",
     "word": "aplenty"
    },
    {
     "cost": 0,
-    "score": -22.55156375215239,
+    "score": -22.958491139947977,
     "source": "typed",
     "word": "aple"
    },
    {
     "cost": 1.1,
-    "score": -26.29054534019581,
+    "score": -27.87207719373767,
     "source": "splitCorrection",
     "word": "ap le"
    }
@@ -1198,55 +1198,55 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -7.160866855683715,
+    "score": -7.588791292307563,
     "source": "fuzzyLexicon",
     "word": "receive"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -15.378131430791043,
-    "source": "fuzzyLexicon",
-    "word": "received"
-   },
-   {
-    "cost": 2.4000000000000004,
-    "score": -16.53815374802802,
+    "score": -11.023416701004763,
     "source": "fuzzyLexicon",
     "word": "recover"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -17.887302255857666,
-    "source": "fuzzyLexicon",
-    "word": "receiver"
-   },
-   {
-    "cost": 2.4000000000000004,
-    "score": -18.081295136237397,
+    "score": -12.170894440775708,
     "source": "fuzzyLexicon",
     "word": "revive"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -18.162042096198835,
+    "score": -15.859441335989079,
+    "source": "fuzzyLexicon",
+    "word": "received"
+   },
+   {
+    "cost": 2.4000000000000004,
+    "score": -18.368612161055704,
+    "source": "fuzzyLexicon",
+    "word": "receiver"
+   },
+   {
+    "cost": 2.4000000000000004,
+    "score": -18.643352001396867,
     "source": "fuzzyLexicon",
     "word": "receives"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -18.927730794389817,
+    "score": -19.409040699587855,
     "source": "fuzzyLexicon",
     "word": "revived"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -21.028732745994695,
+    "score": -21.510042651192727,
     "source": "fuzzyLexicon",
     "word": "revives"
    },
    {
     "cost": 0,
-    "score": -24.627095570985386,
+    "score": -25.108405476183417,
     "source": "typed",
     "word": "recieve"
    }
@@ -1255,8 +1255,8 @@
   "id": "c021",
   "suggestions": [
    "receive",
-   "received",
-   "recover"
+   "recover",
+   "revive"
   ]
  },
  {
@@ -1308,37 +1308,37 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -6.075526859482312,
+    "score": -5.933114956604307,
     "source": "fuzzyLexicon",
     "word": "could"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -12.254470947728164,
+    "score": -9.874879182983394,
     "source": "fuzzyLexicon",
     "word": "cold"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -15.92990763190965,
+    "score": -15.92455473242655,
     "source": "fuzzyLexicon",
     "word": "coup"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -16.660606525410365,
+    "score": -16.655253625927266,
     "source": "fuzzyLexicon",
     "word": "curl"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -16.773443163582744,
+    "score": -16.768090264099644,
     "source": "fuzzyLexicon",
     "word": "coil"
    },
    {
     "cost": 0,
-    "score": -22.808622120372767,
+    "score": -22.803269220889668,
     "source": "typed",
     "word": "coudl"
    }
@@ -1448,85 +1448,85 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -1.2971531167698362,
+    "score": -1.0535873056374314,
     "source": "fuzzyLexicon",
     "word": "the"
    },
    {
-    "cost": 1.6,
-    "score": -9.353883237794438,
-    "source": "fuzzyLexicon",
-    "word": "th"
-   },
-   {
     "cost": 1.3,
-    "score": -10.120554705806036,
+    "score": -8.562167122602856,
     "source": "fuzzyLexicon",
     "word": "ten"
    },
    {
     "cost": 1.725,
-    "score": -10.852993786443054,
+    "score": -10.673440258394418,
     "source": "fuzzyLexicon",
     "word": "try"
    },
    {
     "cost": 1.6,
-    "score": -14.659316127063931,
+    "score": -14.479762599015295,
     "source": "fuzzyLexicon",
     "word": "tech"
    },
    {
     "cost": 1.6,
-    "score": -15.14221600363521,
+    "score": -14.614797964687865,
+    "source": "fuzzyLexicon",
+    "word": "th"
+   },
+   {
+    "cost": 1.6,
+    "score": -14.962662475586574,
     "source": "fuzzyLexicon",
     "word": "te"
    },
    {
     "cost": 0,
-    "score": -15.307988946447121,
+    "score": -15.128435418398485,
     "source": "completion",
     "word": "tehran"
    },
    {
     "cost": 0,
-    "score": -17.495272691149637,
+    "score": -17.315719163101,
     "source": "completion",
     "word": "teheran"
    },
    {
     "cost": 0,
-    "score": -21.755837079223586,
+    "score": -21.57628355117495,
     "source": "completion",
     "word": "tehran's"
    },
    {
     "cost": 0,
-    "score": -21.755837079223586,
+    "score": -21.57628355117495,
     "source": "completion",
     "word": "tehsil"
    },
    {
     "cost": 0,
-    "score": -21.755837079223586,
+    "score": -21.57628355117495,
     "source": "completion",
     "word": "tehsils"
    },
    {
     "cost": 0,
-    "score": -21.755837079223586,
+    "score": -21.57628355117495,
     "source": "completion",
     "word": "tehzeeb"
    },
    {
     "cost": 0.8,
-    "score": -22.555837079223586,
+    "score": -22.37628355117495,
     "source": "fuzzyLexicon",
     "word": "tej"
    },
    {
     "cost": 0,
-    "score": -23.30010815058519,
+    "score": -23.120554622536552,
     "source": "typed",
     "word": "teh"
    }
@@ -1636,94 +1636,94 @@
  {
   "candidates": [
    {
+    "cost": 2.5250000000000004,
+    "score": -7.898951217119858,
+    "source": "fuzzyLexicon",
+    "word": "this"
+   },
+   {
     "cost": 0.8,
-    "score": -6.858606642844611,
+    "score": -8.310642278503114,
     "source": "fuzzyLexicon",
     "word": "their"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -7.800120572252766,
-    "source": "fuzzyLexicon",
-    "word": "this"
-   },
-   {
-    "cost": 2.5250000000000004,
-    "score": -11.969696864352676,
-    "source": "fuzzyLexicon",
-    "word": "those"
-   },
-   {
-    "cost": 2.5250000000000004,
-    "score": -12.910047625084767,
+    "score": -11.26129960917606,
     "source": "fuzzyLexicon",
     "word": "tied"
    },
    {
+    "cost": 2.5250000000000004,
+    "score": -11.90577293856043,
+    "source": "fuzzyLexicon",
+    "word": "those"
+   },
+   {
     "cost": 1.725,
-    "score": -13.982336072449028,
+    "score": -13.406557053480322,
     "source": "fuzzyLexicon",
     "word": "third"
    },
    {
     "cost": 0.925,
-    "score": -14.052696157902062,
+    "score": -13.476917138933356,
     "source": "fuzzyLexicon",
     "word": "thief"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -15.912729422274262,
+    "score": -15.336950403305556,
     "source": "fuzzyLexicon",
     "word": "thee"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -16.626648203187184,
+    "score": -16.050869184218477,
     "source": "fuzzyLexicon",
     "word": "tire"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -16.935555954939414,
+    "score": -16.359776935970704,
     "source": "fuzzyLexicon",
     "word": "theirs"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -17.468157400968845,
+    "score": -16.892378382000143,
     "source": "fuzzyLexicon",
     "word": "thor"
    },
    {
     "cost": 1.6,
-    "score": -18.42698530171769,
+    "score": -17.851206282748983,
     "source": "fuzzyLexicon",
     "word": "tier"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -21.39122597282405,
+    "score": -20.81544695385534,
     "source": "fuzzyLexicon",
     "word": "thieve"
    },
    {
     "cost": 0,
-    "score": -23.07854574466364,
+    "score": -22.502766725694933,
     "source": "completion",
     "word": "thierry"
    },
    {
     "cost": 0,
-    "score": -24.622816816025242,
+    "score": -24.047037797056536,
     "source": "typed",
     "word": "thier"
    }
   ],
-  "correction": "their",
+  "correction": "this",
   "id": "c027",
   "suggestions": [
-   "their",
+   "this",
    "thierry"
   ]
  },
@@ -1752,13 +1752,13 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -4.46180163339032,
+    "score": -4.859645284408527,
     "source": "fuzzyLexicon",
     "word": "because"
    },
    {
     "cost": 0,
-    "score": -22.76660369072023,
+    "score": -23.518201953360265,
     "source": "typed",
     "word": "becuase"
    }
@@ -1874,91 +1874,91 @@
   "candidates": [
    {
     "cost": 1.6,
-    "score": -9.139288237315148,
+    "score": -5.180420746124528,
     "source": "fuzzyLexicon",
     "word": "please"
    },
    {
     "cost": 0.925,
-    "score": -13.692967918212553,
+    "score": -13.661379047662264,
     "source": "fuzzyLexicon",
     "word": "plead"
    },
    {
     "cost": 1.6,
-    "score": -14.393603557239318,
+    "score": -14.36201468668903,
     "source": "fuzzyLexicon",
     "word": "plea"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -15.800296787145818,
+    "score": -15.768707916595531,
     "source": "fuzzyLexicon",
     "word": "peas"
    },
    {
     "cost": 0.925,
-    "score": -15.972960092404248,
+    "score": -15.941371221853961,
     "source": "fuzzyLexicon",
     "word": "pleas"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -16.38118728342974,
+    "score": -16.349598412879445,
     "source": "fuzzyLexicon",
     "word": "pear"
    },
    {
     "cost": 2.6500000000000004,
-    "score": -16.464040975085965,
+    "score": -16.432452104535678,
     "source": "fuzzyLexicon",
     "word": "posse"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -17.66088471749069,
+    "score": -17.629295846940394,
     "source": "fuzzyLexicon",
     "word": "pleads"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -18.275296577790737,
+    "score": -18.24370770724045,
     "source": "fuzzyLexicon",
     "word": "pele"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -18.870823367890306,
+    "score": -18.839234497340012,
     "source": "fuzzyLexicon",
     "word": "pleats"
    },
    {
     "cost": 2.3,
-    "score": -19.67067140171742,
+    "score": -19.63908253116713,
     "source": "fuzzyLexicon",
     "word": "pleat"
    },
    {
     "cost": 1.3250000000000002,
-    "score": -22.4620459670713,
+    "score": -22.43045709652101,
     "source": "fuzzyLexicon",
     "word": "plea's"
    },
    {
     "cost": 0,
-    "score": -22.681317038432905,
+    "score": -22.649728167882614,
     "source": "typed",
     "word": "pleae"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -23.6620459670713,
+    "score": -23.630457096521013,
     "source": "fuzzyLexicon",
     "word": "pled"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -23.6620459670713,
+    "score": -23.630457096521013,
     "source": "fuzzyLexicon",
     "word": "powar"
    }
@@ -2035,7 +2035,7 @@
    },
    {
     "cost": 1.1,
-    "score": -19.361859719299257,
+    "score": -20.472003835082297,
     "source": "splitCorrection",
     "word": "me sage"
    },
@@ -2058,73 +2058,73 @@
   "candidates": [
    {
     "cost": 1.6,
-    "score": -7.952006474095566,
+    "score": -3.0201282899364186,
     "source": "fuzzyLexicon",
     "word": "message"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -15.038918310864918,
+    "score": -14.705357503865386,
     "source": "fuzzyLexicon",
     "word": "massage"
    },
    {
     "cost": 3.2,
-    "score": -15.225164572995396,
+    "score": -14.891603765995864,
     "source": "broadRecovery",
     "word": "messages"
    },
    {
     "cost": 3.2,
-    "score": -18.113955403535346,
+    "score": -17.780394596535817,
     "source": "broadRecovery",
     "word": "mesa"
    },
    {
     "cost": 3.2,
-    "score": -18.654179455070608,
+    "score": -18.320618648071076,
     "source": "broadRecovery",
     "word": "meager"
    },
    {
     "cost": 3.2,
-    "score": -19.115959019805896,
+    "score": -18.782398212806363,
     "source": "broadRecovery",
     "word": "mage"
    },
    {
     "cost": 3.2,
-    "score": -19.443530208171897,
+    "score": -19.109969401172364,
     "source": "broadRecovery",
     "word": "meagre"
    },
    {
     "cost": 3,
-    "score": -19.621844025758104,
+    "score": -19.288283218758572,
     "source": "broadRecovery",
     "word": "menage"
    },
    {
     "cost": 3.2,
-    "score": -19.64816345312899,
+    "score": -19.314602646129458,
     "source": "broadRecovery",
     "word": "messaged"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -20.540469041682464,
+    "score": -20.206908234682928,
     "source": "fuzzyLexicon",
     "word": "mesas"
    },
    {
     "cost": 1.1,
-    "score": -21.232448445895137,
+    "score": -22.00903175467864,
     "source": "splitCorrection",
     "word": "me sage"
    },
    {
     "cost": 0,
-    "score": -22.93796626641922,
+    "score": -22.604405459419688,
     "source": "typed",
     "word": "mesage"
    }
@@ -2181,31 +2181,31 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -8.35578389398493,
+    "score": -8.531390931276338,
     "source": "fuzzyLexicon",
     "word": "keyboard"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -18.072785121480084,
+    "score": -18.368818739227333,
     "source": "fuzzyLexicon",
     "word": "keyboards"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -18.608962586277663,
+    "score": -18.904996204024904,
     "source": "fuzzyLexicon",
     "word": "keyword"
    },
    {
     "cost": 0,
-    "score": -22.727327852724592,
+    "score": -23.023361470471837,
     "source": "typed",
     "word": "keybaord"
    },
    {
     "cost": 2.8000000000000003,
-    "score": -23.98305678136299,
+    "score": -24.279090399110235,
     "source": "fuzzyLexicon",
     "word": "keyboard's"
    }
@@ -2287,7 +2287,7 @@
    },
    {
     "cost": 1.1,
-    "score": -22.93150301053981,
+    "score": -24.223102656137627,
     "source": "splitCorrection",
     "word": "fire nd"
    }
@@ -2304,73 +2304,73 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -4.588410635060371,
+    "score": -4.501029523899448,
     "source": "fuzzyLexicon",
     "word": "friend"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -7.18515836971596,
+    "score": -6.1438200855880405,
     "source": "fuzzyLexicon",
     "word": "friends"
    },
    {
     "cost": 1.6,
-    "score": -12.272158351859797,
+    "score": -12.568191969607044,
     "source": "fuzzyLexicon",
     "word": "fired"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -14.644255280943247,
+    "score": -14.940288898690493,
     "source": "fuzzyLexicon",
     "word": "fires"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -14.712982659419142,
+    "score": -15.009016277166388,
     "source": "fuzzyLexicon",
     "word": "fried"
    },
    {
     "cost": 1.6,
-    "score": -15.675296970778822,
+    "score": -15.97133058852607,
     "source": "fuzzyLexicon",
     "word": "fiend"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -17.152189394766314,
+    "score": -17.448223012513562,
     "source": "fuzzyLexicon",
     "word": "fined"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -19.52478154749921,
+    "score": -19.820815165246458,
     "source": "fuzzyLexicon",
     "word": "firenze"
    },
    {
     "cost": 0,
-    "score": -22.727327852724592,
+    "score": -23.023361470471837,
     "source": "typed",
     "word": "firend"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -23.70805678136299,
+    "score": -24.004090399110233,
     "source": "fuzzyLexicon",
     "word": "firer"
    },
    {
     "cost": 2.8,
-    "score": -23.98305678136299,
+    "score": -24.279090399110235,
     "source": "fuzzyLexicon",
     "word": "fire's"
    },
    {
     "cost": 1.1,
-    "score": -24.59145332344106,
+    "score": -26.179086586786124,
     "source": "splitCorrection",
     "word": "fire nd"
    }
@@ -2420,25 +2420,25 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -4.701000393211243,
+    "score": -5.786435141889259,
     "source": "fuzzyLexicon",
     "word": "work"
    },
    {
     "cost": 1.6,
-    "score": -14.79500569956163,
+    "score": -14.908512261414128,
     "source": "fuzzyLexicon",
     "word": "worm"
    },
    {
     "cost": 1.6,
-    "score": -17.4470913749191,
+    "score": -17.5605979367716,
     "source": "fuzzyLexicon",
     "word": "wok"
    },
    {
     "cost": 0,
-    "score": -23.265330872451386,
+    "score": -23.378837434303883,
     "source": "typed",
     "word": "wrok"
    }
@@ -2489,7 +2489,7 @@
    },
    {
     "cost": 1.1,
-    "score": -25.03723709200415,
+    "score": -25.526034848244485,
     "source": "splitCorrection",
     "word": "hel lo"
    }
@@ -2739,7 +2739,7 @@
    },
    {
     "cost": 1.1,
-    "score": -23.943008254297208,
+    "score": -24.344095741177686,
     "source": "splitCorrection",
     "word": "than ks"
    }
@@ -2816,7 +2816,7 @@
    },
    {
     "cost": 1.1,
-    "score": -22.514051041199128,
+    "score": -23.32315282596881,
     "source": "splitCorrection",
     "word": "meet ing"
    }
@@ -2838,16 +2838,16 @@
     "word": "tomorrow"
    },
    {
-    "cost": 1.1,
-    "score": -13.72445723990156,
-    "source": "splitCorrection",
-    "word": "to morrow"
-   },
-   {
     "cost": 0,
     "score": -13.981288459739574,
     "source": "fuzzyLexicon",
     "word": "tomorrows"
+   },
+   {
+    "cost": 1.1,
+    "score": -19.239465090306922,
+    "source": "splitCorrection",
+    "word": "to morrow"
    },
    {
     "cost": 0,
@@ -2860,8 +2860,8 @@
   "id": "c044",
   "suggestions": [
    "tomorrow",
-   "to morrow",
-   "tomorrows"
+   "tomorrows",
+   "to morrow"
   ]
  },
  {
@@ -2946,7 +2946,7 @@
    },
    {
     "cost": 1.1,
-    "score": -29.017128256305476,
+    "score": -29.595592421998862,
     "source": "splitCorrection",
     "word": "mig ht"
    }
@@ -3309,7 +3309,7 @@
    },
    {
     "cost": 1.1,
-    "score": -26.380145530138805,
+    "score": -27.682622931060113,
     "source": "splitCorrection",
     "word": "fr om"
    }
@@ -3380,7 +3380,7 @@
    },
    {
     "cost": 1.1,
-    "score": -19.940679878390956,
+    "score": -19.914205374965352,
     "source": "splitCorrection",
     "word": "th us"
    }
@@ -3444,16 +3444,16 @@
     "word": "thais"
    },
    {
-    "cost": 1.1,
-    "score": -17.06110318281769,
-    "source": "splitCorrection",
-    "word": "th is"
-   },
-   {
     "cost": 0.925,
     "score": -17.25897131172098,
     "source": "fuzzyLexicon",
     "word": "tuis"
+   },
+   {
+    "cost": 1.1,
+    "score": -18.791860783206694,
+    "source": "splitCorrection",
+    "word": "th is"
    },
    {
     "cost": 0,
@@ -3534,7 +3534,7 @@
    },
    {
     "cost": 1.1,
-    "score": -20.11241970171491,
+    "score": -19.093245160852046,
     "source": "splitCorrection",
     "word": "the ir"
    },
@@ -3658,16 +3658,16 @@
     "word": "thereabouts"
    },
    {
-    "cost": 1.1,
-    "score": -14.571843449083504,
-    "source": "splitCorrection",
-    "word": "the re"
-   },
-   {
     "cost": 0,
     "score": -14.85391668750693,
     "source": "completion",
     "word": "thereto"
+   },
+   {
+    "cost": 1.1,
+    "score": -15.108006655810135,
+    "source": "splitCorrection",
+    "word": "the re"
    },
    {
     "cost": 0,
@@ -3821,7 +3821,7 @@
    },
    {
     "cost": 0.72,
-    "score": -22.376379038054083,
+    "score": -23.291980704762484,
     "source": "splitCorrection",
     "word": "run ing"
    }
@@ -3920,7 +3920,7 @@
    },
    {
     "cost": 1.1,
-    "score": -26.619228596111142,
+    "score": -26.775400517264295,
     "source": "splitCorrection",
     "word": "definite ly"
    }
@@ -3966,7 +3966,7 @@
    },
    {
     "cost": 1.1,
-    "score": -24.35474659595451,
+    "score": -24.84754903666713,
     "source": "splitCorrection",
     "word": "correct ion"
    }
@@ -3994,12 +3994,6 @@
     "word": "informational"
    },
    {
-    "cost": 0.72,
-    "score": -18.262554316762127,
-    "source": "splitCorrection",
-    "word": "i formation"
-   },
-   {
     "cost": 3.325,
     "score": -18.269014714832647,
     "source": "fuzzyLexicon",
@@ -4010,6 +4004,12 @@
     "score": -18.79917005742191,
     "source": "fuzzyLexicon",
     "word": "intimation"
+   },
+   {
+    "cost": 0.72,
+    "score": -19.04942769756321,
+    "source": "splitCorrection",
+    "word": "i formation"
    },
    {
     "cost": 0,
@@ -4090,7 +4090,7 @@
    },
    {
     "cost": 1.1,
-    "score": -22.09899949577941,
+    "score": -23.652911077065703,
     "source": "splitCorrection",
     "word": "do nt"
    }
@@ -4560,7 +4560,7 @@
    },
    {
     "cost": 1.1,
-    "score": -16.28052879676192,
+    "score": -17.056528177439276,
     "source": "splitCorrection",
     "word": "you re"
    },
@@ -4595,7 +4595,7 @@
    },
    {
     "cost": 1.1,
-    "score": -22.829574269727335,
+    "score": -23.868788830257976,
     "source": "splitCorrection",
     "word": "would nt"
    }
@@ -4734,7 +4734,7 @@
    },
    {
     "cost": 1.1,
-    "score": -26.050355943662154,
+    "score": -27.73589286110129,
     "source": "splitCorrection",
     "word": "th ads"
    }
@@ -4911,7 +4911,7 @@
    },
    {
     "cost": 1.1,
-    "score": -20.144278267215604,
+    "score": -19.12510372635274,
     "source": "splitCorrection",
     "word": "the res"
    },
@@ -4992,7 +4992,7 @@
    },
    {
     "cost": 1.1,
-    "score": -28.01402889226239,
+    "score": -28.70675541141393,
     "source": "splitCorrection",
     "word": "doom scrolling"
    }
@@ -5014,7 +5014,7 @@
    },
    {
     "cost": 1.1,
-    "score": -20.036147812330203,
+    "score": -20.666805631591288,
     "source": "splitCorrection",
     "word": "situation ship"
    }
@@ -5048,7 +5048,7 @@
    },
    {
     "cost": 1.1,
-    "score": -20.105477581501457,
+    "score": -21.42397391894923,
     "source": "splitCorrection",
     "word": "pass keys"
    },
@@ -5075,16 +5075,16 @@
     "word": "screenshots"
    },
    {
+    "cost": 1.1,
+    "score": -17.438985387459212,
+    "source": "splitCorrection",
+    "word": "screen shots"
+   },
+   {
     "cost": 1.6,
     "score": -17.720445728827233,
     "source": "fuzzyLexicon",
     "word": "screenshot"
-   },
-   {
-    "cost": 1.1,
-    "score": -21.962166444775416,
-    "source": "splitCorrection",
-    "word": "screen shots"
    }
   ],
   "correction": null,
@@ -5110,7 +5110,7 @@
    },
    {
     "cost": 1.1,
-    "score": -27.4612996894495,
+    "score": -28.163520166215118,
     "source": "splitCorrection",
     "word": "hap tic"
    }
@@ -5252,7 +5252,7 @@
    },
    {
     "cost": 1.1,
-    "score": -32.92797707278437,
+    "score": -33.40534218262156,
     "source": "splitCorrection",
     "word": "pr olly"
    }
@@ -5375,16 +5375,16 @@
     "word": "colourists"
    },
    {
-    "cost": 1.1,
-    "score": -20.58596498125085,
-    "source": "splitCorrection",
-    "word": "col our"
-   },
-   {
     "cost": 2.4000000000000004,
     "score": -21.92310646846174,
     "source": "fuzzyLexicon",
     "word": "couloir"
+   },
+   {
+    "cost": 1.1,
+    "score": -22.535774476935078,
+    "source": "splitCorrection",
+    "word": "col our"
    }
   ],
   "correction": null,
@@ -5435,7 +5435,7 @@
    },
    {
     "cost": 1.1,
-    "score": -26.419977897642028,
+    "score": -28.48349570865223,
     "source": "splitCorrection",
     "word": "favour ite"
    }
@@ -5560,7 +5560,7 @@
    },
    {
     "cost": 1.1,
-    "score": -30.58936651887774,
+    "score": -30.981493011209732,
     "source": "splitCorrection",
     "word": "org anise"
    }
@@ -5626,16 +5626,16 @@
     "word": "meet"
    },
    {
+    "cost": 1.1,
+    "score": -11.286327486790558,
+    "source": "splitCorrection",
+    "word": "me her"
+   },
+   {
     "cost": 2.4000000000000004,
     "score": -11.841479613853648,
     "source": "fuzzyLexicon",
     "word": "member"
-   },
-   {
-    "cost": 1.1,
-    "score": -11.931975899201221,
-    "source": "splitCorrection",
-    "word": "me her"
    },
    {
     "cost": 0.925,
@@ -5779,7 +5779,7 @@
    },
    {
     "cost": 1.1,
-    "score": -40.304189647165195,
+    "score": -40.98681041473815,
     "source": "splitCorrection",
     "word": "acetyl choline"
    }
@@ -5809,23 +5809,23 @@
  {
   "candidates": [
    {
-    "cost": 1.1,
-    "score": -14.712704329007321,
-    "source": "splitCorrection",
-    "word": "a synchronous"
-   },
-   {
     "cost": 0,
     "score": -19.52310646846174,
     "source": "typed",
     "word": "asynchronous"
+   },
+   {
+    "cost": 1.1,
+    "score": -21.529215692198473,
+    "source": "splitCorrection",
+    "word": "a synchronous"
    }
   ],
   "correction": null,
   "id": "c088",
   "suggestions": [
-   "a synchronous",
-   "asynchronous"
+   "asynchronous",
+   "a synchronous"
   ]
  },
  {
@@ -5872,7 +5872,7 @@
    },
    {
     "cost": 1.1,
-    "score": -32.16417096981156,
+    "score": -31.98547918106818,
     "source": "splitCorrection",
     "word": "socio linguistics"
    }
@@ -5916,85 +5916,85 @@
   "candidates": [
    {
     "cost": 0,
-    "score": -4.56042353096747,
+    "score": -4.718081142525606,
     "source": "typed",
     "word": "might"
    },
    {
     "cost": 0,
-    "score": -11.971469645324603,
+    "score": -12.844325018890673,
     "source": "fuzzyLexicon",
     "word": "mighty"
    },
    {
     "cost": 0,
-    "score": -12.131053018927657,
+    "score": -13.003908392493727,
     "source": "completion",
     "word": "might've"
    },
    {
     "cost": 0,
-    "score": -13.5600391779463,
+    "score": -14.43289455151237,
     "source": "completion",
     "word": "mightn't"
    },
    {
     "cost": 0,
-    "score": -13.979150764770965,
+    "score": -14.852006138337035,
     "source": "completion",
     "word": "mightn't've"
    },
    {
     "cost": 0,
-    "score": -15.472124020369312,
+    "score": -16.344979393935386,
     "source": "completion",
     "word": "mightiest"
    },
    {
     "cost": 0,
-    "score": -15.997835938388668,
+    "score": -16.87069131195474,
     "source": "completion",
     "word": "mightier"
    },
    {
     "cost": 0,
-    "score": -16.503772425411274,
+    "score": -17.376627798977346,
     "source": "completion",
     "word": "mightily"
    },
    {
     "cost": 2.5250000000000004,
-    "score": -17.53858673929623,
+    "score": -18.411442112862296,
     "source": "fuzzyLexicon",
     "word": "mitt"
    },
    {
     "cost": 0,
-    "score": -18.345353702882438,
+    "score": -19.21820907644851,
     "source": "completion",
     "word": "mightiness"
    },
    {
     "cost": 2.725,
-    "score": -18.52456087250248,
+    "score": -19.397416246068552,
     "source": "fuzzyLexicon",
     "word": "mirth"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -19.063530657213363,
+    "score": -19.93638603077943,
     "source": "fuzzyLexicon",
     "word": "muggy"
    },
    {
     "cost": 2.4000000000000004,
-    "score": -20.556684677180634,
+    "score": -21.429540050746702,
     "source": "fuzzyLexicon",
     "word": "moggy"
    },
    {
     "cost": 1.1,
-    "score": -30.869028572034928,
+    "score": -32.32034811129439,
     "source": "splitCorrection",
     "word": "mig ht"
    }
@@ -6011,371 +6011,371 @@
   "candidates": [
    {
     "cost": 0,
-    "score": -6.846791263256821,
-    "source": "typed",
-    "word": "form"
-   },
-   {
-    "cost": 0,
-    "score": -6.873312981328784,
+    "score": -6.33480324874088,
     "source": "completion",
     "word": "former"
    },
    {
     "cost": 1.6,
-    "score": -7.864931495290954,
+    "score": -7.100368767337083,
     "source": "fuzzyLexicon",
     "word": "for"
    },
    {
+    "cost": 0,
+    "score": -7.126560021762968,
+    "source": "typed",
+    "word": "form"
+   },
+   {
     "cost": 0.8,
-    "score": -8.193235651200139,
+    "score": -7.428672923246268,
     "source": "fuzzyLexicon",
     "word": "from"
    },
    {
     "cost": 0,
-    "score": -9.088364250275585,
-    "source": "completion",
-    "word": "formula"
-   },
-   {
-    "cost": 0,
-    "score": -9.39783611148303,
+    "score": -7.631022426870105,
     "source": "completion",
     "word": "formation"
    },
    {
     "cost": 0.8,
-    "score": -9.606558520269061,
+    "score": -11.88512830967772,
     "source": "fuzzyLexicon",
     "word": "firm"
    },
    {
     "cost": 0,
-    "score": -9.762101511391469,
-    "source": "completion",
-    "word": "formal"
-   },
-   {
-    "cost": 0,
-    "score": -10.377191725772484,
+    "score": -11.915657109752955,
     "source": "fuzzyLexicon",
     "word": "forms"
    },
    {
     "cost": 0,
-    "score": -10.530901112405582,
-    "source": "completion",
-    "word": "formerly"
-   },
-   {
-    "cost": 0,
-    "score": -10.553836663877542,
-    "source": "completion",
-    "word": "format"
-   },
-   {
-    "cost": 1.6,
-    "score": -11.436961450269854,
-    "source": "fuzzyLexicon",
-    "word": "forum"
-   },
-   {
-    "cost": 0,
-    "score": -12.967785663457063,
+    "score": -12.203222935503192,
     "source": "completion",
     "word": "formed"
    },
    {
     "cost": 0,
-    "score": -13.997601958710648,
+    "score": -12.285873133357658,
+    "source": "completion",
+    "word": "formal"
+   },
+   {
+    "cost": 0,
+    "score": -12.297871326730945,
+    "source": "completion",
+    "word": "formula"
+   },
+   {
+    "cost": 0,
+    "score": -13.233039230756777,
     "source": "completion",
     "word": "forming"
    },
    {
     "cost": 0.8,
-    "score": -14.16445594080264,
+    "score": -13.399893212848768,
     "source": "fuzzyLexicon",
     "word": "fork"
    },
    {
     "cost": 0,
-    "score": -14.26054006032576,
+    "score": -13.495977332371888,
     "source": "completion",
     "word": "formidable"
    },
    {
     "cost": 0,
-    "score": -14.311711474499402,
+    "score": -13.547148746545531,
     "source": "completion",
     "word": "formally"
    },
    {
     "cost": 0,
-    "score": -14.341983466570586,
+    "score": -13.577420738616715,
     "source": "completion",
     "word": "formality"
    },
    {
     "cost": 0,
-    "score": -14.696951999841538,
+    "score": -13.932389271887667,
     "source": "completion",
     "word": "formalities"
    },
    {
+    "cost": 0,
+    "score": -13.93613228177907,
+    "source": "completion",
+    "word": "formerly"
+   },
+   {
+    "cost": 0,
+    "score": -14.412710673000955,
+    "source": "completion",
+    "word": "format"
+   },
+   {
     "cost": 1.55,
-    "score": -15.303039228922648,
+    "score": -14.538476500968777,
     "source": "fuzzyLexicon",
     "word": "dorm"
    },
    {
     "cost": 0,
-    "score": -15.526308372919337,
+    "score": -14.761745644965464,
     "source": "completion",
     "word": "formations"
    },
    {
     "cost": 0,
-    "score": -15.60060240950334,
+    "score": -14.83603968154947,
     "source": "completion",
     "word": "formulas"
    },
    {
     "cost": 0,
-    "score": -15.763192690369056,
+    "score": -14.998629962415183,
     "source": "completion",
     "word": "formaldehyde"
    },
    {
     "cost": 0,
-    "score": -16.06800263085563,
+    "score": -15.303439902901763,
     "source": "completion",
     "word": "formulate"
+   },
+   {
+    "cost": 1.6,
+    "score": -15.337541955830513,
+    "source": "fuzzyLexicon",
+    "word": "forum"
    }
   ],
   "correction": null,
   "id": "c093",
   "suggestions": [
-   "form",
    "former",
-   "formula"
+   "form",
+   "formation"
   ]
  },
  {
   "candidates": [
    {
-    "cost": 1.6,
-    "score": -8.779626906629344,
-    "source": "fuzzyLexicon",
-    "word": "for"
-   },
-   {
     "cost": 0.8,
-    "score": -9.10793106253853,
+    "score": -4.752333232400391,
     "source": "fuzzyLexicon",
     "word": "from"
    },
    {
+    "cost": 1.6,
+    "score": -7.539569641455098,
+    "source": "fuzzyLexicon",
+    "word": "for"
+   },
+   {
     "cost": 0,
-    "score": -12.126041949158125,
+    "score": -11.740915723257524,
     "source": "typed",
     "word": "form"
    },
    {
     "cost": 0,
-    "score": -12.88892866244282,
+    "score": -12.50380243654222,
     "source": "completion",
     "word": "former"
    },
    {
     "cost": 0,
-    "score": -13.594915249045215,
+    "score": -13.209789023144614,
     "source": "fuzzyLexicon",
     "word": "forms"
    },
    {
     "cost": 0.8,
-    "score": -13.634328925801022,
+    "score": -13.24920269990042,
     "source": "fuzzyLexicon",
     "word": "firm"
    },
    {
     "cost": 0,
-    "score": -13.882481074795452,
+    "score": -13.497354848894851,
     "source": "completion",
     "word": "formed"
    },
    {
     "cost": 0,
-    "score": -13.96513127264992,
+    "score": -13.580005046749319,
     "source": "completion",
     "word": "formal"
    },
    {
     "cost": 0,
-    "score": -13.977129466023207,
+    "score": -13.592003240122606,
     "source": "completion",
     "word": "formula"
    },
    {
     "cost": 0,
-    "score": -14.547642194644968,
+    "score": -14.162515968744367,
     "source": "completion",
     "word": "formation"
    },
    {
     "cost": 0,
-    "score": -14.912297370049039,
+    "score": -14.527171144148438,
     "source": "completion",
     "word": "forming"
    },
    {
     "cost": 0.8,
-    "score": -15.07915135214103,
+    "score": -14.69402512624043,
     "source": "fuzzyLexicon",
     "word": "fork"
    },
    {
     "cost": 0,
-    "score": -15.175235471664148,
+    "score": -14.790109245763547,
     "source": "completion",
     "word": "formidable"
    },
    {
     "cost": 0,
-    "score": -15.226406885837791,
+    "score": -14.84128065993719,
     "source": "completion",
     "word": "formally"
    },
    {
     "cost": 0,
-    "score": -15.256678877908975,
+    "score": -14.871552652008374,
     "source": "completion",
     "word": "formality"
    },
    {
     "cost": 0,
-    "score": -15.611647411179927,
+    "score": -15.226521185279328,
     "source": "completion",
     "word": "formalities"
    },
    {
     "cost": 0,
-    "score": -15.615390421071332,
+    "score": -15.23026419517073,
     "source": "completion",
     "word": "formerly"
    },
    {
     "cost": 0,
-    "score": -16.091968812293217,
+    "score": -15.706842586392616,
     "source": "completion",
     "word": "format"
    },
    {
     "cost": 1.55,
-    "score": -16.21773464026104,
+    "score": -15.832608414360438,
     "source": "fuzzyLexicon",
     "word": "dorm"
    },
    {
     "cost": 0,
-    "score": -16.441003784257727,
+    "score": -16.055877558357125,
     "source": "completion",
     "word": "formations"
    },
    {
     "cost": 0,
-    "score": -16.515297820841734,
+    "score": -16.13017159494113,
     "source": "completion",
     "word": "formulas"
    },
    {
     "cost": 0,
-    "score": -16.677888101707445,
+    "score": -16.292761875806843,
     "source": "completion",
     "word": "formaldehyde"
    },
    {
     "cost": 0,
-    "score": -16.982698042194023,
+    "score": -16.59757181629342,
     "source": "completion",
     "word": "formulate"
    },
    {
     "cost": 1.6,
-    "score": -17.016800095122775,
+    "score": -16.631673869222173,
     "source": "fuzzyLexicon",
     "word": "forum"
    }
   ],
-  "correction": null,
+  "correction": "from",
   "id": "c094",
   "suggestions": [
+   "from",
    "form",
-   "former",
-   "forms"
+   "former"
   ]
  },
  {
   "candidates": [
    {
     "cost": 0.8,
-    "score": -4.460379835985109,
+    "score": -3.7313907430620348,
     "source": "fuzzyLexicon",
     "word": "this"
    },
    {
     "cost": 0,
-    "score": -12.062143272505944,
+    "score": -13.184690225713402,
     "source": "typed",
     "word": "thus"
    },
    {
     "cost": 0.8,
-    "score": -13.540584101037428,
+    "score": -14.663131054244886,
     "source": "fuzzyLexicon",
     "word": "thud"
    },
    {
     "cost": 1.6,
-    "score": -15.013279647335127,
+    "score": -16.135826600542583,
     "source": "fuzzyLexicon",
     "word": "thuds"
    },
    {
     "cost": 1.6,
-    "score": -15.018209533547724,
+    "score": -16.140756486755183,
     "source": "fuzzyLexicon",
     "word": "thugs"
    },
    {
     "cost": 0,
-    "score": -16.6995500135076,
+    "score": -17.82209696671506,
     "source": "completion",
     "word": "thusly"
    },
    {
     "cost": 1.6,
-    "score": -18.7913219952971,
+    "score": -19.91386894850456,
     "source": "fuzzyLexicon",
     "word": "thu"
    },
    {
     "cost": 1.725,
-    "score": -19.81450661039593,
+    "score": -20.937053563603392,
     "source": "fuzzyLexicon",
     "word": "tuis"
    },
    {
     "cost": 1.6,
-    "score": -19.848988685827937,
+    "score": -20.971535639035398,
     "source": "fuzzyLexicon",
     "word": "thurs"
    },
    {
     "cost": 1.1,
-    "score": -21.69621517706591,
+    "score": -22.792287626847763,
     "source": "splitCorrection",
     "word": "th us"
    }
@@ -6547,145 +6547,145 @@
   "candidates": [
    {
     "cost": 0,
-    "score": -5.510147641792412,
+    "score": -5.315701792075468,
     "source": "completion",
-    "word": "ideal"
+    "word": "idea"
+   },
+   {
+    "cost": 0,
+    "score": -5.941026551827446,
+    "source": "completion",
+    "word": "ideas"
    },
    {
     "cost": 0.8,
-    "score": -6.139072032692122,
+    "score": -6.235667295389755,
     "source": "fuzzyLexicon",
     "word": "is"
    },
    {
     "cost": 0,
-    "score": -6.5552943147810385,
-    "source": "completion",
-    "word": "idea"
-   },
-   {
-    "cost": 0.8,
-    "score": -7.192397361175981,
-    "source": "fuzzyLexicon",
-    "word": "if"
-   },
-   {
-    "cost": 0,
-    "score": -7.424074782261855,
-    "source": "completion",
-    "word": "identity"
-   },
-   {
-    "cost": 0.4,
-    "score": -9.31283532578373,
-    "source": "fuzzyLexicon",
-    "word": "i'd"
-   },
-   {
-    "cost": 0,
-    "score": -10.215738773162064,
-    "source": "completion",
-    "word": "idiot"
-   },
-   {
-    "cost": 0,
-    "score": -10.894142870603755,
-    "source": "completion",
-    "word": "ideas"
-   },
-   {
-    "cost": 0,
-    "score": -11.559649048090236,
+    "score": -7.0069757460281945,
     "source": "typed",
     "word": "id"
    },
    {
     "cost": 0,
-    "score": -11.856461341265325,
+    "score": -7.263786274768982,
+    "source": "completion",
+    "word": "ideal"
+   },
+   {
+    "cost": 0.8,
+    "score": -7.288992623873613,
+    "source": "fuzzyLexicon",
+    "word": "if"
+   },
+   {
+    "cost": 0,
+    "score": -7.42887094628625,
+    "source": "completion",
+    "word": "identity"
+   },
+   {
+    "cost": 0.4,
+    "score": -9.409430588481364,
+    "source": "fuzzyLexicon",
+    "word": "i'd"
+   },
+   {
+    "cost": 0,
+    "score": -10.312334035859697,
+    "source": "completion",
+    "word": "idiot"
+   },
+   {
+    "cost": 0,
+    "score": -11.953056603962956,
     "source": "completion",
     "word": "idiots"
    },
    {
     "cost": 0,
-    "score": -11.862677785998837,
+    "score": -11.959273048696469,
     "source": "completion",
     "word": "identify"
    },
    {
     "cost": 0,
-    "score": -12.31797154942502,
+    "score": -12.41456681212265,
     "source": "completion",
     "word": "identified"
    },
    {
     "cost": 0,
-    "score": -12.325155729196084,
+    "score": -12.421750991893717,
     "source": "fuzzyLexicon",
     "word": "idk"
    },
    {
     "cost": 0,
-    "score": -12.49880530640822,
+    "score": -12.595400569105854,
     "source": "completion",
     "word": "idol"
    },
    {
     "cost": 0,
-    "score": -12.796833584176772,
+    "score": -12.893428846874404,
     "source": "completion",
     "word": "identical"
    },
    {
     "cost": 0,
-    "score": -12.922124946906631,
+    "score": -13.018720209604263,
     "source": "completion",
     "word": "identification"
    },
    {
     "cost": 0.8,
-    "score": -13.118610954779435,
+    "score": -13.215206217477066,
     "source": "fuzzyLexicon",
     "word": "di"
    },
    {
     "cost": 0,
-    "score": -13.353092617560122,
+    "score": -13.449687880257754,
     "source": "completion",
     "word": "idle"
    },
    {
     "cost": 0,
-    "score": -13.442194669118289,
+    "score": -13.53878993181592,
     "source": "fuzzyLexicon",
     "word": "ida"
    },
    {
     "cost": 0,
-    "score": -13.486224730914929,
+    "score": -13.58281999361256,
     "source": "completion",
     "word": "ideals"
    },
    {
     "cost": 0,
-    "score": -13.551125953346991,
+    "score": -13.647721216044623,
     "source": "completion",
     "word": "idiotic"
    },
    {
     "cost": 0,
-    "score": -13.825418674956337,
+    "score": -13.922013937653968,
     "source": "completion",
     "word": "identities"
    },
    {
     "cost": 0,
-    "score": -14.064711219054006,
+    "score": -14.161306481751637,
     "source": "completion",
     "word": "identifying"
    },
    {
     "cost": 0,
-    "score": -14.068906121910274,
+    "score": -14.165501384607905,
     "source": "fuzzyLexicon",
     "word": "ids"
    }
@@ -6693,8 +6693,8 @@
   "correction": null,
   "id": "c097",
   "suggestions": [
-   "ideal",
    "idea",
+   "ideas",
    "id"
   ]
  },
@@ -6702,145 +6702,145 @@
   "candidates": [
    {
     "cost": 0.8,
-    "score": -2.196655357508815,
+    "score": -2.392584835605669,
     "source": "fuzzyLexicon",
     "word": "is"
    },
    {
     "cost": 0,
-    "score": -6.273200293304278,
+    "score": -5.280420765364893,
     "source": "completion",
     "word": "idea"
    },
    {
     "cost": 0.8,
-    "score": -7.038424738029065,
+    "score": -6.983486856882063,
     "source": "fuzzyLexicon",
     "word": "if"
    },
    {
+    "cost": 0,
+    "score": -8.212870977605085,
+    "source": "completion",
+    "word": "identification"
+   },
+   {
     "cost": 0.4,
-    "score": -9.42543778257525,
+    "score": -9.42008488309215,
     "source": "fuzzyLexicon",
     "word": "i'd"
    },
    {
     "cost": 0,
-    "score": -10.328341229953583,
+    "score": -10.322988330470483,
     "source": "completion",
     "word": "idiot"
    },
    {
     "cost": 0,
-    "score": -11.006745327395276,
+    "score": -11.001392427912174,
     "source": "completion",
     "word": "ideas"
    },
    {
     "cost": 0,
-    "score": -11.672251504881757,
+    "score": -11.666898605398655,
     "source": "typed",
     "word": "id"
    },
    {
     "cost": 0,
-    "score": -11.771814913788704,
+    "score": -11.766462014305604,
     "source": "completion",
     "word": "identity"
    },
    {
     "cost": 0,
-    "score": -11.969063798056844,
+    "score": -11.963710898573744,
     "source": "completion",
     "word": "idiots"
    },
    {
     "cost": 0,
-    "score": -11.975280242790356,
+    "score": -11.969927343307257,
     "source": "completion",
     "word": "identify"
    },
    {
     "cost": 0,
-    "score": -12.42661855360143,
+    "score": -12.421265654118331,
     "source": "completion",
     "word": "ideal"
    },
    {
     "cost": 0,
-    "score": -12.430574006216538,
+    "score": -12.425221106733439,
     "source": "completion",
     "word": "identified"
    },
    {
     "cost": 0,
-    "score": -12.437758185987605,
+    "score": -12.432405286504503,
     "source": "fuzzyLexicon",
     "word": "idk"
    },
    {
     "cost": 0,
-    "score": -12.611407763199741,
+    "score": -12.60605486371664,
     "source": "completion",
     "word": "idol"
    },
    {
     "cost": 0,
-    "score": -12.909436040968291,
+    "score": -12.904083141485192,
     "source": "completion",
     "word": "identical"
    },
    {
-    "cost": 0,
-    "score": -13.03472740369815,
-    "source": "completion",
-    "word": "identification"
-   },
-   {
     "cost": 0.8,
-    "score": -13.231213411570954,
+    "score": -13.225860512087854,
     "source": "fuzzyLexicon",
     "word": "di"
    },
    {
     "cost": 0,
-    "score": -13.465695074351641,
+    "score": -13.460342174868542,
     "source": "completion",
     "word": "idle"
    },
    {
     "cost": 0,
-    "score": -13.554797125909808,
+    "score": -13.549444226426708,
     "source": "fuzzyLexicon",
     "word": "ida"
    },
    {
     "cost": 0,
-    "score": -13.598827187706448,
+    "score": -13.593474288223348,
     "source": "completion",
     "word": "ideals"
    },
    {
     "cost": 0,
-    "score": -13.66372841013851,
+    "score": -13.65837551065541,
     "source": "completion",
     "word": "idiotic"
    },
    {
     "cost": 0,
-    "score": -13.938021131747856,
+    "score": -13.932668232264756,
     "source": "completion",
     "word": "identities"
    },
    {
     "cost": 0,
-    "score": -14.177313675845525,
+    "score": -14.171960776362425,
     "source": "completion",
     "word": "identifying"
    },
    {
     "cost": 0,
-    "score": -14.181508578701793,
+    "score": -14.176155679218693,
     "source": "fuzzyLexicon",
     "word": "ids"
    }
@@ -6850,152 +6850,152 @@
   "suggestions": [
    "is",
    "idea",
-   "i'd"
+   "identification"
   ]
  },
  {
   "candidates": [
    {
     "cost": 0.8,
-    "score": -3.1455524925013414,
+    "score": -2.4659456085884797,
     "source": "fuzzyLexicon",
     "word": "how"
    },
    {
     "cost": 1.6,
-    "score": -5.306756325090975,
+    "score": -5.725992100635024,
     "source": "fuzzyLexicon",
     "word": "he"
    },
    {
-    "cost": 1.6,
-    "score": -8.341557179321736,
-    "source": "fuzzyLexicon",
-    "word": "home"
-   },
-   {
     "cost": 1.725,
-    "score": -9.151019457572128,
+    "score": -6.109361080644057,
     "source": "fuzzyLexicon",
     "word": "his"
    },
    {
     "cost": 1.6,
-    "score": -12.06951695579235,
+    "score": -9.570974585755415,
+    "source": "fuzzyLexicon",
+    "word": "home"
+   },
+   {
+    "cost": 1.6,
+    "score": -12.040435806842511,
     "source": "fuzzyLexicon",
     "word": "hope"
    },
    {
     "cost": 1.15,
-    "score": -12.849676021501566,
+    "score": -13.047465253672456,
     "source": "fuzzyLexicon",
     "word": "joe"
    },
    {
     "cost": 1.6,
-    "score": -13.830648836247592,
+    "score": -16.51613135654947,
     "source": "fuzzyLexicon",
     "word": "hole"
    },
    {
     "cost": 1.725,
-    "score": -15.291624382647448,
+    "score": -17.977106902949323,
     "source": "fuzzyLexicon",
     "word": "hid"
    },
    {
     "cost": 1.6,
-    "score": -16.176411590921298,
+    "score": -18.861894111223172,
     "source": "fuzzyLexicon",
     "word": "hose"
    },
    {
     "cost": 0,
-    "score": -16.285484426529347,
+    "score": -18.970966946831226,
     "source": "typed",
     "word": "hoe"
    },
    {
     "cost": 0,
-    "score": -16.76559006663746,
+    "score": -19.45107258693934,
     "source": "fuzzyLexicon",
     "word": "hoes"
    },
    {
     "cost": 0.925,
-    "score": -17.193694577137567,
+    "score": -19.879177097439445,
     "source": "fuzzyLexicon",
     "word": "hos"
    },
    {
     "cost": 0,
-    "score": -17.47046524629508,
+    "score": -20.15594776659696,
     "source": "completion",
     "word": "hoedown"
    },
    {
     "cost": 1.6,
-    "score": -17.555081779132426,
+    "score": -20.240564299434304,
     "source": "fuzzyLexicon",
     "word": "howe"
    },
    {
     "cost": 1.6,
-    "score": -18.394992845136418,
+    "score": -21.080475365438293,
     "source": "fuzzyLexicon",
     "word": "hone"
    },
    {
     "cost": 0.8,
-    "score": -18.70540906089851,
+    "score": -21.39089158120039,
     "source": "fuzzyLexicon",
     "word": "hie"
    },
    {
     "cost": 0,
-    "score": -18.833383577373,
+    "score": -21.518866097674877,
     "source": "completion",
     "word": "hoeing"
    },
    {
     "cost": 0.925,
-    "score": -18.969660548079958,
+    "score": -21.655143068381832,
     "source": "fuzzyLexicon",
     "word": "hod"
    },
    {
     "cost": 1.6,
-    "score": -19.277753952545435,
+    "score": -21.963236472847314,
     "source": "fuzzyLexicon",
     "word": "hoke"
    },
    {
     "cost": 1.6,
-    "score": -19.5628242485624,
+    "score": -22.248306768864275,
     "source": "fuzzyLexicon",
     "word": "hove"
    },
    {
     "cost": 1.65,
-    "score": -19.76813926370188,
+    "score": -22.453621784003758,
     "source": "fuzzyLexicon",
     "word": "noe"
    },
    {
     "cost": 0,
-    "score": -22.728137353108096,
+    "score": -25.41361987340997,
     "source": "fuzzyLexicon",
     "word": "hoed"
    },
    {
     "cost": 0,
-    "score": -22.728137353108096,
+    "score": -25.41361987340997,
     "source": "completion",
     "word": "hoedowns"
    },
    {
     "cost": 0,
-    "score": -22.728137353108096,
+    "score": -25.41361987340997,
     "source": "fuzzyLexicon",
     "word": "hoey"
    }
@@ -7012,85 +7012,85 @@
   "candidates": [
    {
     "cost": 0,
-    "score": -2.1141531639552884,
+    "score": -0.13283221205738466,
     "source": "typed",
     "word": "its"
    },
    {
     "cost": 1.6,
-    "score": -4.746058096073521,
+    "score": -5.3934454956351905,
     "source": "fuzzyLexicon",
     "word": "it"
    },
    {
     "cost": 0.4,
-    "score": -5.20326436833593,
+    "score": -5.8506517678976,
     "source": "fuzzyLexicon",
     "word": "it's"
    },
    {
     "cost": 1.6,
-    "score": -5.367588322774164,
+    "score": -6.014975722335835,
     "source": "fuzzyLexicon",
     "word": "is"
    },
    {
     "cost": 0,
-    "score": -9.116842643357968,
+    "score": -9.764230042919637,
     "source": "completion",
     "word": "itself"
    },
    {
     "cost": 1.2000000000000002,
-    "score": -12.053650413927043,
+    "score": -12.701037813488716,
     "source": "fuzzyLexicon",
     "word": "it'd"
    },
    {
     "cost": 1.6,
-    "score": -13.184792838128866,
+    "score": -13.832180237690535,
     "source": "fuzzyLexicon",
     "word": "ira"
    },
    {
     "cost": 0.8,
-    "score": -13.225059110975202,
+    "score": -13.872446510536872,
     "source": "fuzzyLexicon",
     "word": "irs"
    },
    {
     "cost": 0.925,
-    "score": -13.293510265582547,
+    "score": -13.940897665144217,
     "source": "fuzzyLexicon",
     "word": "ifs"
    },
    {
     "cost": 0.8,
-    "score": -13.570055301748638,
+    "score": -14.21744270131031,
     "source": "fuzzyLexicon",
     "word": "ist"
    },
    {
     "cost": 0.925,
-    "score": -15.319472837202614,
+    "score": -15.966860236764283,
     "source": "fuzzyLexicon",
     "word": "ite"
    },
    {
     "cost": 1.6,
-    "score": -16.110122489726226,
+    "score": -16.757509889287896,
     "source": "fuzzyLexicon",
     "word": "itis"
    },
    {
     "cost": 1.725,
-    "score": -16.182645215149606,
+    "score": -16.830032614711275,
     "source": "fuzzyLexicon",
     "word": "ire"
    },
    {
     "cost": 1.2000000000000002,
-    "score": -20.780264882301687,
+    "score": -21.427652281863356,
     "source": "fuzzyLexicon",
     "word": "ir's"
    }
@@ -7107,75 +7107,75 @@
   "candidates": [
    {
     "cost": 0,
-    "score": -2.035079894837081,
+    "score": -1.191389571078319,
     "source": "typed",
     "word": "were"
    },
    {
     "cost": 0,
-    "score": -6.069725227852871,
+    "score": -4.482334593129356,
     "source": "completion",
     "word": "weren't"
    },
    {
     "cost": 0.4,
-    "score": -8.363188864343408,
+    "score": -9.236044237909478,
     "source": "fuzzyLexicon",
     "word": "we're"
    },
    {
     "cost": 1.6,
-    "score": -8.916997030346325,
+    "score": -9.789852403912395,
     "source": "fuzzyLexicon",
     "word": "where"
    },
    {
     "cost": 0,
-    "score": -13.320033125433573,
+    "score": -14.192888498999643,
     "source": "completion",
     "word": "werewolf"
    },
    {
     "cost": 1.725,
-    "score": -14.142563242640724,
+    "score": -15.015418616206794,
     "source": "fuzzyLexicon",
     "word": "weed"
    },
    {
     "cost": 1.6,
-    "score": -14.258373619847651,
+    "score": -15.131228993413721,
     "source": "fuzzyLexicon",
     "word": "wee"
    },
    {
     "cost": 0,
-    "score": -14.356478639095995,
+    "score": -15.229334012662065,
     "source": "completion",
     "word": "werewolves"
    },
    {
     "cost": 1.725,
-    "score": -17.88827374574146,
+    "score": -18.761129119307533,
     "source": "fuzzyLexicon",
     "word": "wets"
    },
    {
     "cost": 1.675,
-    "score": -18.925663473012833,
+    "score": -19.7985188465789,
     "source": "fuzzyLexicon",
     "word": "sere"
    },
    {
-    "cost": 1.1,
-    "score": -19.478440795657285,
-    "source": "splitCorrection",
-    "word": "we re"
-   },
-   {
     "cost": 1.725,
-    "score": -19.94089203124759,
+    "score": -20.813747404813657,
     "source": "fuzzyLexicon",
     "word": "wees"
+   },
+   {
+    "cost": 1.1,
+    "score": -21.284860958427387,
+    "source": "splitCorrection",
+    "word": "we re"
    }
   ],
   "correction": null,
@@ -7190,145 +7190,145 @@
   "candidates": [
    {
     "cost": 0,
-    "score": -5.289940661798921,
+    "score": -4.49273868602826,
     "source": "typed",
     "word": "night"
    },
    {
     "cost": 0,
-    "score": -10.95975682277088,
-    "source": "fuzzyLexicon",
-    "word": "nights"
-   },
-   {
-    "cost": 0,
-    "score": -11.374338643944236,
-    "source": "completion",
-    "word": "nightmare"
-   },
-   {
-    "cost": 0,
-    "score": -11.907093563838483,
+    "score": -5.951805623107802,
     "source": "fuzzyLexicon",
     "word": "night's"
    },
    {
     "cost": 0,
-    "score": -12.438991447880072,
+    "score": -11.705286263511269,
+    "source": "fuzzyLexicon",
+    "word": "nights"
+   },
+   {
+    "cost": 0,
+    "score": -12.119868084684626,
+    "source": "completion",
+    "word": "nightmare"
+   },
+   {
+    "cost": 0,
+    "score": -13.184520888620462,
     "source": "completion",
     "word": "nightmares"
    },
    {
     "cost": 0,
-    "score": -13.045429221902081,
+    "score": -13.79095866264247,
     "source": "completion",
     "word": "nightclub"
    },
    {
     "cost": 0,
-    "score": -13.51007503705509,
+    "score": -14.255604477795481,
     "source": "completion",
     "word": "nightingale"
    },
    {
     "cost": 0,
-    "score": -13.606396477014894,
+    "score": -14.351925917755283,
     "source": "completion",
     "word": "nightfall"
    },
    {
     "cost": 0,
-    "score": -14.097186505521638,
+    "score": -14.842715946262027,
     "source": "completion",
     "word": "nighttime"
    },
    {
     "cost": 0,
-    "score": -14.21326514259339,
+    "score": -14.95879458333378,
     "source": "completion",
     "word": "nightgown"
    },
    {
     "cost": 0,
-    "score": -14.312795211860477,
+    "score": -15.058324652600867,
     "source": "completion",
     "word": "nightly"
    },
    {
     "cost": 0,
-    "score": -14.32942538567281,
+    "score": -15.0749548264132,
     "source": "completion",
     "word": "nightcap"
    },
    {
     "cost": 0,
-    "score": -14.48991086636093,
+    "score": -15.23544030710132,
     "source": "completion",
     "word": "nightclubs"
    },
    {
     "cost": 0,
-    "score": -14.80308596700326,
+    "score": -15.548615407743652,
     "source": "completion",
     "word": "nightstand"
    },
    {
     "cost": 0,
-    "score": -15.097403740332528,
+    "score": -15.842933181072917,
     "source": "completion",
     "word": "nightie"
    },
    {
     "cost": 0,
-    "score": -15.22462215281914,
+    "score": -15.97015159355953,
     "source": "completion",
     "word": "nightlife"
    },
    {
     "cost": 0,
-    "score": -15.612744248968323,
+    "score": -16.358273689708714,
     "source": "completion",
     "word": "nighthawk"
    },
    {
     "cost": 0,
-    "score": -15.726798574852873,
+    "score": -16.47232801559326,
     "source": "completion",
     "word": "nightshade"
    },
    {
     "cost": 0,
-    "score": -15.946512530917534,
+    "score": -16.692041971657922,
     "source": "completion",
     "word": "nightingales"
    },
    {
     "cost": 0,
-    "score": -15.98442462641138,
+    "score": -16.729954067151766,
     "source": "completion",
     "word": "nightdress"
    },
    {
     "cost": 1.6,
-    "score": -15.999954569256868,
+    "score": -16.74548400999726,
     "source": "fuzzyLexicon",
     "word": "nigh"
    },
    {
     "cost": 0,
-    "score": -16.052814659788552,
+    "score": -16.79834410052894,
     "source": "completion",
     "word": "nightstick"
    },
    {
     "cost": 0,
-    "score": -16.058722009560086,
+    "score": -16.804251450300477,
     "source": "completion",
     "word": "nightmarish"
    },
    {
     "cost": 0,
-    "score": -16.088772403329166,
+    "score": -16.834301844069554,
     "source": "completion",
     "word": "nightshirt"
    }
@@ -7337,8 +7337,8 @@
   "id": "c102",
   "suggestions": [
    "night",
-   "nights",
-   "nightmare"
+   "night's",
+   "nights"
   ]
  },
  {
@@ -7380,25 +7380,25 @@
   "candidates": [
    {
     "cost": 6.5249999999999995,
-    "score": -18.889031476903344,
+    "score": -19.804324688831283,
     "source": "broadRecovery",
     "word": "correction"
    },
    {
     "cost": 5.7250000000000005,
-    "score": -19.737736308035974,
+    "score": -20.653029519963912,
     "source": "broadRecovery",
     "word": "coercion"
    },
    {
     "cost": 0,
-    "score": -21.428717843022568,
+    "score": -22.344011054950506,
     "source": "typed",
     "word": "coeevitjkn"
    },
    {
     "cost": 6.65,
-    "score": -26.534446771660967,
+    "score": -27.449739983588906,
     "source": "broadRecovery",
     "word": "coediting"
    }
@@ -7415,25 +7415,25 @@
   "candidates": [
    {
     "cost": 6.5249999999999995,
-    "score": -19.844445467700968,
+    "score": -20.018411380390525,
     "source": "broadRecovery",
     "word": "correction"
    },
    {
     "cost": 5.7250000000000005,
-    "score": -20.693150298833597,
+    "score": -20.867116211523154,
     "source": "broadRecovery",
     "word": "coercion"
    },
    {
     "cost": 0,
-    "score": -22.38413183382019,
+    "score": -22.55809774650975,
     "source": "typed",
     "word": "coeevitjkn"
    },
    {
     "cost": 6.65,
-    "score": -27.48986076245859,
+    "score": -27.663826675148144,
     "source": "broadRecovery",
     "word": "coediting"
    }
@@ -7450,25 +7450,25 @@
   "candidates": [
    {
     "cost": 6.5249999999999995,
-    "score": -20.454560310123068,
+    "score": -22.443363662903174,
     "source": "broadRecovery",
     "word": "correction"
    },
    {
     "cost": 5.7250000000000005,
-    "score": -21.303265141255697,
+    "score": -23.292068494035803,
     "source": "broadRecovery",
     "word": "coercion"
    },
    {
     "cost": 0,
-    "score": -22.99424667624229,
+    "score": -24.983050029022397,
     "source": "typed",
     "word": "coeevitjkn"
    },
    {
     "cost": 6.65,
-    "score": -28.09997560488069,
+    "score": -30.088778957660793,
     "source": "broadRecovery",
     "word": "coediting"
    }
@@ -7485,25 +7485,25 @@
   "candidates": [
    {
     "cost": 6.5249999999999995,
-    "score": -19.844445467700968,
+    "score": -20.018411380390525,
     "source": "broadRecovery",
     "word": "correction"
    },
    {
     "cost": 5.7250000000000005,
-    "score": -20.693150298833597,
+    "score": -20.867116211523154,
     "source": "broadRecovery",
     "word": "coercion"
    },
    {
     "cost": 0,
-    "score": -22.38413183382019,
+    "score": -22.55809774650975,
     "source": "typed",
     "word": "coeevitjkn"
    },
    {
     "cost": 6.65,
-    "score": -27.48986076245859,
+    "score": -27.663826675148144,
     "source": "broadRecovery",
     "word": "coediting"
    }
@@ -7580,7 +7580,7 @@
    },
    {
     "cost": 1.1,
-    "score": -25.119543952352004,
+    "score": -26.80508086979114,
     "source": "splitCorrection",
     "word": "th si"
    }
@@ -7656,7 +7656,7 @@
   "candidates": [
    {
     "cost": 0.72,
-    "score": -6.9325210795238315,
+    "score": -7.128450557620686,
     "source": "splitCorrection",
     "word": "this is"
    },
@@ -7733,7 +7733,7 @@
   "candidates": [
    {
     "cost": 0.72,
-    "score": -18.983795535494632,
+    "score": -19.60784260565899,
     "source": "splitCorrection",
     "word": "ia here"
    },
@@ -7786,7 +7786,7 @@
   "candidates": [
    {
     "cost": 1.1,
-    "score": -15.678192882366865,
+    "score": -11.49131765576034,
     "source": "splitCorrection",
     "word": "hello world"
    },
@@ -7863,7 +7863,7 @@
   "candidates": [
    {
     "cost": 1.1,
-    "score": -7.620932180564821,
+    "score": -7.450899660070591,
     "source": "splitCorrection",
     "word": "thank you"
    },
@@ -8018,7 +8018,7 @@
   "candidates": [
    {
     "cost": 1.1,
-    "score": -8.520519609121353,
+    "score": -8.732155095268427,
     "source": "splitCorrection",
     "word": "a lot"
    },
@@ -8210,7 +8210,7 @@
    },
    {
     "cost": 1.1,
-    "score": -33.141404628006526,
+    "score": -33.6604379710695,
     "source": "splitCorrection",
     "word": "ca f\u00e9"
    }
@@ -8325,8 +8325,8 @@
   "id": "c127",
   "suggestions": [
    "you",
-   "for",
-   "goodness"
+   "me",
+   "tom"
   ]
  },
  {
@@ -8334,9 +8334,9 @@
   "correction": null,
   "id": "c128",
   "suggestions": [
+   "at",
    "for",
-   "and",
-   "at"
+   "idea"
   ]
  },
  {
@@ -8346,7 +8346,7 @@
   "suggestions": [
    "you",
    "we",
-   "they"
+   "things"
   ]
  },
  {
@@ -8354,9 +8354,9 @@
   "correction": null,
   "id": "c130",
   "suggestions": [
-   "have",
-   "can",
-   "know"
+   "again",
+   "in",
+   "at"
   ]
  },
  {
@@ -8366,7 +8366,7 @@
   "suggestions": [
    "not",
    "a",
-   "the"
+   "going"
   ]
  }
 ]

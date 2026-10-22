@@ -46,8 +46,6 @@ final class TouchSpatialProfile {
 	}
 
 	private static let key = "kb.touchprofile"
-	private static let minimumSamples = 32
-	private static let referenceDeviation = 0.28
 	private var stored: Stored
 	private var unsavedSamples = 0
 

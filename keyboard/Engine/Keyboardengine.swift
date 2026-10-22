@@ -42,7 +42,6 @@ nonisolated struct CorrectionPolicy: Codable, Equatable {
         closeRescueMargin: 0, closeRescueGap: 0.5, minimumCloseGap: 0.25,
         closeRescueMaxCost: 1.2)
     static let severeMargin = log(10.0)
-    static let severeGap = log(2.0)
     static let looseGap = 1.0
 
     var nativeValues: [NSNumber] {
@@ -125,23 +124,14 @@ final class KeyboardEngine {
     private var sharedEngine: KBSharedEngine?
     private var sharedDecodeToken: KBCancellationToken?
     private let candidateBackend: DecoderCoreBackend
-	/// Two INDEPENDENT neural roles, both optional and promotion-gated (the production singleton
-	/// supplies neither until a checkpoint passes blind quality + device gates):
-	///   • `rescorer`  — PRECISION. Batched P(word|context) over the fixed candidate pool, folded
-	///     into the ranking blend (`rank`). The transformer's strength.
-	///   • `searchPrior` — RECALL. A streaming generator that widens in-trie candidate generation
-	///     (`contextSearchPrior`). The GRU's strength. Never gates the model tier — it is always-on
-	///     and orthogonal to the rescorer, so selecting it can't evict the rescorer (the old single
-	///     slot conflated the two roles and one silently displaced the other).
-	private let rescorer: NeuralLanguagePrior?
+	/// The neural search space: one optional, promotion-gated streaming model (the production
+	/// singleton supplies none until a checkpoint passes blind quality + device gates). It widens
+	/// in-trie generation (`contextSearchPrior`) and supplies the exact complete-word scores the
+	/// resulting hypotheses are ranked by (`rank`). There is no separate rescoring model.
 	private let searchPrior: NeuralSearchPrior?
-	private var scoringPrior: NeuralLanguagePrior? {
-		if let rescorer { return rescorer }
-		return searchPrior
-	}
 	static let searchPriorReadyNotification = Notification.Name("KBSearchPriorReady")
 	private var latestSearchRequest: (request: DecodeRequest, generation: Int)?
-	/// Accessed only on `queue`; one prepared rescorer context is retained for the active word.
+	/// Accessed only on `queue`; one prepared neural scoring context is retained for the active word.
 	private var preparedNeuralSession: (id: UInt64, context: [String])?
 	/// Static fuzzy-search DP columns retained for one append-only English word.
 	/// Cursor edits rebuild this state; ordinary taps advance one column.
@@ -170,7 +160,7 @@ final class KeyboardEngine {
 	}
 	private let lmWeight = 1.0
 	private let freqWeight = 0.3
-	/// Interpolation between the neural rescorer's log-prob and the n-gram's when a rescorer is
+	/// Interpolation between the neural search model's log-prob and the n-gram's when the model is
 	/// active: `neuralPriorWeight·neural + (1−neuralPriorWeight)·ngram`. Hand-set; the eventual
 	/// source of truth is the softmax-ranker trainer (`tools/lm/train_ranker.py`) with its
 	/// promotion gates, once it has real on-device labels — same as `lmWeight`/`freqWeight`.
@@ -281,19 +271,12 @@ final class KeyboardEngine {
 	/// Process-wide engine: iOS may prewarm more than one controller, while language
 	/// data and personalization should be loaded exactly once per extension process.
 	///
-	/// Default builds use the n-gram decoder. Internal builds can install a transformer
-	/// rescorer (`INTERNAL_NEURAL`) or a GRU search and scoring prior (`INTERNAL_GRU`).
-	/// GRU-only sessions retain GRU evidence through ranking and boundary selection.
-	/// With both flags, the GRU generates and the transformer ranks. Enable model
-	/// bundling separately in Secrets.xcconfig and measure residency before promotion.
+	/// Default builds use the n-gram decoder. Internal builds install the GRU neural search
+	/// space (`INTERNAL_GRU`), whose evidence carries through ranking and boundary selection.
+	/// Enable model bundling separately in Secrets.xcconfig and measure residency before promotion.
 	static let shared: KeyboardEngine = {
-		#if INTERNAL_GRU && INTERNAL_NEURAL
-		return KeyboardEngine(rescorer: CoreMLNeuralLanguagePrior.bundled(),
-			searchPrior: GRULanguagePrior.bundled())
-		#elseif INTERNAL_GRU
+		#if INTERNAL_GRU
 		return KeyboardEngine(searchPrior: GRULanguagePrior.bundled())
-		#elseif INTERNAL_NEURAL
-		return KeyboardEngine(rescorer: CoreMLNeuralLanguagePrior.bundled())
 		#else
 		return KeyboardEngine()
 		#endif
@@ -301,8 +284,7 @@ final class KeyboardEngine {
 
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
-	init(languageDataURL: URL? = nil, rescorer: NeuralLanguagePrior? = nil,
-		 searchPrior: NeuralSearchPrior? = nil,
+	init(languageDataURL: URL? = nil, searchPrior: NeuralSearchPrior? = nil,
          correctionPolicy: CorrectionPolicy = .baseline, userModel: UserModel? = nil,
          smoothing: NgramSmoothing = .wittenBell,
          candidateBackend: DecoderCoreBackend = .cpp,
@@ -314,13 +296,12 @@ final class KeyboardEngine {
         self.correctionObserver = correctionObserver
 		let ng = NgramScorer(user: personal, backend: candidateBackend, smoothing: smoothing)
 		ngram = ng
-		self.rescorer = rescorer
 		self.searchPrior = searchPrior
 		searchPrior?.onSearchPriorReady = { [weak self] query in
 			guard let self else { return }
 			self.queue.async {
 				guard let latest = self.latestSearchRequest, self.isLatest(latest.generation),
-					latest.request.languageMode == .english, KBSettings.neuralEnabled,
+					latest.request.languageMode == .english,
 					latest.request.context.map({ $0.lowercased() }) == query.context,
 					query.vocabularyRevision == self.lexicon.vocabularyRevision,
 					query.prefix == nil || query.prefix?.text == latest.request.currentWord.lowercased()
@@ -352,46 +333,20 @@ final class KeyboardEngine {
 	}
 
 	/// Called by the controller only when a new word session begins. Release builds use
-	/// the production singleton above, which has no neural prior and therefore always
-	/// return `.ngram`. Internal profiling can inject a verified prior without creating
+	/// the production singleton above, which has no neural model and therefore always
+	/// return `.ngram`. Internal profiling can inject a verified model without creating
 	/// a second ranking path in the controller.
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func preferredModelTier(for languageMode: KBLanguageMode) -> DecodeModelTier {
-		let neuralAllowed = KBSettings.neuralEnabled
-		if neuralAllowed && languageMode == .english {
-			scoringPrior?.prepareForSelection()
-			searchPrior?.prepareForSelection()
-		}
-		let tier: DecodeModelTier
-		if languageMode == .english, let prior = scoringPrior, prior.isReady, neuralAllowed {
-			tier = prior.modelTier
-		} else { tier = .ngram }
-
-		// NEURAL_DEBUG_TELEMETRY_REMOVE
-		#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
-		if languageMode != .english {
-			KBDiagnostics.recordNeuralState(tier: .ngram, ready: false,
-				state: "disabled-for-language")
-		} else if scoringPrior == nil {
-			KBDiagnostics.recordNeuralState(tier: .ngram, ready: false,
-				state: "not-configured")
-		} else if !neuralAllowed {
-			KBDiagnostics.recordNeuralState(tier: .ngram,
-				ready: scoringPrior?.isReady ?? false, state: "disabled-by-setting")
-		} else if tier != .ngram {
-			KBDiagnostics.recordNeuralState(tier: tier, ready: true, state: "ready")
-		}
-		// A present but non-ready prior publishes its own concrete loader state. Do not
-		// replace artifact-missing/compiling/memory-gated failures with "inactive".
-		#endif
-		return tier
+		guard languageMode == .english, let searchPrior else { return .ngram }
+		searchPrior.prepareForSelection()
+		return searchPrior.isReady ? searchPrior.modelTier : .ngram
 	}
 
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=KeyboardLifecycle
 	// MIGRATION-NOTE: Keep platform scheduling, identity, persistence, learning events and UI publication outside the portable core.
 	func handleMemoryPressure() {
-		rescorer?.handleMemoryPressure()
 		searchPrior?.handleMemoryPressure()
         queue.async { [weak self] in self?.sharedEngine?.memoryPressure() }
 	}
@@ -407,7 +362,7 @@ final class KeyboardEngine {
 			if self.incrementalDecodeSession?.id == wordSessionID {
 				self.incrementalDecodeSession = nil
 			}
-			self.scoringPrior?.discardSession(wordSessionID)
+			self.searchPrior?.discardSession(wordSessionID)
 		}
 	}
 	// MIGRATION: planned SPLIT | stage=policy-glide | target=DecoderFacade
@@ -442,7 +397,7 @@ final class KeyboardEngine {
 			guard let self else { return }
 			self.initializationGroup.wait()
 			if let session = self.preparedNeuralSession {
-				self.scoringPrior?.discardSession(session.id)
+				self.searchPrior?.discardSession(session.id)
 				self.preparedNeuralSession = nil
 			}
 			// Drop any cached neural next-word predictions from the reset personalization epoch.
@@ -748,7 +703,7 @@ final class KeyboardEngine {
 	private func multiwordCandidates(typed: String, taps: [KeyTap?]?, request: DecodeRequest,
 		generation: Int, completion: @escaping ([Candidate]) -> Void) {
 		guard request.requestedModelTier == .neuralGRU, !lexicon.contains(typed),
-			let prior = scoringPrior, prior.modelTier == .neuralGRU else { completion([]); return }
+			let prior = searchPrior, prior.modelTier == .neuralGRU else { completion([]); return }
         let search: MultiwordSearch
 #if DEBUG || KB_REFERENCE_DECODER_YES
         if candidateBackend == .cpp {
@@ -899,6 +854,8 @@ final class KeyboardEngine {
 		var layoutPitch: (CGFloat, CGFloat)?
 		let native = KBNativeGlideSession()
         var shared: KBSharedGlide?
+        /// Vocabulary cannot change mid-gesture; computed once when the shared stream starts.
+        var sharedDynamicWords: [String] = []
 		var resampler = IncrementalGlideResampler()
 		var candidates: [String: OnlineGlideCandidate] = [:]
 		var endpointSignature = ""
@@ -1047,12 +1004,15 @@ final class KeyboardEngine {
 	// MIGRATION-SPLIT: SWIFT_IOS converts UIKit layout/points to numeric buffers; CPP_CORE resamples and consumes the retained trajectory.
 	private func consumeStreamingPath(_ path: [CGPoint], layout: GlideLayout,
 		languageData: LangData, session: inout StreamingGlideSession) -> GlideUpdate? {
-        if candidateBackend == .cpp, scoringPrior == nil, searchPrior == nil, let engine = sharedEngine {
-            if session.shared == nil { session.shared = engine.glideSession(withContext: session.context.map { $0.lowercased() }) }
+        if candidateBackend == .cpp, searchPrior == nil, let engine = sharedEngine {
+            if session.shared == nil {
+                session.shared = engine.glideSession(withContext: session.context.map { $0.lowercased() })
+                session.sharedDynamicWords = lexicon.glideDynamicWords(limit: 128)
+            }
             do {
                 let scored = try session.shared!.update(GlideBuffers.points(path), keys: GlideBuffers.keys(layout),
                     centers: GlideBuffers.points(layout.centers.map(\.point)), xPitch: Double(layout.xPitch), yPitch: Double(layout.yPitch),
-                    lexicon: lexicon.nativeGenerationView(), personal: user.nativeCountsSnapshot(), dynamicWords: lexicon.glideDynamicWords(limit: 128))
+                    lexicon: lexicon.nativeGenerationView(), personal: user.nativeCountsSnapshot(), dynamicWords: session.sharedDynamicWords)
                 guard let winner = scored.first else { return nil }
                 let prediction = GlidePrediction(word: winner.word, alternatives: scored.dropFirst().prefix(3).map(\.word),
                     shapeCostByWord: Dictionary(scored.prefix(12).map { ($0.word, $0.cost) }, uniquingKeysWith: min),
@@ -2411,16 +2371,9 @@ final class KeyboardEngine {
 			return
 		}
 		guard request.languageMode == .english,
-			  let rescorer = scoringPrior,
-			  rescorer.modelTier == request.requestedModelTier,
+			  let prior = searchPrior,
+			  prior.modelTier == request.requestedModelTier,
 			  !ngramRows.isEmpty else {
-			// NEURAL_DEBUG_TELEMETRY_REMOVE
-			#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
-			if scoringPrior == nil {
-				KBDiagnostics.recordNeuralState(tier: request.requestedModelTier,
-					ready: false, state: "not-configured")
-			}
-			#endif
 			completion(nil)
 			return
 		}
@@ -2428,14 +2381,14 @@ final class KeyboardEngine {
 		if preparedNeuralSession?.id != request.wordSessionID
 			|| preparedNeuralSession?.context != context {
 			if let previous = preparedNeuralSession {
-				rescorer.discardSession(previous.id)
+				prior.discardSession(previous.id)
 			}
-			rescorer.prepareContext(context, wordSessionID: request.wordSessionID)
+			prior.prepareContext(context, wordSessionID: request.wordSessionID)
 			preparedNeuralSession = (request.wordSessionID, context)
 		}
 
 		let words = ngramRows.map(\.word)
-		rescorer.score(candidates: words, wordSessionID: request.wordSessionID) {
+		prior.score(candidates: words, wordSessionID: request.wordSessionID) {
 			[weak self] result in
 			guard let self else { return }
 			self.queue.async {
@@ -2444,7 +2397,6 @@ final class KeyboardEngine {
 					return
 				}
 				guard case .success(let probabilities) = result else {
-					// The prior owns and publishes the concrete failure state/detail.
 					completion(nil)
 					return
 				}
@@ -2454,33 +2406,11 @@ final class KeyboardEngine {
                 }
                 let languages = ngramRows.map(\.logLanguageProbability).withUnsafeBytes { Data($0) }
                 let neuralData = neuralValues.withUnsafeBytes { Data($0) }
-                let rescored = KBRanking.rankRows(ngramRows.map(\.native), language: languages, neural: neuralData,
+                let ranked = KBRanking.rankRows(ngramRows.map(\.native), language: languages, neural: neuralData,
                     safety: ngramRows.map { NSNumber(value: self.lexicon.safetyPenalty($0.word)) },
                     typed: request.currentWord.lowercased(), compressed: frequencyMode == .compressed,
                     limit: NSNumber(value: self.scoreCap)).map(RankedCandidate.init(native:))
-
-				// NEURAL_DEBUG_TELEMETRY_REMOVE
-				#if DEBUG || INTERNAL_NEURAL || INTERNAL_GRU
-				let ngramRank = Dictionary(uniqueKeysWithValues:
-					ngramRows.enumerated().map { ($0.element.word, $0.offset + 1) })
-				let ngramByWord = Dictionary(uniqueKeysWithValues:
-					ngramRows.map { ($0.word, $0) })
-				let telemetryRows = rescored.enumerated().compactMap { index, row
-					-> KBDiagnostics.NeuralRankRowSnapshot? in
-					guard let baseline = ngramByWord[row.word],
-						  let baselineRank = ngramRank[row.word],
-						  let neural = row.neuralLogProbability else { return nil }
-					return .init(word: row.word, ngramRank: baselineRank,
-						finalRank: index + 1, spatialCost: row.spatialCost,
-						ngramLogProbability: baseline.logLanguageProbability,
-						neuralLogProbability: neural, ngramScore: baseline.score,
-						finalScore: row.score)
-				}
-				KBDiagnostics.recordNeuralRanking(tier: request.requestedModelTier,
-					typedWord: request.currentWord, context: context,
-					wordSessionID: request.wordSessionID, rows: telemetryRows)
-				#endif
-                completion((rescored, request.requestedModelTier))
+                completion((ranked, request.requestedModelTier))
 			}
 		}
 	}
@@ -2505,7 +2435,7 @@ final class KeyboardEngine {
 		taps: [KeyTap?]? = nil) -> TrieSearchPrior? {
 		guard !context.isEmpty else { return nil }
 		let pool = ngram.nextWords(context: context, limit: 24)
-		if let searchPrior, KBSettings.neuralEnabled {
+		if let searchPrior {
 			// Prefix-aware generation only once a few characters pin the word down; below that the
 			// spatial first-letter set is too permissive to sharpen anything.
 			let prefix: SearchPrefix? = lw.count >= 3
@@ -2595,7 +2525,6 @@ final class KeyboardEngine {
 	// MIGRATION-SPLIT: CPP_CORE selects cached generated words and seeds; SWIFT_IOS owns settings and readiness/cancellation coordination; OBJCXX_BRIDGE services prediction batches.
 	private func neuralNextWords(context: [String], seed pool: [String], limit: Int = 24) -> [String] {
 		guard let searchPrior, !context.isEmpty else { return [] }
-		guard KBSettings.neuralEnabled else { return [] }
 		let query = SearchPriorQuery(context: context, prefix: nil, pool: pool,
 			vocabularyRevision: lexicon.vocabularyRevision)
 		searchPrior.warmSearchPrior(query, lexicon: lexicon.nativeGenerationView())
@@ -2656,7 +2585,6 @@ final class KeyboardEngine {
 // MIGRATION-SPLIT: CPP_CORE owns EWMA/statistical updates; SWIFT_IOS owns epoch checks, locks, persistence and publication of profile values.
 final class GlideProfile {
 	/// Baked grid-searched defaults — identical to the constants glide shipped with.
-	static let baseSigma = 0.10
 	static let baseGate  = 0.43
 
 	/// EWMA of the CORRECT-word shape cost, seeded near the synthetic-harness correct-cost
@@ -2679,8 +2607,6 @@ final class GlideProfile {
 	// Adaptation constants.
 	private static let alpha  = 0.12                 // EWMA rate — slow; no single stroke dominates
 	private static let warmup = 12.0                 // supervised samples before adapted fully replaces default
-	private static let sigmaK = baseSigma / 0.22     // σ tracks the mean, anchored so mean 0.22 → baseSigma
-	private static let gateK  = 2.7                  // gate sits ~2.7σ above the mean (≈ the offline p95 midpoint)
 
 	// MIGRATION: planned SWIFT_IOS | stage=platform | target=GlideProfileStorage
 	func load() {

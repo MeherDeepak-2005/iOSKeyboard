@@ -51,6 +51,16 @@ static void rejects(const Bytes& bytes) {
     catch (const std::invalid_argument&) { rejected = true; }
     assert(rejected);
 }
+// Continuation IDs are validated as rows are read, not by a whole-pack scan at load.
+static void rejectsOnRead(const Bytes& bytes) {
+    kb::PackedLexicon view{bytes};
+    bool rejected = false;
+    try {
+        for (std::uint32_t id = 0; id < view.wordCount(); ++id) (void)view.bigrams(std::int32_t(id));
+        for (auto c : view.trigramContexts()) (void)view.trigrams(c.first, c.second);
+    } catch (const std::invalid_argument&) { rejected = true; }
+    assert(rejected);
+}
 static void testVersion(unsigned version) {
     auto bytes = fixture(version);
     kb::PackedLexicon view{bytes};
@@ -88,7 +98,7 @@ static void testVersion(unsigned version) {
     bad = bytes; replace(bad, biHash, 3, version == 5 ? 2 : 4); rejects(bad);
     bad = bytes; replace(bad, biHash + 8, 0xffffffff); rejects(bad);
     const auto biData = biHash + (version == 5 ? 12 : 16);
-    bad = bytes; replace(bad, biData, 3, version == 5 ? 2 : 4); rejects(bad);
+    bad = bytes; replace(bad, biData, 3, version == 5 ? 2 : 4); rejectsOnRead(bad);
     if (version < 5) { bad = bytes; replace(bad, 12, 3); rejects(bad); }
     std::cout << "PASS v" << version << ": words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and "
               << bytes.size() << " truncated prefixes + corrupt fields\n";

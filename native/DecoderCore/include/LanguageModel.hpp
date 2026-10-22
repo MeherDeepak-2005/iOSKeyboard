@@ -23,7 +23,9 @@ class LanguageModel final {
     std::unordered_map<std::int32_t, std::int64_t> unigrams_;
     std::unordered_map<std::int32_t, Context> bigrams_;
     std::array<double, 3> triDiscounts_{};
-    std::optional<Context> prepare(const std::optional<Continuations>& row) const;
+    // `wanted` (sorted IDs) limits stored counts to the words being scored; evidence
+    // still covers the whole row. Modified Kneser–Ney needs every row and ignores it.
+    std::optional<Context> prepare(const std::optional<Continuations>& row, std::span<const std::int32_t> wanted) const;
     static Context discounted(const CountRows& rows, const std::array<double, 3>& discounts);
     static Context discounted(const std::vector<Continuation>& rows, const std::array<double, 3>& discounts);
     void prepareMKN();

@@ -75,14 +75,26 @@ memory-mapped trie and language model.
 Source: https://github.com/hermitdave/FrequencyWords
 License: https://creativecommons.org/licenses/by-sa/4.0/
 
-Tatoeba English CC0 Sentences
+Tatoeba English Sentences
 
-The bi- and trigram counts in keyboard/langdata.bin are derived from the English
-CC0-only Tatoeba sentence export snapshot dated July 18, 2026. Glyph lowercases and
-tokenizes sentences, counts bounded context tables, and does not ship sentence text.
+The bi- and trigram counts in keyboard/langdata.bin are derived in part from every
+English sentence in the Tatoeba export snapshot dated October 20, 2026. Glyph
+lowercases and tokenizes sentences and ships only aggregate, pruned counts, never
+sentence text. Tatoeba sentences are licensed under Creative Commons Attribution 2.0
+France (a subset is also dedicated to the public domain under CC0). Copyright in each
+sentence belongs to its Tatoeba contributor.
 
 Source: https://tatoeba.org/en/downloads
-Public-domain dedication: https://creativecommons.org/publicdomain/zero/1.0/
+License: https://creativecommons.org/licenses/by/2.0/fr/
+
+WikiText-103
+
+The bi- and trigram counts in keyboard/langdata.bin are also derived from the raw
+training split of WikiText-103 (Merity et al., 2016), built from verified Good and
+Featured Wikipedia articles. Only aggregate, pruned counts are shipped.
+
+Source: https://huggingface.co/datasets/Salesforce/wikitext
+License: https://creativecommons.org/licenses/by-sa/3.0/
 
 AI4Bharat Aksharantar Telugu
 

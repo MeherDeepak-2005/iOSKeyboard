@@ -4,8 +4,7 @@ set -eu
 # GRU streaming search-prior model (roadmap Plan 3 / NN-LM in the trie). Bundled ONLY for
 # an explicit internal profiling build, never for ordinary Debug or Release builds. Pair it
 # with the INTERNAL_GRU Swift compile flag (KeyboardEngine.shared) so the extension both
-# bundles the model AND wires GRULanguagePrior into contextSearchPrior. Mirrors
-# install_internal_coreml.sh; the two are independent switches.
+# bundles the model AND wires GRULanguagePrior into contextSearchPrior.
 if [ "${INTERNAL_GRU_ENABLED:-NO}" != "YES" ]; then
     echo "note: GRU search prior not enabled (set INTERNAL_GRU_ENABLED=YES to bundle)"
     exit 0
@@ -58,8 +57,7 @@ if [ "$#" -ne 1 ] || [ ! -d "$1" ]; then
     exit 1
 fi
 ditto "$1" "$compiled_output"
-python3 "${SRCROOT}/tools/lm/export_coreml.py" \
-    --part tokenizer \
+python3 "${SRCROOT}/tools/lm/export_tokenizer.py" \
     --sentencepiece "$tokenizer_model" \
     --tokenizer-output "$tokenizer_output"
 

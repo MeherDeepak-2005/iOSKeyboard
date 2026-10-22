@@ -5,6 +5,7 @@
 #include "Glide.hpp"
 #include "Personalization.hpp"
 #include <atomic>
+#include <stdexcept>
 #include "TextOrder.hpp"
 
 namespace kb {
@@ -15,7 +16,10 @@ public:
     void cancel() noexcept { cancelled_.store(true, std::memory_order_relaxed); }
     bool cancelled() const noexcept { return cancelled_.load(std::memory_order_relaxed); }
 };
-enum class EngineStatus { ok, cancelled, unsupportedLanguage, unsupportedModel };
+enum class EngineStatus { ok, cancelled, unsupportedLanguage, unsupportedModel, glideInvalidated };
+// Thrown by updateGlide when the retained stream can no longer be extended (path
+// shrank, layout pitch changed). Hosts must fall back to a full-path decode.
+struct GlideInvalidated final : std::runtime_error { GlideInvalidated() : std::runtime_error("glide stream invalidated") {} };
 enum class CandidateSource { typed, fuzzyLexicon, completion, contextInjection, broadRecovery, splitCorrection };
 struct DecodeInput {
     RequestIdentity identity;

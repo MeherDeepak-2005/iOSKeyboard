@@ -107,6 +107,15 @@ int main(int argc,char**argv) {
     auto serialized=encodePersonalization(user.exportSnapshot());auto restored=decodePersonalization(serialized);
     assert(restored.epoch==4 && restored.counts.uni("word")==1 && restored.confirmed.at("word")==1);
     for(std::size_t n=0;n<serialized.size();++n){bool rejected=false;try{(void)decodePersonalization(std::span(serialized).first(n));}catch(const std::invalid_argument&){rejected=true;}assert(rejected);}
+    {   // Whatever learning accepts must import again (oversized/empty inputs are not stored).
+        Personalization edge; edge.reset(9);
+        std::string longWord(1100,'x'), longContext(1100,'y'), half(600,'z');
+        edge.learn(std::vector<std::string>{longContext},"hello"); edge.learn(std::vector<std::string>{half,half},"there");
+        edge.learn({},longWord); edge.learn({},""); edge.confirm(""); edge.confirm(longWord);
+        auto back=decodePersonalization(encodePersonalization(edge.exportSnapshot()));
+        assert(back.counts.uni("hello")==1 && back.counts.uni("there")==1 && !back.counts.uni(longWord) && back.confirmed.empty());
+        assert(back.counts.bigram.contains(half) && !back.counts.bigram.contains(longContext) && back.counts.trigram.empty());
+    }
     user.reset(5);assert(user.counts()->unigram.empty() && old->uni("word")==1 && !user.kept("word"));
     for(int i=0;i<4100;++i)user.learn({},"word"+std::to_string(i));assert(user.prune());assert(user.counts()->unigram.empty());
     std::vector<RankedRow> ties{{{"z",0,1},"z",0,0,0,{}},{{"a",0,1},"a",0,0,0,{}}};
@@ -132,6 +141,25 @@ int main(int argc,char**argv) {
     auto boosted=reader->incrementalSeeds('c',{},1000000,boosts);assert(boosted && seeds->seeds().size()==boosted->seeds().size());
     IncrementalSearch reusable(seeds);reusable.advanceNormalized("hello");reusable.reset(boosted);assert(reusable.typed().empty());reusable.advanceNormalized("coeevitjkn");
     IncrementalSearch independent(boosted);independent.advanceNormalized("coeevitjkn");auto a=reusable.candidates(7.2),b=independent.candidates(7.2);assert(a.size()==b.size());for(std::size_t i=0;i<a.size();++i)assert(a[i].word==b[i].word&&a[i].cost==b[i].cost&&a[i].logFrequency==b[i].logFrequency);
+    {   // Retyping a retained word with different touches must not reuse stale DP costs.
+        auto hSeeds=reader->incrementalSeeds('h',{},1000000);assert(hSeeds);
+        std::vector<std::optional<TouchOffset>> centered(5,TouchOffset{0,0}),shifted(5,TouchOffset{0.45,0.3});
+        IncrementalSearch retainedSearch(hSeeds);retainedSearch.advanceNormalized("house",centered);retainedSearch.advanceNormalized("house",shifted);
+        IncrementalSearch freshSearch(hSeeds);freshSearch.advanceNormalized("house",shifted);
+        auto x=retainedSearch.candidates(2.4),y=freshSearch.candidates(2.4);assert(x.size()==y.size());
+        for(std::size_t i=0;i<x.size();++i)assert(x[i].word==y[i].word&&x[i].cost==y[i].cost);
+        retainedSearch.advanceNormalized("houses",centered);freshSearch.reset(hSeeds);freshSearch.advanceNormalized("houses",centered);
+        x=retainedSearch.candidates(2.4);y=freshSearch.candidates(2.4);assert(x.size()==y.size());
+        for(std::size_t i=0;i<x.size();++i)assert(x[i].word==y[i].word&&x[i].cost==y[i].cost);
+    }
+    {   // A stream that can no longer be extended must say so, not look like "no candidates".
+        GlideLayout layout{{},1,1};const char* rows[]={"qwertyuiop","asdfghjkl","zxcvbnm"};const double shifts[]={0,0.5,1.5};
+        for(int y=0;y<3;++y)for(int x=0;rows[y][x];++x)layout.centers.emplace_back(std::uint8_t(rows[y][x]),Point{x+shifts[y],double(y)});
+        std::vector<Point> path{{5.5,1},{2,0},{8,0},{8,0}};
+        auto glide=engine->createSession();glide->beginGlide({});(void)glide->updateGlide(path,layout,view,{});
+        bool invalidated=false;try{(void)glide->updateGlide(std::span(path).first(2),layout,view,{});}catch(const GlideInvalidated&){invalidated=true;}
+        assert(invalidated);
+    }
     session->memoryPressure();assert(session->decode(input("hello"),view).suggestions==engine->createSession()->decode(input("hello"),view).suggestions);
     if (argc == 4) replayGoldens(reader, argv[2], argv[3]);
     std::cout << "Shared engine, snapshot ownership, deterministic ties, serialization, reset/reuse and cancellation passed\n";

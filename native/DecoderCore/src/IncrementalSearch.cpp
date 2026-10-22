@@ -69,7 +69,15 @@ bool IncrementalSearch::advanceNormalized(std::string_view word, std::span<const
         typed_.pop_back(); appliedTaps_.pop_back(); canRollback_ = false;
         return true;
     }
-    if (word.size() < typed_.size() || !word.starts_with(typed_)) {
+    // A retained prefix is valid only if it was computed from the same touch evidence;
+    // otherwise retyping the same letters at new positions would reuse stale costs.
+    bool prefixTapsMatch = true;
+    for (std::size_t i = 0; i < std::min(word.size(), typed_.size()) && prefixTapsMatch; ++i) {
+        const auto tap = hasTaps ? taps[i] : std::nullopt;
+        const auto old = appliedTaps_[i];
+        prefixTapsMatch = tap.has_value() == old.has_value() && (!tap || (tap->dx == old->dx && tap->dy == old->dy));
+    }
+    if (word.size() < typed_.size() || !word.starts_with(typed_) || !prefixTapsMatch) {
         resetRows(); typed_.clear(); appliedTaps_.clear(); canRollback_ = false;
     }
     for (std::size_t index = typed_.size(); index < word.size(); ++index)

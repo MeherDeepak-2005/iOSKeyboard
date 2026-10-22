@@ -43,19 +43,22 @@ request; GIF and Sticker traffic starts only after an explicit search.
 
 ## Internal Neural Model
 
-`INTERNAL_NEURAL_MODEL_PACKAGE` and `INTERNAL_NEURAL_TOKENIZER_MODEL` are consumed
-by Debug builds. Ordinary Release builds do not read, compile, or bundle those
-paths. The Xcode build phase compiles the Core ML package and creates the compact
-tokenizer artifact without requiring a globally installed `sentencepiece` Python
-module.
+The decoder's only neural model is the GRU neural search space: it generates
+hypotheses inside the trie search and scores them, with no separate rescoring
+model. `INTERNAL_GRU_MODEL_PACKAGE`, `INTERNAL_GRU_TOKENIZER_MODEL` and the optional
+`INTERNAL_GRU_SCORE_PACKAGE` are read only when `INTERNAL_GRU_ENABLED=YES`; ordinary
+Debug and Release builds do not read, compile, or bundle those paths. The Xcode
+build phase compiles the Core ML package and creates the compact tokenizer artifact
+(`tools/lm/export_tokenizer.py`) without requiring a globally installed
+`sentencepiece` Python module.
 
 For optimized physical-device profiling, explicitly opt in with both the build
 setting and Swift compilation condition:
 
 ```sh
 xcodebuild -scheme keyboard -configuration Release -sdk iphoneos \
-  -destination 'generic/platform=iOS' INTERNAL_NEURAL_ENABLED=YES \
-  SWIFT_ACTIVE_COMPILATION_CONDITIONS=INTERNAL_NEURAL \
+  -destination 'generic/platform=iOS' INTERNAL_GRU_ENABLED=YES \
+  SWIFT_ACTIVE_COMPILATION_CONDITIONS=INTERNAL_GRU \
   ENABLE_USER_SCRIPT_SANDBOXING=NO build
 ```
 

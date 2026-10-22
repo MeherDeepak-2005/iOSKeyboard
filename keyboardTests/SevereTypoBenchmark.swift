@@ -7,12 +7,12 @@ import Testing
 /// is injected into candidate generation or neural scores.
 @MainActor
 struct SevereTypoBenchmark {
-    @Test func coeevitjknWithAndWithoutNeuralScorer() async throws {
+    @Test func coeevitjknWithAndWithoutNeuralSearch() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let contexts: [[String]] = [[], ["auto"], ["possibly", "receive"],
             ["for", "definitely", "decided"], ["could", "definitely", "receive"]]
         let configURL = URL(fileURLWithPath: "/tmp/ioskeyboard-severe-benchmark-config.json")
-        var configurations: [(String, NeuralLanguagePrior?)] = [("ngram", nil)]
+        var configurations: [(String, NeuralSearchPrior?)] = [("ngram", nil)]
         var neuralStatus = "not_run_missing_trained_model_and_matching_tokenizer"
         if FileManager.default.fileExists(atPath: configURL.path) {
             struct Config: Decodable {
@@ -28,24 +28,18 @@ struct SevereTypoBenchmark {
             try #require(FileManager.default.fileExists(atPath: tokenizer.path))
             try #require(!config.model.contains("ioskeyboard-gru-test-fixture"),
                 "random plumbing fixture must not be reported as a trained scorer")
+            try #require(config.kind == "gru", "the neural search space supports only the GRU model")
             let compiled = url.pathExtension == "mlmodelc"
-            let prior: NeuralLanguagePrior
-            if config.kind == "gru" {
-                prior = GRULanguagePrior(compiledURL: compiled ? url : nil,
-                    packageURL: compiled ? nil : url, tokenizerURL: tokenizer,
-                    scorePackageURL: config.scoreModel.map { URL(fileURLWithPath: $0) })
-            } else {
-                try #require(config.kind == "transformer")
-                prior = CoreMLNeuralLanguagePrior(compiledURL: compiled ? url : nil,
-                    packageURL: compiled ? nil : url, tokenizerURL: tokenizer)
-            }
+            let prior = GRULanguagePrior(compiledURL: compiled ? url : nil,
+                packageURL: compiled ? nil : url, tokenizerURL: tokenizer,
+                scorePackageURL: config.scoreModel.map { URL(fileURLWithPath: $0) })
             var waited = 0.0
             while !prior.isReady, waited < 60 {
                 try await Task.sleep(nanoseconds: 200_000_000); waited += 0.2
             }
             try #require(prior.isReady, "configured neural model did not become ready")
-            configurations.append((config.kind + "_scorer_only", prior))
-            neuralStatus = "ran_configured_scorer_without_neural_search_prior"
+            configurations.append((config.kind + "_neural_search", prior))
+            neuralStatus = "ran_configured_neural_search_space"
         }
         var rows: [[String: Any]] = []
         func percentile(_ values: [Double], _ fraction: Double) -> Double {
@@ -55,7 +49,7 @@ struct SevereTypoBenchmark {
         for (mode, prior) in configurations {
             for context in contexts {
                 let engine = KeyboardEngine(languageDataURL: root.appendingPathComponent("keyboard/langdata.bin"),
-                    rescorer: prior)
+                    searchPrior: prior)
                 let tier = prior?.modelTier ?? .ngram
                 var timings: [Double] = [], snapshots: [DecodeSnapshot] = []
                 for repetition in 0...30 {

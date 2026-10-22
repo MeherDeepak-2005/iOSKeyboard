@@ -44,7 +44,7 @@
       "correct_commits" : 31,
       "correction" : "correction",
       "correction_candidate_rank" : 1,
-      "first_decode_ms" : 1255.7639583392302,
+      "first_decode_ms" : 21107.138833322097,
       "mode" : "ngram",
       "replays" : 31,
       "suggestions" : [
@@ -52,40 +52,40 @@
         "coercion",
         "coediting"
       ],
-      "warm_p50_ms" : 8.6642916576238349,
-      "warm_p95_ms" : 99.745458326651715,
-      "warm_p99_ms" : 862.64608333294746
+      "warm_p50_ms" : 59.470500011229888,
+      "warm_p95_ms" : 576.71237498288974,
+      "warm_p99_ms" : 1137.8807916771621
     },
     {
       "candidates" : [
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -13.013778885645088,
-          "score" : -18.889031476903344,
+          "ngram_log_probability" : -13.929072097573027,
+          "score" : -19.804324688831283,
           "source" : "broadRecovery",
           "spatial_cost" : 6.5249999999999995,
           "word" : "correction"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -14.602172619465975,
-          "score" : -19.737736308035974,
+          "ngram_log_probability" : -15.517465831393913,
+          "score" : -20.653029519963912,
           "source" : "broadRecovery",
           "spatial_cost" : 5.7250000000000005,
           "word" : "coercion"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -21.428717843022568,
-          "score" : -21.428717843022568,
+          "ngram_log_probability" : -22.344011054950506,
+          "score" : -22.344011054950506,
           "source" : "typed",
           "spatial_cost" : 0,
           "word" : "coeevitjkn"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -20.042423481902677,
-          "score" : -26.534446771660967,
+          "ngram_log_probability" : -20.957716693830616,
+          "score" : -27.449739983588906,
           "source" : "broadRecovery",
           "spatial_cost" : 6.6500000000000004,
           "word" : "coediting"
@@ -97,7 +97,7 @@
       "correct_commits" : 31,
       "correction" : "correction",
       "correction_candidate_rank" : 1,
-      "first_decode_ms" : 87.969958331086673,
+      "first_decode_ms" : 3024.5978749881033,
       "mode" : "ngram",
       "replays" : 31,
       "suggestions" : [
@@ -105,40 +105,40 @@
         "coercion",
         "coediting"
       ],
-      "warm_p50_ms" : 8.5205000068526715,
-      "warm_p95_ms" : 13.538583341869526,
-      "warm_p99_ms" : 26.729916673502885
+      "warm_p50_ms" : 51.237833336926997,
+      "warm_p95_ms" : 65.522791672265157,
+      "warm_p99_ms" : 71.186416666023433
     },
     {
       "candidates" : [
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -13.969192876442712,
-          "score" : -19.844445467700968,
+          "ngram_log_probability" : -14.143158789132269,
+          "score" : -20.018411380390525,
           "source" : "broadRecovery",
           "spatial_cost" : 6.5249999999999995,
           "word" : "correction"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -15.557586610263598,
-          "score" : -20.693150298833597,
+          "ngram_log_probability" : -15.731552522953155,
+          "score" : -20.867116211523154,
           "source" : "broadRecovery",
           "spatial_cost" : 5.7250000000000005,
           "word" : "coercion"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -22.384131833820192,
-          "score" : -22.384131833820192,
+          "ngram_log_probability" : -22.558097746509748,
+          "score" : -22.558097746509748,
           "source" : "typed",
           "spatial_cost" : 0,
           "word" : "coeevitjkn"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -20.997837472700301,
-          "score" : -27.489860762458591,
+          "ngram_log_probability" : -21.171803385389858,
+          "score" : -27.663826675148144,
           "source" : "broadRecovery",
           "spatial_cost" : 6.6500000000000004,
           "word" : "coediting"
@@ -151,7 +151,7 @@
       "correct_commits" : 31,
       "correction" : "correction",
       "correction_candidate_rank" : 1,
-      "first_decode_ms" : 77.564291670569219,
+      "first_decode_ms" : 1257.6267083350103,
       "mode" : "ngram",
       "replays" : 31,
       "suggestions" : [
@@ -159,40 +159,40 @@
         "coercion",
         "coediting"
       ],
-      "warm_p50_ms" : 7.754249993013218,
-      "warm_p95_ms" : 9.2564583319472149,
-      "warm_p99_ms" : 9.4415000057779253
+      "warm_p50_ms" : 45.43908333289437,
+      "warm_p95_ms" : 62.200250016758218,
+      "warm_p99_ms" : 65.279833332169801
     },
     {
       "candidates" : [
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -14.579307718864809,
-          "score" : -20.454560310123068,
+          "ngram_log_probability" : -16.568111071644918,
+          "score" : -22.443363662903174,
           "source" : "broadRecovery",
           "spatial_cost" : 6.5249999999999995,
           "word" : "correction"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -16.167701452685698,
-          "score" : -21.303265141255697,
+          "ngram_log_probability" : -18.156504805465804,
+          "score" : -23.292068494035803,
           "source" : "broadRecovery",
           "spatial_cost" : 5.7250000000000005,
           "word" : "coercion"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -22.994246676242291,
-          "score" : -22.994246676242291,
+          "ngram_log_probability" : -24.983050029022397,
+          "score" : -24.983050029022397,
           "source" : "typed",
           "spatial_cost" : 0,
           "word" : "coeevitjkn"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -21.6079523151224,
-          "score" : -28.09997560488069,
+          "ngram_log_probability" : -23.596755667902507,
+          "score" : -30.088778957660793,
           "source" : "broadRecovery",
           "spatial_cost" : 6.6500000000000004,
           "word" : "coediting"
@@ -206,7 +206,7 @@
       "correct_commits" : 31,
       "correction" : "correction",
       "correction_candidate_rank" : 1,
-      "first_decode_ms" : 87.111208325950429,
+      "first_decode_ms" : 1274.2518750019372,
       "mode" : "ngram",
       "replays" : 31,
       "suggestions" : [
@@ -214,40 +214,40 @@
         "coercion",
         "coediting"
       ],
-      "warm_p50_ms" : 7.3280000069644302,
-      "warm_p95_ms" : 14.684958339785226,
-      "warm_p99_ms" : 16.031041668611579
+      "warm_p50_ms" : 45.698333327891305,
+      "warm_p95_ms" : 52.7497083239723,
+      "warm_p99_ms" : 73.481958330376074
     },
     {
       "candidates" : [
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -13.969192876442712,
-          "score" : -19.844445467700968,
+          "ngram_log_probability" : -14.143158789132269,
+          "score" : -20.018411380390525,
           "source" : "broadRecovery",
           "spatial_cost" : 6.5249999999999995,
           "word" : "correction"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -15.557586610263598,
-          "score" : -20.693150298833597,
+          "ngram_log_probability" : -15.731552522953155,
+          "score" : -20.867116211523154,
           "source" : "broadRecovery",
           "spatial_cost" : 5.7250000000000005,
           "word" : "coercion"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -22.384131833820192,
-          "score" : -22.384131833820192,
+          "ngram_log_probability" : -22.558097746509748,
+          "score" : -22.558097746509748,
           "source" : "typed",
           "spatial_cost" : 0,
           "word" : "coeevitjkn"
         },
         {
           "neural_log_probability" : null,
-          "ngram_log_probability" : -20.997837472700301,
-          "score" : -27.489860762458591,
+          "ngram_log_probability" : -21.171803385389858,
+          "score" : -27.663826675148144,
           "source" : "broadRecovery",
           "spatial_cost" : 6.6500000000000004,
           "word" : "coediting"
@@ -261,7 +261,7 @@
       "correct_commits" : 31,
       "correction" : "correction",
       "correction_candidate_rank" : 1,
-      "first_decode_ms" : 77.164624992292374,
+      "first_decode_ms" : 1042.8006250003818,
       "mode" : "ngram",
       "replays" : 31,
       "suggestions" : [
@@ -269,9 +269,9 @@
         "coercion",
         "coediting"
       ],
-      "warm_p50_ms" : 7.5287916697561741,
-      "warm_p95_ms" : 9.1192499967291951,
-      "warm_p99_ms" : 11.15649999701418
+      "warm_p50_ms" : 48.100999993039295,
+      "warm_p95_ms" : 55.714833317324519,
+      "warm_p99_ms" : 61.301000008825213
     }
   ],
   "typed" : "coeevitjkn"

@@ -22,7 +22,15 @@ final class Lexicon {
 	/// way `Trie.bump` edits heap nodes. Only words the user actually types, but the
 	/// KEY COUNT still grows one entry per distinct dictionary word ever typed, so it
 	/// is capped (halve-and-drop, like UserModel) rather than left to accrete forever.
-    private var boosts: [String: Int] { nativeVocabulary.boosts.mapValues(\.intValue) }
+    // Native owns boosts; keep one converted copy (callers hold `lock`). Exporting the
+    // table on every logFreq/completion call cost an O(boosts) bridge round-trip each time.
+    private var boostCache: [String: Int]?
+    private var boosts: [String: Int] {
+        if let boostCache { return boostCache }
+        let value = nativeVocabulary.boosts.mapValues(\.intValue)
+        boostCache = value
+        return value
+    }
     private lazy var nativeVocabulary = KBVocabularyState(blocked: nativeBlockedWords)
 
 	/// Highest-frequency words, for the empty-context suggestion bar on a fresh install.
@@ -111,13 +119,6 @@ final class Lexicon {
 	func isStaticWord(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
 		return (staticTrie && langData?.trieContains(lw) == true) || (!staticTrie && baseTrie.contains(lw))
-	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-	func isPrefix(_ lw: String) -> Bool {
-		lock.lock(); defer { lock.unlock() }
-		return (staticTrie && langData?.trieHasPrefix(lw) == true) || baseTrie.hasPrefix(lw)
-			|| supplementaryTrie.hasPrefix(lw) || personalTrie.hasPrefix(lw)
 	}
 	/// Standard English clitics. A string that is <lexicon word> + one of these is a
 	/// valid contraction even when the CONTRACTION itself is missing from the corpus
@@ -374,6 +375,7 @@ final class Lexicon {
 	func noteUse(of lw: String, timesUsed: Int, adoptAfter: Int,
 				 allowAdoption: Bool = false) {
 		lock.lock(); defer { lock.unlock() }
+        boostCache = nil
         if nativeVocabulary.note(lw, count: timesUsed, allowAdoption: allowAdoption, threshold: adoptAfter,
             glide: Self.isGlideSpelling(lw), packed: staticTrie ? langData?.nativeCandidateLexicon : nil,
             base: baseTrie.native, supplementary: supplementaryTrie.native, personal: personalTrie.native) { vocabularyEpoch &+= 1 }
@@ -386,6 +388,7 @@ final class Lexicon {
 		vocabularyEpoch &+= 1
 		personalTrie = Trie()
         nativeVocabulary.resetPersonalization()
+        boostCache = nil
 		lock.unlock()
 	}
 

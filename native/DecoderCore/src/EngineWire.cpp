@@ -23,7 +23,7 @@ void writeCounts(Writer& w,const std::unordered_map<std::string,std::int64_t>& v
 }
 void readCounts(Reader& r,std::unordered_map<std::string,std::int64_t>& out,std::size_t cap){
     auto n=r.u32();if(n>cap)throw std::invalid_argument("wire count cap exceeded");
-    for(std::size_t i=0;i<n;++i){auto key=r.text();auto value=r.u64();if(key.empty()||key.size()>1024||value==0||value>INT32_MAX||!out.emplace(std::move(key),std::int64_t(value)).second)throw std::invalid_argument("invalid wire count");}
+    for(std::size_t i=0;i<n;++i){auto key=r.text();auto value=r.u64();if(key.empty()||key.size()>maxPersonalWordBytes||value==0||value>INT32_MAX||!out.emplace(std::move(key),std::int64_t(value)).second)throw std::invalid_argument("invalid wire count");}
 }
 void writeTable(Writer&w,const std::unordered_map<std::string,CountRows>& table){
     std::vector<std::string> keys;for(const auto&[key,row]:table){(void)row;keys.push_back(key);}std::sort(keys.begin(),keys.end(),utf8Less);w.u32(std::uint32_t(keys.size()));
@@ -31,7 +31,7 @@ void writeTable(Writer&w,const std::unordered_map<std::string,CountRows>& table)
 }
 void readTable(Reader&r,std::unordered_map<std::string,CountRows>& table){
     auto n=r.u32();if(n>4000)throw std::invalid_argument("wire context cap exceeded");
-    for(std::size_t i=0;i<n;++i){auto context=r.text();std::unordered_map<std::string,std::int64_t> counts;readCounts(r,counts,8000);if(context.size()>1040||table.contains(context))throw std::invalid_argument("invalid wire context");CountRows row(counts.begin(),counts.end());std::sort(row.begin(),row.end(),[](const auto&a,const auto&b){return utf8Less(a.first,b.first);});table.emplace(std::move(context),std::move(row));}
+    for(std::size_t i=0;i<n;++i){auto context=r.text();std::unordered_map<std::string,std::int64_t> counts;readCounts(r,counts,8000);if(context.size()>maxPersonalContextBytes||table.contains(context))throw std::invalid_argument("invalid wire context");CountRows row(counts.begin(),counts.end());std::sort(row.begin(),row.end(),[](const auto&a,const auto&b){return utf8Less(a.first,b.first);});table.emplace(std::move(context),std::move(row));}
 }
 }
 std::vector<std::byte> encodeDecodeOutput(const DecodeOutput& out){

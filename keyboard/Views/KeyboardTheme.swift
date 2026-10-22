@@ -11,7 +11,7 @@ struct KeyboardTheme {
 	let usesSystemTransparency: Bool
 	let key, keyText, specialKey, specialKeyText, accentKeyText: UIColor
 	let accentStart, accentEnd: UIColor             // action-button gradient stops (full accent)
-	let accentSoft, accentSoftText: UIColor         // shift/delete = lighter tint of the accent
+	let accentSoft, accentSoftText: UIColor         // optional soft accent colors
 	let pressedOverlay: UIColor
 	let suggestionHighlight, suggestionHighlightBorder: UIColor
 	let popupFill, popupText: UIColor
@@ -19,10 +19,10 @@ struct KeyboardTheme {
 	let shadowOpacity: Float
 	let cornerRadius: CGFloat
 	let isDark: Bool
+    var isSystemAppearance: Bool = false
 
-	/// Modern Material-style keyboard. The action key uses the full accent gradient;
-	/// shift/delete use a lighter tint of that same accent. Special keys stay neutral.
-	/// A Theme Studio design, when enabled, overrides the stock look entirely.
+    /// The default System appearance follows light/dark traits with neutral keys.
+    /// Explicit accents and enabled Theme Studio designs keep their saved colors.
 	static func system(dark: Bool) -> KeyboardTheme {
 		if KBSettings.customThemeEnabled, let c = KBSettings.customTheme(dark: dark) {
 			return custom(c)
@@ -40,15 +40,19 @@ struct KeyboardTheme {
 	}
 
 	private static func accentTheme(dark: Bool, accent: KBAccent) -> KeyboardTheme {
+        let system = accent.id == KBPalette.system.id
 		let g = accent.gradient(dark: dark)
 		let accentHSL = KBHSL(g.endColor)
 		let highContrast = UIAccessibility.isDarkerSystemColorsEnabled
-		let specialFill = accentHSL.color(
+		let specialFill = system
+            // Dark: the same tone as letter keys over the system material, as stock iOS 26.
+            ? UIColor(white: dark ? 0.32 : 0.67, alpha: highContrast ? 1 : 0.65)
+            : accentHSL.color(
 			saturation: accentHSL.saturation * (dark ? 0.58 : 0.48),
 			lightness: dark ? min(accentHSL.lightness + 0.18, 0.72) : max(accentHSL.lightness - 0.08, 0.34),
 			alpha: highContrast ? (dark ? 0.44 : 0.32) : (dark ? 0.18 : 0.14)
 		)
-		let accentSoftFill = accentHSL.color(
+		let accentSoftFill = system ? specialFill : accentHSL.color(
 			saturation: accentHSL.saturation * (dark ? 0.78 : 0.68),
 			lightness: dark ? min(accentHSL.lightness + 0.22, 0.76) : max(accentHSL.lightness - 0.03, 0.38),
 			alpha: highContrast ? (dark ? 0.58 : 0.44) : (dark ? 0.34 : 0.24)
@@ -64,19 +68,20 @@ struct KeyboardTheme {
 				: max(KBHSL(g.endColor).lightness, 0.36),
 			alpha: 0.96)
 		let actionText = bestContrastingText(over: [proposedActionStart, proposedActionEnd])
-		let actionStart = ensuringContrast(proposedActionStart, against: actionText)
-		let actionEnd = ensuringContrast(proposedActionEnd, against: actionText)
-		// The owned tint is deliberately translucent: it preserves the host's system
-		// material while preventing a clear-only deck from becoming arbitrarily black
-		// or muddy. Accessibility settings replace it with the opaque fallback below.
+        let actionStart = ensuringContrast(system ? g.startColor : proposedActionStart, against: actionText)
+        let actionEnd = ensuringContrast(system ? g.endColor : proposedActionEnd, against: actionText)
+		// The deck paints no tint of its own. iOS draws its keyboard material behind
+		// the extension AND in a strip above it that the extension can't cover; any
+		// tint here makes that strip read as a separate band over the suggestions.
+		// Accessibility settings replace it with the opaque fallback below.
 		if dark {
 			return KeyboardTheme(name: "Dark",
-				backgroundTop: UIColor(white: 1, alpha: 0.045),
-				backgroundBottom: UIColor(white: 0, alpha: 0.085),
+				backgroundTop: .clear,
+				backgroundBottom: .clear,
 				fallbackBackgroundTop: UIColor(hex: 0x29292E),
 				fallbackBackgroundBottom: UIColor(hex: 0x202025),
 				usesSystemTransparency: true,
-				key: UIColor(white: 1, alpha: highContrast ? 0.34 : 0.18), keyText: UIColor(hex: 0xF4F4F6),
+				key: UIColor(white: 1, alpha: highContrast ? 0.34 : 0.165), keyText: UIColor(hex: 0xF4F4F6),
 				specialKey: specialFill, specialKeyText: UIColor(hex: 0xECECF0),
 				accentKeyText: actionText,
 				accentStart: actionStart, accentEnd: actionEnd,
@@ -86,11 +91,11 @@ struct KeyboardTheme {
 				suggestionHighlightBorder: UIColor.white.withAlphaComponent(highContrast ? 0.42 : 0.12),
 				popupFill: UIColor(hex: highContrast ? 0x55555C : 0x48484E),
 				popupText: UIColor(hex: 0xFAFAFC),
-					shadowColor: .white, shadowOpacity: 0, cornerRadius: 8, isDark: true)
+					shadowColor: .white, shadowOpacity: 0, cornerRadius: 8, isDark: true, isSystemAppearance: system)
 		} else {
 			return KeyboardTheme(name: "Light",
-				backgroundTop: UIColor(white: 1, alpha: 0.15),
-				backgroundBottom: UIColor(white: 0.76, alpha: 0.08),
+				backgroundTop: .clear,
+				backgroundBottom: .clear,
 				fallbackBackgroundTop: UIColor(hex: 0xE1E2E6),
 				fallbackBackgroundBottom: UIColor(hex: 0xD4D6DB),
 				usesSystemTransparency: true,
@@ -104,7 +109,7 @@ struct KeyboardTheme {
 				suggestionHighlightBorder: UIColor.black.withAlphaComponent(highContrast ? 0.22 : 0.08),
 				popupFill: .white,
 				popupText: UIColor(hex: 0x151517),
-					shadowColor: UIColor(white: 0, alpha: 1), shadowOpacity: 0, cornerRadius: 8, isDark: false)
+					shadowColor: UIColor(white: 0, alpha: 1), shadowOpacity: 0, cornerRadius: 8, isDark: false, isSystemAppearance: system)
 		}
 	}
 
@@ -281,8 +286,18 @@ enum KeyboardInputKind: Equatable {
 	}
 }
 enum ShiftState   { case off, on, locked }
-enum KeyRole      { case normal, special, accent, accentSoft }   // accentSoft = lighter tint of the accent (shift/delete)
-enum KeyWidth     { case unit, wide, ret, flex }
+enum KeyRole      { case normal, special, accent, accentSoft }   // optional soft accent role
+enum KeyWidth     {
+	case unit, modifier, utility, ret, flex
+
+	/// Widths in letter-key units, matched to the stock iOS deck. Shift/delete
+	/// (and #+=) sit at the 44pt tap-target minimum; the bottom row's
+	/// 123/ABC, globe and emoji keys are a touch narrower; return is wide
+	/// enough for its "send"/"search" labels.
+	static let modifierUnits: CGFloat = 1.35
+	static let utilityUnits: CGFloat = 1.3
+	static let returnUnits: CGFloat = 2.8
+}
 
 struct KeySpec {
 	var label: String? = nil
@@ -290,7 +305,6 @@ struct KeySpec {
 	var accessibilityLabel: String? = nil
 	var role: KeyRole = .normal
 	var width: KeyWidth = .unit
-	var pill: Bool = false           // fully-rounded (capsule) instead of normal roundness
 	var repeats: Bool = false        // fires continuously while held (delete)
 	var popup: Bool = false          // show the stock-style character balloon on press
 	var letterBase: String? = nil    // lowercase base letter → enables in-place shift relabelling

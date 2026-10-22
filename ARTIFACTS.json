@@ -4,16 +4,16 @@
   "artifacts": [
     {
       "path": "keyboard/langdata.bin",
-      "sha256": "f796d93b208eb3a76376d1f6646165ce676a98b093f4c894e2b9426fc1417ec4",
-      "bytes": 15564546,
+      "sha256": "9db0760697014aecdf540d1828cd523156bcf87a2ed04f2afaa724ac24cd8ea6",
+      "bytes": 28311910,
       "format": "KBLM v6",
       "builder": "tools/build_language_data.py",
       "contents": {
         "words": 114283,
-        "bigramContexts": 29206,
-        "bigramEntries": 241198,
-        "trigramContexts": 218403,
-        "trigramEntries": 386447,
+        "bigramContexts": 55520,
+        "bigramEntries": 1280074,
+        "trigramContexts": 266840,
+        "trigramEntries": 767271,
         "trieNodes": 275561,
         "sentenceStarters": 20
       },
@@ -39,7 +39,27 @@
           "license": "CC-BY-SA-4.0"
         },
         {
-          "name": "Tatoeba English CC0 export snapshot",
+          "name": "Tatoeba English export snapshot (all sentences)",
+          "path": "tools/data/tatoeba-eng-2026-10-20.tsv.bz2",
+          "url": "https://downloads.tatoeba.org/exports/per_language/eng/eng_sentences.tsv.bz2",
+          "sha256": "bb3dcc28a8984a26dc466ee14eb53c4210b0dd9bb111b9d686d1efc83ecf091c",
+          "license": "CC-BY-2.0-FR (subset also CC0-1.0)",
+          "contents": {
+            "sentences": 2039120
+          }
+        },
+        {
+          "name": "WikiText-103 raw train split",
+          "url": "https://huggingface.co/datasets/Salesforce/wikitext/tree/b08601e04326c79dfdd32d625aee71d232d685c3/wikitext-103-raw-v1",
+          "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+          "files": {
+            "train-00000-of-00002.parquet": "74da360f23826045b3e6ac6375411fdb15f003030aa74f2596ed08b857cb9212",
+            "train-00001-of-00002.parquet": "ba090ac30dbf5461e8dcbdd1a1b8e6f3cf9c2c756d64f0c1220450acd514f720"
+          },
+          "license": "CC-BY-SA-3.0"
+        },
+        {
+          "name": "Tatoeba English CC0 export snapshot (legacy --legacy-ngrams reproduction only)",
           "path": "tools/data/tatoeba-eng-cc0-2026-07-18.tsv.bz2",
           "sha256": "14f975533e2f15257f674d6099b95cf6b2c3458a8baf7496935081ad862f4b91",
           "license": "CC0-1.0"
@@ -78,7 +98,15 @@
           "transformation": "Union with existing vocabulary; retain existing frequencies; new frequency prior 1; preserve four contraction-policy exclusions. Original context files are offline assets."
         }
       ],
-      "integrationReport": "docs/corev4-import/IMPORT-RESULTS.txt"
+      "integrationReport": "docs/corev4-import/IMPORT-RESULTS.txt",
+      "ngramPruning": {
+        "bigramMinCount": 4,
+        "bigramPerContext": 1024,
+        "trigramMinCount": 8,
+        "trigramPerContext": 64,
+        "contextTotals": "pre-pruning; unretained mass is assigned to the backoff at runtime",
+        "inVocabularyTokensCounted": 95050257
+      }
     },
     {
       "path": "keyboard/telugu_layout.kbpack",

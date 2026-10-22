@@ -467,7 +467,6 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
     return {[_packed nativeLexicon], _base.get(), _supplementary.get(), _personal.get(), [_snapshot nativeSnapshot]};
 }
 - (BOOL)containsWord:(NSString *)word { auto view=[self nativeLexicon];return view.contains(word.UTF8String ?: ""); }
-- (BOOL)isBlockedWord:(NSString *)word { auto view=[self nativeLexicon];return view.isBlocked(word.UTF8String ?: ""); }
 @end
 @implementation KBCandidateGenerator
 + (NSArray<NSNumber *> *)rankFundingBonusesWithCount:(NSUInteger)count {
@@ -857,10 +856,6 @@ static NSArray<KBMultiwordHypothesis *> *KBHypotheses(const std::vector<kb::Mult
     for (NSNumber *value in safety) s.push_back(value.doubleValue);
     return KBRankedRows(kb::rankGlide([lexicon nativeLexicon], values, l, s, sigma, {static_cast<const std::uint8_t *>(dwell.bytes), dwell.length}));
 }
-+ (NSArray<NSString *> *)dynamicWords:(NSArray<NSString *> *)supp counts:(NSArray<NSNumber *> *)sc personal:(NSArray<NSString *> *)personal counts:(NSArray<NSNumber *> *)pc limit:(NSUInteger)limit {
-    auto values = kb::dynamicGlideWords(KBCountRows(supp, sc), KBCountRows(personal, pc), limit); NSMutableArray *out = [NSMutableArray array];
-    for (const auto& word : values) [out addObject:[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]]; return out;
-}
 @end
 
 #include "../DecoderCore/include/NeuralSearch.hpp"
@@ -882,8 +877,6 @@ static NSArray<KBMultiwordHypothesis *> *KBHypotheses(const std::vector<kb::Mult
 - (NSString *)wordFromIDs:(NSArray<NSNumber *> *)ids {std::vector<int32_t> v;for(NSNumber *n in ids)v.push_back(n.intValue);return @(_tokenizer->word(v).c_str());}
 @end
 @implementation KBNeuralMath
-+ (NSArray<NSNumber *> *)logProbabilities:(NSArray<NSNumber *> *)values {std::vector<float> v;for(NSNumber *n in values)v.push_back(n.floatValue);if(!kb::logProbabilities(v))return nil;NSMutableArray *out=[NSMutableArray array];for(auto n:v)[out addObject:@(n)];return out;}
-+ (double)boundary:(NSArray<NSNumber *> *)values continuation:(NSArray<NSNumber *> *)continuation {std::vector<float> v;std::vector<uint8_t> c;for(NSNumber *n in values)v.push_back(n.floatValue);for(NSNumber *n in continuation)c.push_back(n.boolValue);return kb::boundaryProbability(v,c);}
 + (NSArray<NSNumber *> *)top:(NSArray<NSNumber *> *)values count:(NSUInteger)count allowed:(NSArray<NSNumber *> *)allowed {std::vector<float> v;std::vector<uint8_t> a;for(NSNumber *n in values)v.push_back(n.floatValue);for(NSNumber *n in allowed)a.push_back(n.boolValue);NSMutableArray *out=[NSMutableArray array];for(auto n:kb::topIndices(v,count,a))[out addObject:@(n)];return out;}
 @end
 #import <CoreML/CoreML.h>
@@ -1135,8 +1128,6 @@ static NSDictionary *KBExportContexts(const std::unordered_map<std::string, kb::
 - (void)releaseKeep:(NSString *)word { _state.releaseKeep(KBText(word)); }
 - (BOOL)kept:(NSString *)word { return _state.kept(KBText(word)); }
 - (NSInteger)count:(NSString *)word { return _state.counts()->uni(KBText(word)); }
-- (NSInteger)confirmationCount:(NSString *)word { return _state.confirmations(KBText(word)); }
-- (NSUInteger)diversity:(NSString *)word limit:(NSUInteger)limit { return _state.diversity(KBText(word), limit); }
 - (BOOL)prune { return _state.prune(); }
 - (BOOL)allowsAdoption:(NSString *)word count:(NSInteger)count lexicon:(KBGenerationLexicon *)lexicon { return _state.allowsAdoption(KBText(word), count, [lexicon nativeLexicon]); }
 @end

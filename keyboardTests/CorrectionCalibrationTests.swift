@@ -46,7 +46,9 @@ struct CorrectionCalibrationTests {
                         let t = Double(hit.entries.count)
                         if smoothing == .wittenBell {
                             let n = Double(hit.total), weight = n / (n + t) * n / (n + 8)
-                            probability = weight * count / n + (1 - weight) * probability
+                            // Unretained (pruned) context mass backs off rather than vanishing.
+                            let retained = Double(min(hit.entries.reduce(0) { $0 + $1.count }, hit.total))
+                            probability = weight * count / n + (n - weight * retained) / n * probability
                         } else {
                             let n = hit.entries.reduce(0.0) { $0 + Double($1.count) }
                             probability = (count + (t + 8) * probability) / (n + t + 8)

@@ -373,7 +373,8 @@ def logprob(ld, w, ctx):
             total, entries = hit
             weight = total / (total + len(entries)) * total / (total + 8.0)
             count = next((count for word, count in entries if word == wid), 0)
-            probability = weight * count / total + (1 - weight) * probability
+            retained = sum(count for _, count in entries)   # pruned mass goes to the backoff
+            probability = weight * count / total + (total - weight * retained) / total * probability
     return math.log(max(probability, float.fromhex('0x0.0000000000001p-1022')))
 
 
@@ -605,10 +606,10 @@ def main():
 
     if args.oracle:
         # Oracle recall = the hard ceiling on every downstream number: if the gold
-        # word isn't in the candidate list, no rescorer at any size can save it.
+        # word isn't in the candidate list, no ranking stage at any model size can save it.
         # Two stages can lose it: (1) the channel prune — pair cost > maxCost, the
         # word never comes out of the trie; (2) the crude pre-rank cap — it comes
-        # out, but ranks below what survives to the rescorer (Swift keeps nBest=24
+        # out, but ranks below what survives to scoring (Swift keeps nBest=24
         # from a scoreCap=32 batch). Report both, plus what a bigger budget buys.
         ks = (3, 8, 12, 16, 24)
         budgets = (1.8, 2.8, 3.6, 4.0)
@@ -629,7 +630,7 @@ def main():
                 for k in ks:
                     hit_at[k] += r < k
         print(f"\noracle recall (gold word at ANY rank):  {found / n:.3f}")
-        print("after crude pre-rank (-cost + freq_w*logFreq) — what the rescorer sees:")
+        print("after crude pre-rank (-cost + freq_w*logFreq) — what the scorer sees:")
         tags = {24: "  <- Swift nBest"}
         for k in ks:
             print(f"  recall@{k:<2}  {hit_at[k] / n:.3f}{tags.get(k, '')}")

@@ -267,26 +267,84 @@ final class keyboardUITests: XCTestCase {
     }
 
 	/// The re-added clipboard icon sits in the suggestion strip and is tappable — proving
-	/// SuggestionBar exposes it and the tap target is valid on a real device. The panel
+	/// The tools row exposes Clipboard with a direct, labelled action. The panel
 	/// it opens is an extension overlay whose accessibility subtree XCUITest does not
 	/// reliably snapshot, so its rendering is covered by the `renderClipboardPanel` unit
 	/// test instead; here we only assert the entry point and that the tap does not crash
 	/// the keyboard (the strip is still queryable afterward).
 	@MainActor
-	func testClipboardIconIsPresentAndTappable() throws {
+	func testClipboardToolsArePresentAndTappable() throws {
 		try selectLanguage(identifier: "language.english", title: "English")
 		let host = launchRuntimeHost()
 		guard host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 4) else {
 			throw XCTSkip("Glyph is not the active software keyboard on this simulator")
 		}
-		let clip = host.descendants(matching: .any)["suggestion.clipboard"]
-		XCTAssertTrue(clip.waitForExistence(timeout: 3), "Clipboard icon missing from suggestion strip")
+        let tools = host.descendants(matching: .any)["suggestion.tools"]
+        XCTAssertTrue(tools.waitForExistence(timeout: 3))
+        tools.tap()
+		let clip = host.descendants(matching: .any)["tools.clipboard"]
+		XCTAssertTrue(clip.waitForExistence(timeout: 3), "Clipboard action missing from tools row")
 		XCTAssertTrue(clip.isHittable, "Clipboard icon is not hittable")
 		clip.tap()
 		// The keyboard survived opening the panel: the deck is still there to type on.
 		XCTAssertTrue(host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 3),
 			"Keyboard disappeared after opening the clipboard panel")
 	}
+
+    @MainActor
+    func testUniversalSuggestionsRemainVisibleInURLFieldWithAutocorrectionDisabled() throws {
+        let host = XCUIApplication()
+        host.launchArguments = ["-keyboard-runtime-host", "-keyboard-runtime-url"]
+        host.launch()
+        let field = host.textFields["runtime.text"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        guard host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 4) else {
+            throw XCTSkip("Glyph is not the active software keyboard on this device")
+        }
+        let tools = host.buttons["suggestion.tools"]
+        XCTAssertTrue(tools.waitForExistence(timeout: 3))
+        XCTAssertTrue(tools.isHittable)
+        let primary = host.buttons["suggestion.primary"]
+        expectation(for: NSPredicate { _, _ in !primary.label.isEmpty }, evaluatedWith: host)
+        waitForExpectations(timeout: 3)
+        let stripHeight = tools.frame.height
+        for letter in ["Q", "z", "x", "q"] { tapLetter(letter, in: host) }
+        host.keys["Space"].tap()
+        XCTAssertEqual((field.value as? String)?.lowercased(), "qzxq ",
+            "Showing predictions must not enable unwanted URL autocorrection")
+        XCTAssertTrue(tools.isHittable)
+        XCTAssertEqual(tools.frame.height, stripHeight)
+        tools.tap()
+        XCTAssertTrue(host.buttons["tools.clipboard"].waitForExistence(timeout: 2))
+        add(XCTAttachment(screenshot: host.screenshot()))
+    }
+
+    @MainActor
+    func testHostSendClearsSuggestionsWithoutSpaceAndKeepsStarterWords() throws {
+        try selectLanguage(identifier: "language.english", title: "English")
+        let host = launchRuntimeHost()
+        guard host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 4) else {
+            throw XCTSkip("Glyph is not the active software keyboard on this device")
+        }
+        for letter in ["M", "i", "c", "r", "o", "s", "o", "f", "t"] { tapLetter(letter, in: host) }
+        let primary = host.buttons["suggestion.primary"]
+        XCTAssertTrue(primary.waitForExistence(timeout: 3))
+        let oldWord = primary.label
+        XCTAssertFalse(oldWord.isEmpty)
+        host.buttons["runtime.clear"].tap() // programmatic host edit; keyboard inserts no boundary
+        let refreshed = NSPredicate { _, _ in
+            let field = host.textFields["runtime.text"].value as? String ?? ""
+            return (field.isEmpty || field == "Type") && !primary.label.isEmpty && primary.label != oldWord
+        }
+        expectation(for: refreshed, evaluatedWith: host)
+        waitForExpectations(timeout: 3)
+        // Copying must not replace any of the suggestion controls with a Paste banner.
+        host.buttons["runtime.copy"].tap()
+        XCTAssertTrue(primary.exists)
+        XCTAssertFalse(host.buttons["suggestion.paste"].exists)
+        add(XCTAttachment(screenshot: host.screenshot()))
+    }
 
 	/// Probes the emoji page end-to-end: opens the palette, taps specific cells (early
 	/// section, then a far section reached via a category tab), and verifies the exact

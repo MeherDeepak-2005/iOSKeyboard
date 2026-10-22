@@ -20,7 +20,6 @@ final class KeyButton: UIView {
 	private let gradient: CAGradientLayer?        // non-nil for the accent (action) key
 	private let dim = UIView()                    // press-feedback overlay (works on any fill)
 	private let dimColor: UIColor
-	private let isPill: Bool                       // capsule rounding
 	private let baseRadius: CGFloat
 	private var label: UILabel?                    // set for text keys — updated in place on shift
 	private var iconView: UIImageView?            // set for symbol keys (e.g. the shift glyph)
@@ -53,7 +52,6 @@ final class KeyButton: UIView {
 		// Recessed "empty slot" look while the balloon floats: darken in both themes so the
 		// cap reads as a blackish transparent well and only the raised balloon shows the glyph.
 		self.recessColor = theme.isDark ? UIColor(white: 0, alpha: 0.34) : UIColor(white: 0, alpha: 0.16)
-		self.isPill = spec.pill
 		self.glyphScale = spec.glyphScale
 		self.baseRadius = theme.cornerRadius
 		self.spokenLabelWasExplicit = spec.accessibilityLabel != nil
@@ -135,6 +133,7 @@ final class KeyButton: UIView {
 		layer.shadowOpacity = theme.shadowOpacity
 		layer.shadowRadius = 2.5
 		layer.shadowOffset = CGSize(width: 0, height: 1)
+        if isShift, let symbol = spec.symbol { setSymbol(symbol) }
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
@@ -170,7 +169,7 @@ final class KeyButton: UIView {
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		let r = isPill ? bounds.height / 2 : baseRadius     // capsule for functional keys
+		let r = baseRadius                // every cap shares one radius, as stock does
 		CATransaction.begin(); CATransaction.setDisableActions(true)
 		layer.cornerRadius = r
 		gradient?.cornerRadius = r
@@ -195,7 +194,16 @@ final class KeyButton: UIView {
 		dim.backgroundColor = on ? recessColor : .clear
 	}
 
-	static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 19, weight: .regular)
+	static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
+
+    func setActionAppearance(active: Bool, theme: KeyboardTheme) {
+        guard theme.isSystemAppearance else { return }
+        let fill = active ? theme.accentStart : theme.specialKey
+        gradient?.colors = [fill.cgColor, fill.cgColor]
+        let text = active ? theme.accentKeyText : theme.specialKeyText
+        label?.textColor = text
+        iconView?.tintColor = text
+    }
 
 	/// Relabel a text key in place (used to switch letters between lower/upper case on a
 	/// shift change, without rebuilding the view).

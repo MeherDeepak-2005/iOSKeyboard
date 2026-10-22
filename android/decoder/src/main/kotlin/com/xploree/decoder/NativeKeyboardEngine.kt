@@ -86,6 +86,20 @@ class NativeKeyboardEngine(dictionaryPath: String, safetyPack: ByteArray) : Clos
     companion object { init { System.loadLibrary("xploree_decoder") } }
 }
 
+/** Wire status values (EngineStatus). A Glide update with STATUS_GLIDE_INVALIDATED can no
+ * longer be extended; end the gesture and decode the full path instead. */
+const val STATUS_OK = 0
+const val STATUS_CANCELLED = 1
+const val STATUS_GLIDE_INVALIDATED = 4
+data class TouchOffset(val dx: Double, val dy: Double)
+
+/** Match iOS revision fields. Capture identity before scheduling; compare all fields
+ * before publication. A newer generation alone never validates a different field/layout.
+ */
+data class RequestIdentity(val fieldRevision: Long, val documentRevision: Long,
+    val wordSessionID: Long, val generation: Long, val layoutRevision: Long,
+    val vocabularyEpoch: Long, val personalizationEpoch: Long)
+
 data class KeyboardDecodeRequest(val word: String, val context: List<String>, val identity: RequestIdentity, val taps: List<TouchOffset?>? = null)
 data class KeyboardCandidate(val word: String, val cost: Double, val logFrequency: Double, val language: Double, val score: Double, val typedMargin: Double, val source: Int)
 data class KeyboardDecodeResult(val identity: RequestIdentity, val status: Int, val suggestions: List<String>, val correction: String?, val confidence: Double,
@@ -101,7 +115,7 @@ internal class WireReader(bytes: ByteArray) {
     fun finish() { require(!data.hasRemaining()) }
 }
 internal fun decodeResult(bytes: ByteArray): KeyboardDecodeResult {
-    val r = WireReader(bytes); require(r.int() == 0x3244424b); val status = r.count(3)
+    val r = WireReader(bytes); require(r.int() == 0x3244424b); val status = r.count(STATUS_GLIDE_INVALIDATED)
     val identity = RequestIdentity(r.long(), r.long(), r.long(), r.long(), r.long(), r.long(), r.long())
     val suggestions = List(r.count(4)) { r.text() }
     val length = r.int(); val correction = if (length == -1) null else r.text(length)

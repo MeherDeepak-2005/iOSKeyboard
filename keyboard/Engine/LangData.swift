@@ -26,6 +26,8 @@ nonisolated final class IncrementalDecodeSession {
 	private var previousPrevious: [Double]
 	private var scratch: [Double]
 	private(set) var typed: [UInt8] = []
+	/// Touch evidence each retained column was computed with (mirrors IncrementalSearch.cpp).
+	private var appliedTaps: [KeyTap?] = []
 	private let nativeSearchComparison: KBIncrementalSearch?
 	private let nativeSearchPrimary: KBIncrementalSearch?
 	let backend: DecoderCoreBackend
@@ -145,9 +147,17 @@ nonisolated final class IncrementalDecodeSession {
 			bytes.allSatisfy({ ($0 >= UInt8(ascii: "a") && $0 <= UInt8(ascii: "z"))
 				|| $0 == KB.apostrophe }) else { return false }
 		let tapRow = taps?.count == bytes.count ? taps : nil
-		if bytes.count < typed.count || !bytes.starts(with: typed) {
+		// Reuse a retained prefix only if it was computed from the same touches; retyping
+		// the same letters at new positions must not keep stale costs.
+		let prefixTapsMatch = (0..<min(bytes.count, typed.count)).allSatisfy { i in
+			let tap = tapRow?[i], old = appliedTaps[i]
+			if let tap, let old { return tap.dx == old.dx && tap.dy == old.dy }
+			return tap == nil && old == nil
+		}
+		if bytes.count < typed.count || !bytes.starts(with: typed) || !prefixTapsMatch {
 			resetRows()
 			typed.removeAll(keepingCapacity: true)
+			appliedTaps.removeAll(keepingCapacity: true)
 		}
 		for index in typed.count..<bytes.count {
 			append(bytes[index], tap: tapRow?[index])
@@ -259,6 +269,7 @@ nonisolated final class IncrementalDecodeSession {
 		swap(&previousPrevious, &previous)
 		swap(&previous, &scratch)
 		typed.append(byte)
+		appliedTaps.append(tap)
 	}
 #endif
 }
@@ -831,9 +842,6 @@ nonisolated final class LangData {
 		}
 		return best
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=PackedLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
-	func trieHasPrefix(_ lw: String) -> Bool { trieNode(for: Array(lw.utf8)) != nil }
 	// MIGRATION: planned CPP_CORE | stage=search | target=PackedLexicon
 	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func trieWordID(_ lw: String) -> Int32? {

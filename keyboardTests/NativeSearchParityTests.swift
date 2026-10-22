@@ -261,7 +261,8 @@ struct NativeSearchParityTests {
                 #expect(session.nativeParityFailure == nil, "\(session.nativeParityFailure ?? "") word=\(word)")
             }
         }
-        // Mismatched taps fall back exactly as before, including append-only reuse.
+        // Mismatched taps fall back exactly as before. A changed surviving tap rebuilds
+        // the retained prefix in both implementations (no append-only reuse of stale costs).
         _ = session.advance(to: "then", taps: [KeyTap(dx: 0.2, dy: 0.1)])
         _ = session.candidates(maxCost: 3.6)
         #expect(session.nativeParityFailure == nil)

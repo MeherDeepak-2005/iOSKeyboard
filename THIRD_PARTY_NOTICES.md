@@ -75,15 +75,31 @@ and serializes it into a memory-mapped trie with frequency and language-model da
 - Source: https://github.com/hermitdave/FrequencyWords
 - License: https://creativecommons.org/licenses/by-sa/4.0/
 
-## Tatoeba English CC0 Sentences
+## Tatoeba English Sentences
 
-The bi- and trigram counts in `keyboard/langdata.bin` are derived from the English
-CC0-only Tatoeba sentence export snapshot vendored at
-`tools/data/tatoeba-eng-cc0-2026-07-18.tsv.bz2`. Glyph lowercases and tokenizes the
-sentences, counts bounded context tables, and does not ship sentence text in the app.
+The bi- and trigram counts in `keyboard/langdata.bin` are derived in part from every
+English sentence in the Tatoeba export snapshot dated October 20, 2026, vendored at
+`tools/data/tatoeba-eng-2026-10-20.tsv.bz2` (2,039,120 sentences). Glyph lowercases and
+tokenizes the sentences and ships only aggregate, pruned counts, never sentence text.
+Tatoeba sentences are licensed under Creative Commons Attribution 2.0 France; a
+subset is additionally dedicated to the public domain under CC0. Copyright in each
+sentence belongs to its Tatoeba contributor.
 
 - Source: https://tatoeba.org/en/downloads
-- Public-domain dedication: https://creativecommons.org/publicdomain/zero/1.0/
+- License: https://creativecommons.org/licenses/by/2.0/fr/
+
+The earlier CC0-only snapshot `tools/data/tatoeba-eng-cc0-2026-07-18.tsv.bz2` is kept
+so `tools/build_language_data.py --legacy-ngrams` can reproduce the previous pack.
+
+## WikiText-103
+
+The bi- and trigram counts in `keyboard/langdata.bin` are also derived from the raw
+training split of WikiText-103 (Merity et al., 2016), built from verified Good and
+Featured Wikipedia articles, at Hugging Face dataset revision
+`b08601e04326c79dfdd32d625aee71d232d685c3`. Only aggregate, pruned counts are shipped.
+
+- Source: https://huggingface.co/datasets/Salesforce/wikitext
+- License: https://creativecommons.org/licenses/by-sa/3.0/
 
 ## AI4Bharat Aksharantar Telugu
 

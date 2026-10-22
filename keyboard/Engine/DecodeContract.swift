@@ -6,8 +6,6 @@ import Foundation
 // MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 enum DecodeModelTier: String, Codable, Equatable {
 	case ngram
-	case neuralW8
-	case neuralW8A8
 	case neuralGRU
 }
 
@@ -90,9 +88,9 @@ struct DecodeCandidateEvidence: Equatable {
 	}
 }
 
-/// Runtime seam for an iOS 18 stateful model. Implementations must score only the
-/// supplied bounded continuation set, never perform full neural beam search on the
-/// host-insertion path, and must return on their own queue.
+/// Scoring half of the neural-search-space model: exact complete-word log probabilities
+/// for the hypotheses the search produced. Implementations must score only the supplied
+/// bounded set, never run on the host-insertion path, and must return on their own queue.
 // MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
 // MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 protocol NeuralLanguagePrior: AnyObject {
@@ -170,8 +168,9 @@ protocol SearchPriorProvider: AnyObject {
 	func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]?
 }
 
-/// One model supplies both generation and exact candidate scoring. A separate
-/// transformer rescorer remains optional; the GRU must work without it.
+/// One model supplies both generation and exact candidate scoring — the neural search space.
+/// There is no separate rescoring model: hypotheses are ranked by the same scores that
+/// guided the search.
 // MIGRATION: planned SWIFT_IOS | stage=platform | target=IOSPlatform
 // MIGRATION-NOTE: Retain the Swift boundary, persistence and platform behavior; export immutable snapshots where the portable core needs data.
 protocol NeuralSearchPrior: SearchPriorProvider, NeuralLanguagePrior {

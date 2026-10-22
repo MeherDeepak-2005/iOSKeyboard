@@ -148,7 +148,6 @@ NS_ASSUME_NONNULL_BEGIN
     snapshot:(KBGenerationSnapshot *)snapshot;
 - (instancetype)init NS_UNAVAILABLE;
 - (BOOL)containsWord:(NSString *)word;
-- (BOOL)isBlockedWord:(NSString *)word;
 @end
 
 @interface KBCandidateGenerator : NSObject
@@ -291,8 +290,6 @@ NS_ASSUME_NONNULL_BEGIN
     gate:(double)gate shouldCancel:(nullable BOOL (^)(void))cancel NS_SWIFT_NAME(augment(beam:lexicon:points:contextWords:dynamicWords:gate:shouldCancel:));
 + (NSArray<KBScoredRow *> *)rankCandidates:(NSArray<KBChannelCandidate *> *)rows lexicon:(KBGenerationLexicon *)lexicon
     language:(NSData *)language safety:(NSArray<NSNumber *> *)safety sigma:(double)sigma dwell:(NSData *)dwell NS_SWIFT_NAME(rank(rows:lexicon:language:safety:sigma:dwell:));
-+ (NSArray<NSString *> *)dynamicWords:(NSArray<NSString *> *)supplementary counts:(NSArray<NSNumber *> *)supplementaryCounts
-    personal:(NSArray<NSString *> *)personal counts:(NSArray<NSNumber *> *)personalCounts limit:(NSUInteger)limit;
 @end
 NS_ASSUME_NONNULL_END
 NS_ASSUME_NONNULL_BEGIN
@@ -306,8 +303,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)wordFromIDs:(NSArray<NSNumber *> *)ids;
 @end
 @interface KBNeuralMath : NSObject
-+ (nullable NSArray<NSNumber *> *)logProbabilities:(NSArray<NSNumber *> *)values;
-+ (double)boundary:(NSArray<NSNumber *> *)values continuation:(NSArray<NSNumber *> *)continuation;
 + (NSArray<NSNumber *> *)top:(NSArray<NSNumber *> *)values count:(NSUInteger)count allowed:(NSArray<NSNumber *> *)allowed;
 @end
 NS_ASSUME_NONNULL_END
@@ -404,8 +399,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)releaseKeep:(NSString *)word;
 - (BOOL)kept:(NSString *)word;
 - (NSInteger)count:(NSString *)word;
-- (NSInteger)confirmationCount:(NSString *)word;
-- (NSUInteger)diversity:(NSString *)word limit:(NSUInteger)limit;
 - (BOOL)prune;
 - (BOOL)allowsAdoption:(NSString *)word count:(NSInteger)count lexicon:(KBGenerationLexicon *)lexicon;
 @end

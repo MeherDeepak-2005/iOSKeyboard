@@ -40,9 +40,13 @@ void Personalization::mutate() { ++revision_; if (counts_.use_count() != 1) coun
 void Personalization::reset(std::uint64_t epoch) { ++revision_; counts_ = std::make_shared<PersonalCounts>(); confirmed_.clear(); recent_.clear(); kept_.clear(); epoch_ = epoch; }
 void Personalization::install(PersonalizationSnapshot snapshot) { reset(snapshot.epoch); counts_ = std::make_shared<PersonalCounts>(std::move(snapshot.counts)); confirmed_ = std::move(snapshot.confirmed); }
 void Personalization::learn(std::span<const std::string> context, std::string word) {
+    if (word.empty() || word.size() > maxPersonalWordBytes) return;
     mutate(); increment(counts_->unigram[word]);
-    if (!context.empty()) bump(counts_->bigram[context.back()], word);
-    if (context.size()>=2) bump(counts_->trigram[context[context.size()-2]+" "+context.back()], word);
+    if (!context.empty() && context.back().size() <= maxPersonalContextBytes) bump(counts_->bigram[context.back()], word);
+    if (context.size()>=2) {
+        auto key = context[context.size()-2]+" "+context.back();
+        if (key.size() <= maxPersonalContextBytes) bump(counts_->trigram[key], word);
+    }
     recent_.push_back({{context.begin(),context.end()},std::move(word)}); if(recent_.size()>64) recent_.erase(recent_.begin());
 }
 void Personalization::demote(std::string_view word) {
@@ -55,6 +59,7 @@ void Personalization::demote(std::string_view word) {
     if(context.size()>=2)down(counts_->trigram,context[context.size()-2]+" "+context.back(),word);
 }
 void Personalization::confirm(std::string word) {
+    if (word.empty() || word.size() > maxPersonalWordBytes) return;
     confirmed_[word]=std::min<std::int64_t>(confirmed_[word]+1,8); kept_.insert(std::move(word));
     if(confirmed_.size()>512){for(auto& [key,count]:confirmed_){(void)key;count=count>=2?count-1:0;}std::erase_if(confirmed_,[](const auto& e){return e.second==0;});}
 }

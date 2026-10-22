@@ -77,7 +77,11 @@ DecodeOutput EngineSession::decode(const DecodeInput& input, const EngineView& v
     auto length = input.characterOffsets.empty() ? typed.size() : input.characterOffsets.size() - 1;
     auto t = Clock::now();
     std::optional<std::vector<ChannelCandidate>> retained;
-    if (typed.size() >= 5 && engine_->packed_ && engine_->packed_->hasTrie()) {
+    // Retained search accepts only a-z and apostrophes. Reject other input before
+    // building a ~24k-seed set that advanceNormalized would discard every keystroke.
+    const bool retainable = std::all_of(typed.begin(), typed.end(), [](unsigned char c) { return (c >= 'a' && c <= 'z') || c == apostrophe; });
+    if (!retainable) search_.reset();
+    if (retainable && typed.size() >= 5 && engine_->packed_ && engine_->packed_->hasTrie()) {
         auto first = std::uint8_t(typed.front());
         const auto tap = input.taps.empty() ? std::nullopt : input.taps.front();
         const bool sameSeedTap = tap.has_value() == seedTap_.has_value() && (!tap || (tap->dx == seedTap_->dx && tap->dy == seedTap_->dy));
@@ -154,7 +158,7 @@ std::vector<RankedRow> EngineSession::updateGlide(std::span<const Point> path, c
         std::span<const std::string> dynamic, const CancellationToken* token) {
     if (token && token->cancelled()) return {};
     if (!glide_) beginGlide({});
-    if (!glide_->consume(path, layout)) return {};
+    if (!glide_->consume(path, layout)) throw GlideInvalidated();
     if (glide_->needsAugmentation) {
         auto next = glide_->empty() ? nextWords(glideContext_, view, 48) : std::vector<std::string>{};
         glide_->augment(view.lexicon, next, dynamic);

@@ -100,7 +100,7 @@ existing normal-radius equivalence tests separately.
 
 ### P1: define one complete-word score
 
-**Files:** `keyboard/Engine/CoreMLNeuralLanguagePrior.swift`,
+**Files:** `keyboard/Engine/GRULanguagePrior.swift`,
 `tools/lm/generate_next_words.py`, `tools/lm/export_gru_score_coreml.py`.
 
 **Problem:** generation includes a word-boundary probability; `rankPool` rescoring
@@ -157,8 +157,9 @@ before their neural evidence affects selection.
 **Implementation:** carry exact neural scores and source evidence with generated
 candidates. Define a consistent combined spatial/LM objective and use it for
 candidate admission and final ranking. Keep the typed row and safety policies.
-Evaluate interpolation on a separate development set. A second transformer should
-be an optional measured experiment, not a prerequisite for making the GRU useful.
+Evaluate interpolation on a separate development set. The design is a neural
+search space: there is no second rescoring model, and the transformer rescorer
+has been removed.
 
 **Acceptance:** an engine-level test must demonstrate generation and selection
 with only the GRU search role configured. Add an ablation where a neural candidate
@@ -167,7 +168,7 @@ boundary decisions still agree.
 
 ### P2: remove accidental shortlist losses
 
-**Files:** `keyboard/Engine/CoreMLNeuralLanguagePrior.swift`, `Keyboardengine.swift`.
+**Files:** `keyboard/Engine/GRULanguagePrior.swift`, `Keyboardengine.swift`.
 
 - Apply legal-token/first-letter constraints before selecting top beam extensions.
   Test a compatible token ranked below the original global top eight.
@@ -184,7 +185,7 @@ boundary decisions still agree.
 
 ### P2: add cancellation, epochs, and readiness semantics
 
-**Files:** `keyboard/Engine/CoreMLNeuralLanguagePrior.swift`,
+**Files:** `keyboard/Engine/GRULanguagePrior.swift`,
 `Keyboardengine.swift`, `DecodeContract.swift`.
 
 **Problems:** per-key deduplication does not bound queued prefix work. Cache keys
@@ -213,7 +214,7 @@ constraints, changed adopted vocabulary, and completion after a field switch.
 ### P2: decode hypothesized boundaries with recurrent state
 
 **Files:** `keyboard/Engine/Keyboardengine.swift`, `DecodeContract.swift`,
-`CoreMLNeuralLanguagePrior.swift`.
+`GRULanguagePrior.swift`.
 
 **Problem:** `splitCandidate` selects one exact dictionary pair. It does not retain
 competing segmentations, correct both component words jointly, or condition neural
@@ -254,8 +255,8 @@ Compare against the existing split heuristic and retain correct-input safeguards
 **Files:** `keyboardTests/keyboardTests.swift`, `tools/evaluation/`,
 `tools/lm/benchmarks/`.
 
-The existing GRU tier test injects a rescorer, whereas the default internal GRU
-configuration installs a search prior. Direct trie tests do not establish that
+The engine tier test now installs the model as a search prior, matching the
+default internal GRU configuration. Direct trie tests do not establish that
 the engine uses neural recovery. The committed transformer results are not evidence
 for the new GRU generation path.
 
@@ -267,7 +268,6 @@ Create an explicit evaluation matrix:
 | N-gram-funded recovery | Isolate trie-budget heuristic effects |
 | GRU generation with baseline ranking | Measure generation recall independently |
 | GRU generation with consistent neural ranking | Measure the complete neural path |
-| Optional GRU plus transformer | Test whether a second model earns its cost |
 
 Use a development split for tuning and an untouched, user-separated blind test set.
 Include already-correct input, real-word typos, severe typos, rare/personal words,
@@ -281,7 +281,7 @@ size. Declare acceptance thresholds before examining blind results.
 
 ### P2: make multilingual scope match runtime behavior
 
-**Files:** `tools/lm/multilingual/README.md`, `CoreMLNeuralLanguagePrior.swift`,
+**Files:** `tools/lm/multilingual/README.md`, `GRULanguagePrior.swift`,
 `Keyboardengine.swift`, language-pack builders.
 
 The mixed-corpus pipeline is groundwork, not a completed multilingual decoder.
@@ -373,7 +373,7 @@ Outstanding:
    runtime plumbing but cannot establish quality or trained-artifact compatibility.
 2. Reconcile local-only main commits deliberately before replacing that branch.
 3. Run paired, user-separated ablations: shipping n-gram; n-gram funding;
-   neural funding; GRU-only ranking; combined transformer ranking; multiword beam.
+   neural funding; GRU-only ranking; multiword beam.
    Capture oracle recall before/after caps, top-1/top-3, false corrections,
    suggestion/commit agreement, and each error/register slice. No result is claimed.
 4. Physical-device latency, peak memory, energy/thermal and jetsam measurements.

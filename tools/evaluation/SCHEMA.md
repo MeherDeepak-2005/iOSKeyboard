@@ -86,7 +86,7 @@ xcodebuild -project keyboard.xcodeproj -scheme keyboard -configuration Release \
 ```
 
 Without trained artifacts, the report explicitly records the neural mode as
-unavailable. To compare a real scorer, create
+unavailable. To compare a real neural search model, create
 `/tmp/ioskeyboard-severe-benchmark-config.json` with absolute paths:
 
 ```json
@@ -98,12 +98,11 @@ unavailable. To compare a real scorer, create
 }
 ```
 
-`scoreModel` is optional. Use `kind: "transformer"` with a matching transformer
-package and runtime binary tokenizer for the W8 route. Compiled `.mlmodelc` step
-or transformer models are accepted too. The scorer is injected directly; no
-neural generation prior is installed. GRU-tier decoding still uses its tier's
-candidate-cap and multiword behavior, so that comparison is an end-to-end mode
-comparison rather than a fixed-pool reranking experiment. Model load and engine
+`scoreModel` is optional, and a compiled `.mlmodelc` step model is accepted too.
+`gru` is the only supported kind: the model is installed as the engine's neural
+search space, so it both generates hypotheses inside the trie search and scores
+them, with the GRU tier's candidate-cap and multiword behavior. There is no
+separate rescoring model, so the comparison is end-to-end n-gram versus NSS. Model load and engine
 synchronous construction are outside the reported decode timers. The first
 decode includes queued engine initialization (lexicon/personalization/index warmup);
 warm decodes are reported separately. Simulator timing and RAM

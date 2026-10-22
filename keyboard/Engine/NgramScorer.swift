@@ -274,7 +274,9 @@ final class SwiftNgramScorer {
         if smoothing == .wittenBell {
             let n = Double(hit.total), t = Double(hit.entries.count)
             let weight = n / (n + t) * n / (n + 8)
-            return Context(total: n, discountMass: n * (1 - weight),
+            // Pruned contexts send their unretained mass to the backoff (matches LanguageModel.cpp).
+            let retained = Double(min(hit.entries.reduce(0) { $0 + $1.count }, hit.total))
+            return Context(total: n, discountMass: n - weight * retained,
                 counts: Dictionary(uniqueKeysWithValues: hit.entries.map { ($0.word, weight * Double($0.count)) }))
         }
         // Fixed prototype strength=8; no fitting against validation outcomes.

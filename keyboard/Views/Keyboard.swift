@@ -128,12 +128,12 @@ final class KeyboardView: UIView {
 	/// this revision in decode requests so no touch model survives a geometry change.
 	var onGeometryChange: (() -> Void)?
 	var onOpenMedia: ((KlipyKind) -> Void)?
-	/// The suggestion strip's clipboard icon was tapped. The controller captures the
+	/// Clipboard was selected in the tools row. The controller captures the
 	/// pasteboard (once, explicitly) and calls back into `showClipboard(hasFullAccess:)`.
 	var onOpenClipboard: (() -> Void)?
 	/// A history row was picked in the clipboard panel.
 	var onClipboardPick: ((String) -> Void)?
-	/// The "Paste" offer in the suggestion strip was tapped (empty field + fresh copy).
+	/// The explicit Paste current clipboard action in the clipboard panel was tapped.
 	var onPaste: (() -> Void)?
 
 	/// Set to the tapped key's landing offset for the duration of `key.action()`, so
@@ -158,6 +158,7 @@ final class KeyboardView: UIView {
 	private var mediaView: MediaPanelView?
 	private var clipboardView: ClipboardPanelView?
 	private var mediaSearchHeader: EmojiSearchHeader?
+	private var mediaSearchStrip: MediaSearchStrip?
 	private var isMediaSearching = false
 	private var mediaQuery = ""
 	private var mediaSearchKind: KlipyKind = .gifs
@@ -240,7 +241,10 @@ final class KeyboardView: UIView {
 	/// enough to tell a deliberate swipe from a jittery tap. Tuned for real hands in P5.
 	private var glideThreshold: CGFloat { unitPitch * 0.85 }
 
-	private let stripHeight: CGFloat = 44       // full minimum touch target for suggestions
+	/// iOS 26 hosts extensions inside its glass keyboard container and reserves ~16pt
+	/// above our view for the container's rounded top, which we can neither draw in
+	/// nor shrink. A 32pt strip brings rim-to-keys to ~52pt, against stock's ~51.
+	private let stripHeight: CGFloat = 32
 	/// Telugu legends are drawn smaller and the rows shorter: the script's glyphs read
 	/// large and the deck carries ~5 glyph rows, so at Latin size it towers over stock.
 	private static let teluguGlyphScale: CGFloat = 0.6
@@ -275,8 +279,10 @@ final class KeyboardView: UIView {
 		(isEmojiSearching || isMediaSearching) ? EmojiSearchHeader.height : stripSpace
 	}
 
-	/// Reserved for a browsing overlay without changing key geometry.
-	private var expansionSpace: CGFloat { 0 }
+	/// Extra height for browsing overlays, without changing key geometry. The GIF and
+	/// sticker grid gets ~2.5 GIF rows / 3 sticker rows instead of a cramped 1.5.
+	private static let mediaExpansion: CGFloat = 88
+	private var expansionSpace: CGFloat { page == .media ? Self.mediaExpansion : 0 }
 
 	private var keyRowCount: Int {
 		guard languageMode == .telugu,
@@ -335,8 +341,15 @@ final class KeyboardView: UIView {
 		addSubview(suggestionBar)
 		suggestionBar.isHidden = !showsSuggestions    // start collapsed until the host is known
 		suggestionBar.onPick = { [weak self] in self?.onPickSuggestion?($0) }
-		suggestionBar.onOpenClipboard = { [weak self] in self?.onOpenClipboard?() }
-		suggestionBar.onPaste = { [weak self] in self?.onPaste?() }
+        suggestionBar.onSelectTool = { [weak self] tool in
+            guard let self else { return }
+            switch tool {
+            case .clipboard: self.onOpenClipboard?()
+            case .emoji: self.showEmoji()
+            case .gifs: self.onOpenMedia?(.gifs)
+            case .stickers: self.onOpenMedia?(.stickers)
+            }
+        }
 		reload()
 	}
 	required init?(coder: NSCoder) { fatalError() }
@@ -365,10 +378,7 @@ final class KeyboardView: UIView {
 		suggestionBar.setSuggestions(s, typedPrefix: typedPrefix, highlightPrimary: highlightPrimary)
 	}
 
-	/// Show/hide the strip's "Paste" offer (metadata-driven; the controller decides when).
-	func setPasteOffer(_ show: Bool) {
-		suggestionBar.setPasteOffer(show)
-	}
+    func dismissTools() { suggestionBar.dismissTools() }
 
 	func setGlidePreview(_ word: String?, alternatives: [String] = [],
 		confident: Bool = true) {
@@ -420,7 +430,23 @@ final class KeyboardView: UIView {
 	func setActionTitle(_ title: String?) {
 		guard title != actionTitle else { return }
 		actionTitle = title
+		applyActionKeyState()
+	}
+
+	func setActionEnabled(_ enabled: Bool) {
+		actionEnabled = enabled
+		applyActionKeyState()
+	}
+
+	/// Media search owns the action key: it reads "search" and stays enabled whatever
+	/// the host says — an empty message field (WhatsApp) disables return, which would
+	/// otherwise make a GIF/sticker query impossible to submit.
+	private var displayedActionTitle: String? { isMediaSearching ? "search" : actionTitle }
+	private var displayedActionEnabled: Bool { isMediaSearching || actionEnabled }
+
+	private func applyActionKeyState() {
 		guard let actionKey else { return }
+		let title = displayedActionTitle
 		if let title, !title.isEmpty {
 			actionKey.setTitle(title)
 			actionKey.accessibilityLabel = title
@@ -428,11 +454,8 @@ final class KeyboardView: UIView {
 			actionKey.setSymbol("return")
 			actionKey.accessibilityLabel = "Return"
 		}
-	}
-
-	func setActionEnabled(_ enabled: Bool) {
-		actionEnabled = enabled
-		actionKey?.setInputEnabled(enabled)
+        actionKey.setActionAppearance(active: title?.isEmpty == false, theme: theme)
+		actionKey.setInputEnabled(displayedActionEnabled)
 	}
 
 	/// Apply host input traits without reconstructing the whole controller. Returning
@@ -524,6 +547,7 @@ final class KeyboardView: UIView {
 		suggestionBar.isHidden = true
 		let panel = ClipboardPanelView(theme: theme, showsGlobe: showsGlobe, hasFullAccess: hasFullAccess)
 		panel.onPick = { [weak self] in self?.onClipboardPick?($0) }
+        panel.onPasteCurrent = { [weak self] in self?.onPaste?() }
 		panel.onABC = { [weak self] in self?.hideClipboard() }
 		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
 		addSubview(panel)
@@ -552,20 +576,29 @@ final class KeyboardView: UIView {
 		shift = .off
 		suggestionBar.isHidden = true
 		let header = EmojiSearchHeader(theme: theme)
-		header.placeholder = "Search \(kind.displayName.lowercased())"
+		header.placeholder = kind == .gifs ? "Search GIFs" : "Search stickers"
+		// The header's own emoji results row stays empty; the media strip owns that row.
+		header.emptyStatus = ""
+		header.noResultsStatus = ""
 		header.onCancel = { [weak self] in self?.exitMediaSearch(submit: false) }
 		header.onClear = { [weak self] in self?.mediaQuery = ""; self?.refreshMediaSearch() }
 		addSubview(header)
 		mediaSearchHeader = header
+		let strip = MediaSearchStrip(theme: theme, kind: kind, hasFullAccess: mediaHasFullAccess)
+		addSubview(strip)
+		mediaSearchStrip = strip
 		reload(); refreshMediaSearch(); onHeightChange?(); setNeedsLayout()
 	}
 
 	private func refreshMediaSearch() {
 		mediaSearchHeader?.update(query: mediaQuery, results: [], showingRecents: true)
+		mediaSearchStrip?.search(mediaQuery)
 	}
 
 	private func tearDownMediaSearch() {
 		mediaSearchHeader?.removeFromSuperview(); mediaSearchHeader = nil
+		mediaSearchStrip?.prepareForDismissal()
+		mediaSearchStrip?.removeFromSuperview(); mediaSearchStrip = nil
 		isMediaSearching = false
 	}
 
@@ -670,6 +703,7 @@ final class KeyboardView: UIView {
 	// While emoji search is active the deck's keys edit the query; otherwise they
 	// pass straight through to the controller. All key actions route through these.
 	private func routeInsert(_ s: String, _ tap: KeyTap?) {
+        suggestionBar.dismissTools()
 		if isEmojiSearching {
 			emojiQuery += s.lowercased()
 			refreshEmojiSearch()
@@ -683,13 +717,15 @@ final class KeyboardView: UIView {
 		onInsert?(s, tap)
 	}
 	private func routeOutput(_ output: KeyOutput, _ tap: KeyTap?) {
-		if isEmojiSearching {
+        suggestionBar.dismissTools()
+		if isEmojiSearching || isMediaSearching {
 			if case .text(let text) = output { routeInsert(text, tap) }
 			return
 		}
 		onKeyOutput?(output, tap)
 	}
 	private func routeDelete() {
+        suggestionBar.dismissTools()
 		if isEmojiSearching {
 			// A live query: delete edits the query, never the host document.
 			if !emojiQuery.isEmpty { emojiQuery.removeLast(); refreshEmojiSearch(); return }
@@ -702,6 +738,7 @@ final class KeyboardView: UIView {
 		onDelete?()
 	}
 	private func routeReturn() {
+        suggestionBar.dismissTools()
 		if isEmojiSearching { exitEmojiSearch(backToEmoji: true); return }
 		if isMediaSearching { exitMediaSearch(submit: true); return }
 		onReturn?()
@@ -750,6 +787,8 @@ final class KeyboardView: UIView {
 		} else if isMediaSearching {
 			mediaSearchHeader?.frame = CGRect(x: 0, y: 0, width: bounds.width,
 				height: EmojiSearchHeader.height)
+			// Over the header's second (results) row: 44pt search row + 48pt results.
+			mediaSearchStrip?.frame = CGRect(x: 6, y: 44, width: max(0, bounds.width - 12), height: 48)
 		} else {
 			suggestionBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: stripSpace)
 		}
@@ -760,14 +799,36 @@ final class KeyboardView: UIView {
 		let deckOriginX = (bounds.width - W) / 2
 		let unit = max(1, (W - keySpacing*9)/10)
 		unitPitch = unit + keySpacing            // grid-unit scale for tap offsets
-		let wide = unit*1.5 + keySpacing/2
-		let retW = unit*2 + keySpacing
+		// Where Z…M start: half a key in from the A…L row's own half-key indent.
+		let letterInset = unit*1.5 + keySpacing/2
+		// Stock proportions (393pt: shift/delete 44, 123/emoji 42.5, return 91.6).
+		let modifierW = unit * KeyWidth.modifierUnits
 		func fixed(_ k: KeyWidth) -> CGFloat {
-			switch k { case .unit: return unit; case .wide: return wide; case .ret: return retW; case .flex: return 0 }
+			switch k {
+			case .unit: return unit
+			case .modifier: return modifierW
+			case .utility: return unit * KeyWidth.utilityUnits
+			case .ret: return unit * KeyWidth.returnUnits
+			case .flex: return 0
+			}
 		}
 
 		var y = headerSpace + topPad
 		for row in rows {
+            // Keep Z…M on the existing ten-unit letter grid. Narrowing just the
+            // edge caps must not move letter centers or the glide/touch model.
+            if row.count == 9, row.first?.isShift == true,
+                row.dropFirst().dropLast().allSatisfy({ $0.letterBase != nil }) {
+                row[0].frame = CGRect(x: deckOriginX, y: y, width: modifierW, height: rowHeight)
+                for (index, key) in row.dropFirst().dropLast().enumerated() {
+                    key.frame = CGRect(x: deckOriginX + letterInset + keySpacing + CGFloat(index) * unitPitch,
+                        y: y, width: unit, height: rowHeight)
+                }
+                row[8].frame = CGRect(x: deckOriginX + W - modifierW, y: y,
+                    width: modifierW, height: rowHeight)
+                y += rowHeight + rowSpacing
+                continue
+            }
 			let flexCount = row.filter { $0.widthKind == .flex }.count
 			let fixedSum = row.reduce(0) { $0 + fixed($1.widthKind) }
 			let gaps = keySpacing * CGFloat(max(0, row.count - 1))
@@ -1323,6 +1384,9 @@ final class KeyboardView: UIView {
 		var bestDist = CGFloat.greatestFiniteMagnitude
 		for key in row {
 				let f = key.frame
+                // Modifier caps own their whole visible rectangle. Letter priors
+                // can arbitrate the gutters but cannot steal a deliberate Delete.
+                if key.widthKind == .modifier, f.contains(p) { return key }
 				// Authoritative inner core: a tap solidly inside a key ALWAYS returns it,
 				// so LM target-resizing can only ever affect edge and gap taps — the
 				// keyboard never feels like it's fighting a deliberate press.
@@ -1374,7 +1438,7 @@ final class KeyboardView: UIView {
 		}
 		shiftKey = all.first { $0.isShift }
 		actionKey = all.first { $0.role == .accent }
-		actionKey?.setInputEnabled(actionEnabled)
+		applyActionKeyState()
 		var orderedAccessibilityElements: [Any] = [suggestionBar]
 		for row in rows { orderedAccessibilityElements.append(contentsOf: row) }
 		accessibilityElements = orderedAccessibilityElements
@@ -1398,6 +1462,8 @@ final class KeyboardView: UIView {
 	func keyAccessibilityLabels() -> [String] {
 		rows.flatMap { $0 }.compactMap(\.accessibilityLabel)
 	}
+
+    func keyLabelForTesting(at point: CGPoint) -> String? { key(at: point)?.accessibilityLabel }
 
 	func keyFramesForTesting() -> [CGRect] {
 		rows.flatMap { $0 }.map(\.frame)
@@ -1475,32 +1541,35 @@ final class KeyboardView: UIView {
 
 	private func specs() -> [[KeySpec]] {
 		let del = KeySpec(symbol: "delete.left", accessibilityLabel: "Delete",
-			role: .accentSoft, width: .wide, repeats: true) { [weak self] in self?.routeDelete() }
+			role: .special, width: .modifier, repeats: true) { [weak self] in self?.routeDelete() }
 		let ret: KeySpec = {
-			if let t = actionTitle, !t.isEmpty {
-				return KeySpec(label: t, accessibilityLabel: t, role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
+			if let t = displayedActionTitle, !t.isEmpty {
+				return KeySpec(label: t, accessibilityLabel: t, role: .accent, width: .ret) { [weak self] in self?.routeReturn() }
 			}
 			return KeySpec(symbol: "return", accessibilityLabel: "Return",
-				role: .accent, width: .ret, pill: true) { [weak self] in self?.routeReturn() }
+				role: .accent, width: .ret) { [weak self] in self?.routeReturn() }
 		}()
 		let space = KeySpec(label: "space", accessibilityLabel: "Space", width: .flex,
-			pill: true, isSpace: true) { [weak self] in
+			isSpace: true) { [weak self] in
 			self?.routeInsert(" ", nil)
 			self?.returnToLettersFromSymbolPage()   // stock: space snaps back to ABC from 123/#+=
 		}
-		func switchKey(_ l: String, to t: KeyboardSurfacePage) -> KeySpec {
+		// Bottom-row page switches (123/ABC) are utility width; the #+= / 123 key in
+		// the third symbol row matches delete across from it, as stock does.
+		func switchKey(_ l: String, to t: KeyboardSurfacePage,
+			width: KeyWidth = .utility) -> KeySpec {
 			let spoken = t == .letters ? "Letters" : (t == .numbers ? "Numbers" : "Symbols")
 			return KeySpec(label: l, accessibilityLabel: spoken,
-				role: .special, width: .wide, pill: true) { [weak self] in self?.page = t; self?.reload() }
+				role: .special, width: width) { [weak self] in self?.page = t; self?.reload() }
 		}
 		let emojiKey = KeySpec(symbol: "face.smiling", accessibilityLabel: "Emoji",
-			role: .special, width: .unit, pill: false) { [weak self] in self?.showEmoji() }
+			role: .special, width: .utility) { [weak self] in self?.showEmoji() }
 		func bottom(_ leading: KeySpec, extras: [KeySpec] = [],
 			trailingExtras: [KeySpec] = []) -> [KeySpec] {
 			var r = [leading]
 			if showsGlobe {
 				r.append(KeySpec(symbol: "keyboard", accessibilityLabel: "Next Keyboard",
-					role: .special, width: .unit, pill: true, isInputModeSwitch: true) { [weak self] in self?.onNextKeyboard?() })
+					role: .special, width: .utility, isInputModeSwitch: true) { [weak self] in self?.onNextKeyboard?() })
 			}
 			r.append(emojiKey)
 			r.append(contentsOf: extras)
@@ -1510,7 +1579,7 @@ final class KeyboardView: UIView {
 			return r
 		}
 		let shiftKey = KeySpec(symbol: shiftSymbol, accessibilityLabel: "Shift",
-			role: .accentSoft, width: .wide, isShift: true) { [weak self] in
+			role: .special, width: .modifier, isShift: true) { [weak self] in
 			guard let self else { return }
 			let now = ProcessInfo.processInfo.systemUptime
 			let isDoubleTap = now - self.lastShiftTapAt <= 0.35
@@ -1537,7 +1606,7 @@ final class KeyboardView: UIView {
 				if languageLayout.alternate != nil {
 					let alternateVisible = page == .alternateLetters
 					let toggle = KeySpec(symbol: alternateVisible ? "shift.fill" : "shift",
-						accessibilityLabel: "Shift", role: .accentSoft, width: .wide,
+						accessibilityLabel: "Shift", role: .special, width: .modifier,
 						isShift: true) { [weak self] in
 							guard let self else { return }
 							self.page = alternateVisible ? .letters : .alternateLetters
@@ -1592,21 +1661,21 @@ final class KeyboardView: UIView {
 				return [
 					digits.map(scriptSpec),
 					["-","/",":",";","(",")","₹","&","@","\""].map(charSpec),
-					[switchKey("#+=", to: .symbols)] + [".",",","?","!","'"].map(punct) + [del],
+					[switchKey("#+=", to: .symbols, width: .modifier)] + [".",",","?","!","'"].map(punct) + [del],
 					bottom(switchKey("ABC", to: .letters))
 				]
 			}
 			return [
 				["1","2","3","4","5","6","7","8","9","0"].map(charSpec),
 				["-","/",":",";","(",")","$","&","@","\""].map(charSpec),
-				[switchKey("#+=", to: .symbols)] + [".",",","?","!","'"].map(punct) + [del],
+				[switchKey("#+=", to: .symbols, width: .modifier)] + [".",",","?","!","'"].map(punct) + [del],
 				bottom(switchKey("ABC", to: .letters))
 			]
 		case .symbols:
 			return [
 				["[","]","{","}","#","%","^","*","+","="].map(charSpec),
 				["_","\\","|","~","<",">","€","£","¥","•"].map(charSpec),
-				[switchKey("123", to: .numbers)] + [".",",","?","!","'"].map(punct) + [del],
+				[switchKey("123", to: .numbers, width: .modifier)] + [".",",","?","!","'"].map(punct) + [del],
 				bottom(switchKey("ABC", to: .letters))
 			]
 		case .emoji, .media, .clipboard:
