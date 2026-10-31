@@ -1,3 +1,29 @@
+# Published NSS graph implementation
+
+The active `nss` tier now uses `NeuralFst` and `NeuralFstSearch`, following the
+published UpdateLM/ExtendLM algorithms and thresholds. See
+[`docs/nss-paper/CONFORMANCE.md`](../../docs/nss-paper/CONFORMANCE.md) for the hard
+constraints, explicit local choices, unavailable Gboard components, and comparison.
+The previous `NeuralSearchSpace` scorer remains as an export/reference test utility;
+it no longer drives decoding. The historical description below describes the
+checkpoint implementation, **not the active graph decoder**.
+
+The internal model at `keyboard/nss-english.nsslm` is a four-gate, untied LSTM with
+6,372,332 parameters, initialized by a function-preserving expansion of the frozen
+CIFG step-8000 model. This is not additional training and is not Google's model.
+The original export and reference scores are preserved in `artifacts/`.
+`configs/paper-lstm-96x670.json` is the corresponding configuration for future training.
+Both models retain the same 30k vocabulary and locally trained language behavior.
+
+To reconstruct the expanded export:
+
+```sh
+python3 tools/nss/expand_reference_model.py \
+  tools/nss/artifacts/baseline-step8000.nsslm keyboard/nss-english.nsslm
+```
+
+## Historical checkpoint implementation
+
 # Neural search space (NSS) word language model
 
 The NSS decoder (Gboard, Zhang et al., "Neural Search Space in Gboard Decoder", 2024)
@@ -124,6 +150,6 @@ python3 evaluate.py score nss --vs <n-gram run>
 
 On iOS the model is opt-in (`Config/README.md`): `INTERNAL_NSS_ENABLED=YES` bundles
 it and the `INTERNAL_NSS` Swift condition selects the `nss` tier, so ordinary builds
-stay n-gram-only. Glide still scores with the n-gram. The promotion gates in
+stay n-gram-only. In the checkpoint implementation, Glide still scored with the n-gram. The new graph tier also supplies neural lookahead and word scores to Glide. The promotion gates in
 `tools/lm/README.md` (data rights, blind user-separated evaluation, device latency and
 memory) apply before it ships.

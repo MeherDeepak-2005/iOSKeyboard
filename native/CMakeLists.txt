@@ -13,6 +13,7 @@ add_library(DecoderCore STATIC
     DecoderCore/src/IncrementalSearch.cpp
     DecoderCore/src/LanguageModel.cpp
     DecoderCore/src/Multiword.cpp
+    DecoderCore/src/NeuralFst.cpp
     DecoderCore/src/NeuralLanguageModel.cpp
     DecoderCore/src/NeuralSearch.cpp
     DecoderCore/src/PackedLexicon.cpp
@@ -38,8 +39,20 @@ if(KB_BUILD_TESTS)
     add_test(NAME neural-search COMMAND neural-search-tests)
     add_executable(neural-search-tests tests/NeuralSearchTests.cpp)
     target_link_libraries(neural-search-tests PRIVATE DecoderCore)
+    add_executable(nss-fst-tests tests/NeuralFstTests.cpp)
+    target_link_libraries(nss-fst-tests PRIVATE DecoderCore)
+    add_test(NAME nss-fst COMMAND nss-fst-tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/nss/cifg-tied.nsslm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")
+    add_test(NAME nss-fst-trained COMMAND nss-fst-tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/nss-english.nsslm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")
     add_executable(nss-word-model-tests tests/NeuralLanguageModelTests.cpp)
     target_link_libraries(nss-word-model-tests PRIVATE DecoderCore)
+    add_test(NAME nss-expanded-model-reference COMMAND nss-word-model-tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/nss-english.nsslm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/nss-english.goldens.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")
     foreach(model cifg-tied lstm-untied gru-projected)
         add_test(NAME nss-word-model-${model} COMMAND nss-word-model-tests
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/nss/${model}.nsslm"
@@ -56,6 +69,7 @@ if(KB_BUILD_TESTS)
         target_compile_options(neural-search-tests PRIVATE -UNDEBUG)
         target_compile_options(decoder-core-tests PRIVATE -UNDEBUG)
         target_compile_options(nss-word-model-tests PRIVATE -UNDEBUG)
+        target_compile_options(nss-fst-tests PRIVATE -UNDEBUG)
     endif()
     add_test(NAME decoder-core-parity COMMAND decoder-core-tests
         "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")

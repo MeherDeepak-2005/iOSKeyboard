@@ -18,7 +18,8 @@ std::optional<std::vector<Point>> idealPath(std::string_view word, std::size_t c
 std::optional<double> shapeCost(std::string_view word, std::span<const Point> observed, int band, double direction);
 std::vector<ChannelCandidate> decodeGlide(std::span<const Point> observed, const PackedLexicon& lexicon,
     std::size_t width, int band, double frequency, double direction, double seedRadius, std::size_t window,
-    const std::function<bool()>& cancel);
+    const std::function<bool()>& cancel,
+    const std::function<double(std::size_t)>& languageLookahead = {});
 class GlideResampler {
     double spacing_, distance_ = 0;
     std::optional<Point> last_;

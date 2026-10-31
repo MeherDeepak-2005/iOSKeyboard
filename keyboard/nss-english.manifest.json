@@ -1,0 +1,16 @@
+{
+  "initialization": "function-preserving CIFG expansion; not newly trained",
+  "source_sha256": "814966e17fb56dc8ecad73758f01cd94195e665885373ec4a92f4321e7556638",
+  "sha256": "ef8b999732e6afbc07b69b06feaf3a8170adb90f89923496d32ae8075ea3a9e2",
+  "bytes": 7056928,
+  "parameters": 6372332,
+  "architecture": {
+    "arch": "lstm",
+    "embed": 96,
+    "hidden": 670,
+    "proj": 96,
+    "layers": 1,
+    "cifg": false,
+    "tied": false
+  }
+}

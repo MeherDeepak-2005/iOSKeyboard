@@ -1,0 +1,92 @@
+{
+  "before": [
+    {
+      "id": "three",
+      "s": [
+        "howmanyare"
+      ],
+      "c": null,
+      "ms": 24.5612,
+      "ok": 1
+    },
+    {
+      "id": "three2",
+      "s": [
+        "ia here",
+        "inhere",
+        "iamhere"
+      ],
+      "c": null,
+      "ms": 17.3193,
+      "ok": 1
+    },
+    {
+      "id": "badspace",
+      "s": [
+        "how many",
+        "exactly",
+        "bowman"
+      ],
+      "c": "how many",
+      "ms": 12.3009,
+      "ok": 1
+    },
+    {
+      "id": "typo2",
+      "s": [
+        "honey",
+        "how ny",
+        "hominy"
+      ],
+      "c": "honey",
+      "ms": 12.9715,
+      "ok": 1
+    }
+  ],
+  "after": [
+    {
+      "id": "three",
+      "s": [
+        "howmanyare",
+        "how many are",
+        "how any are"
+      ],
+      "c": null,
+      "ms": 38.7217,
+      "ok": 1
+    },
+    {
+      "id": "three2",
+      "s": [
+        "is here",
+        "i here",
+        "iamhere"
+      ],
+      "c": null,
+      "ms": 22.863,
+      "ok": 1
+    },
+    {
+      "id": "badspace",
+      "s": [
+        "how many",
+        "how any",
+        "how many you"
+      ],
+      "c": "how many",
+      "ms": 13.0584,
+      "ok": 1
+    },
+    {
+      "id": "typo2",
+      "s": [
+        "how many",
+        "how you",
+        "how to"
+      ],
+      "c": "how many",
+      "ms": 8.13092,
+      "ok": 1
+    }
+  ]
+}

@@ -156,7 +156,7 @@ std::optional<double> shapeCost(std::string_view word, std::span<const Point> po
 }
 std::vector<ChannelCandidate> decodeGlide(std::span<const Point> points, const PackedLexicon& lexicon,
         std::size_t width, int band, double frequency, double direction, double seedRadius, std::size_t window,
-        const std::function<bool()>& cancel) {
+        const std::function<bool()>& cancel, const std::function<double(std::size_t)>& languageLookahead) {
     if (!lexicon.hasTrie() || points.size() < 2 || !width || (cancel && cancel())) return {};
     auto observed = resampleN(points, 32); if (observed.size() != 32) return {};
     auto obsTan = direction > 0 ? tangents(observed) : std::vector<Point>{};
@@ -191,7 +191,7 @@ std::vector<ChannelCandidate> decodeGlide(std::span<const Point> points, const P
             }
         } return heap;
     };
-    auto key = [&](double prune, std::size_t node) { return prune - frequency * std::log(double(lexicon.trieRecord(node).maxFrequency) + 1); };
+    auto key = [&](double prune, std::size_t node) { return languageLookahead ? prune - 0.06 * languageLookahead(node) : prune - frequency * std::log(double(lexicon.trieRecord(node).maxFrequency) + 1); };
     struct Seed { std::size_t node; Point p; double d; };
     std::vector<Seed> seeds;
     auto root = lexicon.trieRecord(0);
@@ -199,7 +199,7 @@ std::vector<ChannelCandidate> decodeGlide(std::span<const Point> points, const P
         if (auto p = center(lexicon.trieRecord(node).label)) seeds.push_back({node, *p, distance(*p, observed[0])});
     std::stable_sort(seeds.begin(), seeds.end(), [](const auto& a, const auto& b) { return a.d < b.d; });
     std::vector<Hyp> beam;
-    for (std::size_t i = 0; i < seeds.size(); ++i) { const auto& s = seeds[i]; if (s.d <= seedRadius || i < 4) {
+    for (std::size_t i = 0; i < seeds.size(); ++i) { const auto& s = seeds[i]; if (languageLookahead || s.d <= seedRadius || i < 4) {
         auto path = addPath(s.p, -1); beam.push_back({s.node, 0, s.d, key(s.d, s.node), path}); emit(s.node, path);
     }}
     beam = best(beam);

@@ -37,3 +37,9 @@ for model in "$repo_root/native/tests/fixtures/nss/"*.nsslm "$repo_root/keyboard
   [ -f "$model" ] || continue
   "$work_dir/nss-tests" "$model" "${model%.nsslm}.goldens.json" "$repo_root/keyboard/langdata.bin"
 done
+
+"${CXX:-clang++}" -std=c++20 -Wall -Wextra -Werror -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  "$repo_root/native/DecoderCore/src/"*.cpp \
+  "$repo_root/native/tests/NeuralFstTests.cpp" -o "$work_dir/nss-fst-tests"
+"$work_dir/nss-fst-tests" "$repo_root/keyboard/nss-english.nsslm" "$repo_root/keyboard/langdata.bin"

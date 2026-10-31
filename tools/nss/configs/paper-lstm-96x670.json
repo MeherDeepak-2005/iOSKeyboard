@@ -1,0 +1,29 @@
+{
+  "description": "Paper-sized one-layer LSTM: 30k words, 96 embedding, 670 cells, ~6.4M parameters. Projection 96 and untied output are explicit local choices; the paper does not publish every tensor shape.",
+  "model": {
+    "arch": "lstm",
+    "embed": 96,
+    "hidden": 670,
+    "proj": 96,
+    "cifg": false,
+    "layers": 1,
+    "tied": false,
+    "dropout": 0.0
+  },
+  "data": {
+    "weights": {
+      "tatoeba": 3.0,
+      "wikitext": 0.6
+    }
+  },
+  "train": {
+    "batch": 128,
+    "bptt": 48,
+    "tokens": 130000000,
+    "lr": 0.003,
+    "warmup": 1000,
+    "clip": 1.0,
+    "weight_decay": 0.01,
+    "eval_every": 2000
+  }
+}
