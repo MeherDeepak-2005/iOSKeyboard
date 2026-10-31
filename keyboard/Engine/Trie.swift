@@ -82,22 +82,82 @@ nonisolated final class TrieSearchPrior {
 	func rootChild(_ ch: UInt8) -> PriorNode? { root.child(ch) }
 }
 
+// Shared channel constants must also exist in Release builds.
+nonisolated enum TrieChannelCosts {
+	// The weighted-DP costs and first-letter policy are shared with the static mmap
+	// trie in LangData — both searches must produce byte-identical costs (and the
+	// Python eval harness mirrors them). Internal, not private, for that reason.
+	// Fitted on the tune half of tools/evaluation/autocorrect (27 Oct 2026); must equal
+	// native SpatialModel.hpp. A dropped letter is a common slip, so a deletion costs less
+	// than an extra typed letter.
+	static let insCost = 1.6
+	static let delCost = 1.1
+	/// Adjacent-letter swap ("teh" → "the") — the single most common typo class.
+	/// One cheap operation (OSA / restricted Damerau) instead of two full edits.
+	static let transCost = 0.65
+	/// A doubled letter typed once (posess → possess) or a letter typed twice (excell → excel):
+	/// native `doubledDeletionCost` / `doubledInsertionCost`. Only the same letter on both sides.
+	static let doubledDelCost = 0.3, doubledInsCost = 0.6
+	static let minimumDeletionCost = min(delCost, doubledDelCost)
+	/// A candidate letter the user did not type, after the candidate letter `previous` (0 at the
+	/// start), where the typed letter at that point is `typed` (0 before the first); native `deletionCostAt`.
+	static func deletionCost(_ letter: UInt8, after previous: UInt8, typed: UInt8) -> Double {
+		letter == KB.apostrophe ? KB.apostropheSkipCost
+			: letter == previous && letter == typed ? doubledDelCost : delCost
+	}
+	/// An extra typed letter after the typed letter `previous`, where the candidate letter at that
+	/// point is `candidate` (0 before the first); native `insertionCostAt`.
+	static func insertionCost(_ typed: UInt8, after previous: UInt8, candidate: UInt8) -> Double {
+		typed == previous && typed == candidate ? doubledInsCost : insCost
+	}
+	static let firstLetterPenalty = 2.0             // 5+ letters, first key not adjacent
+	static let adjacentFirstLetterPenalty = 1.0     // 5+ letters, neighbouring first key
+	static let spellingFirstLetterPenalty = 2.0     // 5+ letters, vowel for vowel or c/k/s/z (as other keys)
+	static let swappedFirstLetterPenalty = 0.75
+	static let missingFirstLetterPenalty4 = 0.2, missingFirstLetterPenalty = 1.5
+	static let firstLetterPenalty3 = 0.35, firstLetterPenalty4 = 0.2
+	static func firstLetterPenaltyPolicy(
+		typedLength: Int,
+		candidateFirst: UInt8,
+		typedFirst: UInt8,
+		typedSecond: UInt8 = 0,
+		candidateSecond: UInt8 = 0,
+		spelling: Bool = true
+	) -> Double {
+		guard candidateFirst != typedFirst, typedLength > 2 else { return 0 }
+		let swapped = typedSecond != 0 && candidateFirst == typedSecond && candidateSecond == typedFirst
+		// A dropped first letter (bove → above): the candidate's second letter is the typed first.
+		if typedLength >= 4, !swapped, candidateSecond == typedFirst {
+			return typedLength == 4 ? missingFirstLetterPenalty4 : missingFirstLetterPenalty
+		}
+		if typedLength == 3 { return firstLetterPenalty3 }
+		if typedLength == 4 { return firstLetterPenalty4 }
+		if swapped { return swappedFirstLetterPenalty }
+		// A spelling confusion (vowel for vowel, c/k, c/s, s/z: krust → crust) pays at most
+		// spellingFirstLetterPenalty; row or diagonal neighbours (squared grid distance ≤ 1.3), as native.
+		let other = spelling && KB.spellingConfusion(candidateFirst, typedFirst)
+			? min(firstLetterPenalty, spellingFirstLetterPenalty) : firstLetterPenalty
+		return KB.neighbouringKeys(candidateFirst, typedFirst) ? min(adjacentFirstLetterPenalty, other) : other
+	}
+
+}
+
 /// Native mutable vocabulary façade. The independent Swift implementation is
 /// available only to Debug/test builds and never shadows production mutations.
 nonisolated final class Trie {
     let native = KBMutableTrie()
     let backend: DecoderCoreBackend
-    static let insCost = SwiftTrie.insCost, delCost = SwiftTrie.delCost, transCost = SwiftTrie.transCost,
-        firstLetterPenalty = SwiftTrie.firstLetterPenalty
+    static let insCost = TrieChannelCosts.insCost, delCost = TrieChannelCosts.delCost, transCost = TrieChannelCosts.transCost,
+        firstLetterPenalty = TrieChannelCosts.firstLetterPenalty
     /// A neighbouring key typed before the word (vfell → fell); 3 = off. Native `extraLeadingKeyCost`.
     static let extraLeadingKeyCost = 1.6
     static func deletionCost(_ letter: UInt8, after previous: UInt8, typed: UInt8) -> Double {
-        SwiftTrie.deletionCost(letter, after: previous, typed: typed)
+        TrieChannelCosts.deletionCost(letter, after: previous, typed: typed)
     }
     static func insertionCost(_ typed: UInt8, after previous: UInt8, candidate: UInt8) -> Double {
-        SwiftTrie.insertionCost(typed, after: previous, candidate: candidate)
+        TrieChannelCosts.insertionCost(typed, after: previous, candidate: candidate)
     }
-    static var minimumDeletionCost: Double { SwiftTrie.minimumDeletionCost }
+    static var minimumDeletionCost: Double { TrieChannelCosts.minimumDeletionCost }
 #if DEBUG || KB_REFERENCE_DECODER_YES
     private let reference: SwiftTrie?
 #endif
@@ -112,7 +172,7 @@ nonisolated final class Trie {
     /// Mirrors native `firstLetterPenalty` (SpatialModel.cpp). Pass 0 when a letter is unknown.
     static func firstLetterPenaltyPolicy(typedLength: Int, candidateFirst: UInt8, typedFirst: UInt8,
                                          typedSecond: UInt8 = 0, candidateSecond: UInt8 = 0, spelling: Bool = true) -> Double {
-        SwiftTrie.firstLetterPenaltyPolicy(typedLength: typedLength, candidateFirst: candidateFirst,
+        TrieChannelCosts.firstLetterPenaltyPolicy(typedLength: typedLength, candidateFirst: candidateFirst,
             typedFirst: typedFirst, typedSecond: typedSecond, candidateSecond: candidateSecond, spelling: spelling)
     }
     func insert(_ word: String, freq: Int, id: Int32 = -1) {
@@ -198,62 +258,7 @@ nonisolated final class SwiftTrie {
 		}
 	}
 	private let root = Node()
-	// The weighted-DP costs and first-letter policy are shared with the static mmap
-	// trie in LangData — both searches must produce byte-identical costs (and the
-	// Python eval harness mirrors them). Internal, not private, for that reason.
-	// Fitted on the tune half of tools/evaluation/autocorrect (27 Oct 2026); must equal
-	// native SpatialModel.hpp. A dropped letter is a common slip, so a deletion costs less
-	// than an extra typed letter.
-	static let insCost = 1.6
-	static let delCost = 1.1
-	/// Adjacent-letter swap ("teh" → "the") — the single most common typo class.
-	/// One cheap operation (OSA / restricted Damerau) instead of two full edits.
-	static let transCost = 0.65
-	/// A doubled letter typed once (posess → possess) or a letter typed twice (excell → excel):
-	/// native `doubledDeletionCost` / `doubledInsertionCost`. Only the same letter on both sides.
-	static let doubledDelCost = 0.3, doubledInsCost = 0.6
-	static let minimumDeletionCost = min(delCost, doubledDelCost)
-	/// A candidate letter the user did not type, after the candidate letter `previous` (0 at the
-	/// start), where the typed letter at that point is `typed` (0 before the first); native `deletionCostAt`.
-	static func deletionCost(_ letter: UInt8, after previous: UInt8, typed: UInt8) -> Double {
-		letter == KB.apostrophe ? KB.apostropheSkipCost
-			: letter == previous && letter == typed ? doubledDelCost : delCost
-	}
-	/// An extra typed letter after the typed letter `previous`, where the candidate letter at that
-	/// point is `candidate` (0 before the first); native `insertionCostAt`.
-	static func insertionCost(_ typed: UInt8, after previous: UInt8, candidate: UInt8) -> Double {
-		typed == previous && typed == candidate ? doubledInsCost : insCost
-	}
-	static let firstLetterPenalty = 2.0             // 5+ letters, first key not adjacent
-	static let adjacentFirstLetterPenalty = 1.0     // 5+ letters, neighbouring first key
-	static let spellingFirstLetterPenalty = 2.0     // 5+ letters, vowel for vowel or c/k/s/z (as other keys)
-	static let swappedFirstLetterPenalty = 0.75
-	static let missingFirstLetterPenalty4 = 0.2, missingFirstLetterPenalty = 1.5
-	static let firstLetterPenalty3 = 0.35, firstLetterPenalty4 = 0.2
-	static func firstLetterPenaltyPolicy(
-		typedLength: Int,
-		candidateFirst: UInt8,
-		typedFirst: UInt8,
-		typedSecond: UInt8 = 0,
-		candidateSecond: UInt8 = 0,
-		spelling: Bool = true
-	) -> Double {
-		guard candidateFirst != typedFirst, typedLength > 2 else { return 0 }
-		let swapped = typedSecond != 0 && candidateFirst == typedSecond && candidateSecond == typedFirst
-		// A dropped first letter (bove → above): the candidate's second letter is the typed first.
-		if typedLength >= 4, !swapped, candidateSecond == typedFirst {
-			return typedLength == 4 ? missingFirstLetterPenalty4 : missingFirstLetterPenalty
-		}
-		if typedLength == 3 { return firstLetterPenalty3 }
-		if typedLength == 4 { return firstLetterPenalty4 }
-		if swapped { return swappedFirstLetterPenalty }
-		// A spelling confusion (vowel for vowel, c/k, c/s, s/z: krust → crust) pays at most
-		// spellingFirstLetterPenalty; row or diagonal neighbours (squared grid distance ≤ 1.3), as native.
-		let other = spelling && KB.spellingConfusion(candidateFirst, typedFirst)
-			? min(firstLetterPenalty, spellingFirstLetterPenalty) : firstLetterPenalty
-		return KB.neighbouringKeys(candidateFirst, typedFirst) ? min(adjacentFirstLetterPenalty, other) : other
-	}
-	
+
 	func insert(_ word: String, freq: Int, id: Int32 = -1) {
 		var node = root
 		for ch in word.utf8 {
@@ -295,18 +300,18 @@ nonisolated final class SwiftTrie {
 		// ONE flat DP buffer for the whole walk, rows indexed by depth — the previous
 		// version allocated a fresh [Double] row per trie node visited (thousands of
 		// transient arrays per keystroke). Depth is bounded: every row past the typed
-		// length adds ≥ delCost to the row minimum (an apostrophe level adds only
+		// length adds ≥ TrieChannelCosts.delCost to the row minimum (an apostrophe level adds only
 		// apostropheSkipCost — the +2 headroom covers the one apostrophe a real word
 		// carries), so beyond this depth no row can come back under budget. The prior can
 		// relax the budget by up to maxBonus, so its headroom is added to the depth bound.
 		let priorHeadroom = prior != nil ? TrieSearchPrior.maxBonus : 0
-		let maxDepth = n + Int((maxCost + priorHeadroom) / SwiftTrie.minimumDeletionCost) + 2
+		let maxDepth = n + Int((maxCost + priorHeadroom) / TrieChannelCosts.minimumDeletionCost) + 2
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
-		for i in 0...n { dp[i] = Double(i) * SwiftTrie.insCost }
+		for i in 0...n { dp[i] = Double(i) * TrieChannelCosts.insCost }
 		var out: [Candidate] = []
 		for (ch, child) in root.children {
 			// Best case for the candidate's second letter; settled in recurse at depth 2.
-			let firstPenalty = SwiftTrie.firstLetterPenaltyPolicy(typedLength: n,
+			let firstPenalty = TrieChannelCosts.firstLetterPenaltyPolicy(typedLength: n,
 				candidateFirst: ch, typedFirst: chars[0], typedSecond: n > 1 ? chars[1] : 0,
 				candidateSecond: chars[0])
 			SwiftTrie.recurse(child, ch, 0, 1, firstPenalty, chars, tapRow,
@@ -316,7 +321,7 @@ nonisolated final class SwiftTrie {
 	}
 
 	/// `parentMin` is the previous DP row's minimum: a transposition reaches back to it, so a
-	/// branch may only be pruned when min(rowMin, parentMin + transCost) is over budget.
+	/// branch may only be pruned when min(rowMin, parentMin + TrieChannelCosts.transCost) is over budget.
 	private static func recurse(_ node: Node, _ letter: UInt8, _ prevLetter: UInt8,
 								_ depth: Int, _ firstPenalty: Double,
 								_ typed: [UInt8], _ taps: [KeyTap?]?,
@@ -329,17 +334,17 @@ nonisolated final class SwiftTrie {
 		let base = depth * (n + 1), prev = base - (n + 1)
 		// Advancing past a candidate letter the typed string omitted: cheap for an
 		// apostrophe (see KB.apostropheSkipCost) or a doubled letter, a full deletion otherwise.
-		var rowMin = dp[prev] + deletionCost(letter, after: prevLetter, typed: 0)
+		var rowMin = dp[prev] + TrieChannelCosts.deletionCost(letter, after: prevLetter, typed: 0)
 		dp[base] = rowMin
 		for col in 1...n {
-			let ins = dp[base + col - 1] + insertionCost(typed[col - 1], after: col >= 2 ? typed[col - 2] : 0, candidate: letter)
-			let del = dp[prev + col] + deletionCost(letter, after: prevLetter, typed: typed[col - 1])
+			let ins = dp[base + col - 1] + TrieChannelCosts.insertionCost(typed[col - 1], after: col >= 2 ? typed[col - 2] : 0, candidate: letter)
+			let del = dp[prev + col] + TrieChannelCosts.deletionCost(letter, after: prevLetter, typed: typed[col - 1])
 			let s = KB.subCost(letter, typed: typed[col - 1], tap: taps?[col - 1] ?? nil, typedFirst: col == 1)
 			var v = min(ins, del, dp[prev + col - 1] + s)
 			// Transposition: candidate's last two letters match the typed pair swapped.
 			// prev - (n+1) is the depth-2 row, valid whenever depth ≥ 2 (row 0 = init).
 			if depth >= 2, col >= 2, letter == typed[col - 2], prevLetter == typed[col - 1] {
-				v = min(v, dp[prev - (n + 1) + col - 2] + transCost)
+				v = min(v, dp[prev - (n + 1) + col - 2] + TrieChannelCosts.transCost)
 			}
 			dp[base + col] = v
 			if v < rowMin { rowMin = v }
@@ -350,15 +355,15 @@ nonisolated final class SwiftTrie {
 		let bonus = priorNode?.bonus ?? 0
 		// Settle the root's provisional penalty once the candidate's second letter is known.
 		let typedSecond: UInt8 = n > 1 ? typed[1] : 0
-		let bound = depth == 2 ? firstLetterPenaltyPolicy(typedLength: n, candidateFirst: prevLetter,
+		let bound = depth == 2 ? TrieChannelCosts.firstLetterPenaltyPolicy(typedLength: n, candidateFirst: prevLetter,
 			typedFirst: typed[0], typedSecond: typedSecond, candidateSecond: letter) : firstPenalty
-		let settled = depth == 1 ? max(firstPenalty, firstLetterPenaltyPolicy(typedLength: n,
+		let settled = depth == 1 ? max(firstPenalty, TrieChannelCosts.firstLetterPenaltyPolicy(typedLength: n,
 			candidateFirst: letter, typedFirst: typed[0], typedSecond: typedSecond)) : bound
 		let finalCost = dp[base + n] + settled
 		if let w = node.word, finalCost - (priorNode?.terminalBonus ?? 0) <= maxCost {
 			out.append(Candidate(word: w, cost: finalCost, logFreq: node.logFreq))
 		}
-		if min(rowMin, parentMin + transCost) + bound - bonus <= maxCost {
+		if min(rowMin, parentMin + TrieChannelCosts.transCost) + bound - bonus <= maxCost {
 			for (ch, child) in node.children {
 				recurse(child, ch, letter, depth + 1, bound, typed, taps,
 					&dp, maxDepth, maxCost, priorNode?.child(ch), rowMin, &out)
