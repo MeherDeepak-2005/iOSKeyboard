@@ -60,8 +60,12 @@ struct NativeCandidateGenerationTests {
                 gruTier: false, shouldCancel: { false })
             if word.isEmpty { #expect(pool.close.isEmpty); continue }
             equal(lexicon.completions(prefix: word, limit: 24), pool.completions.map(Candidate.init(native:)))
-            let cost = word.count <= 4 ? 1.8 : word.count <= 7 ? 2.8 : 3.6
-            equal(lexicon.corrections(for: word, maxCost: cost), pool.close.map(Candidate.init(native:)))
+            // Native close = the full search at the length's radius, then the narrow pass for a
+            // dropped first letter (bove → above), which the full search leaves out.
+            let cost = word.count <= 4 ? 1.6 : word.count <= 7 ? 2.8 : 3.6
+            let expected = lexicon.corrections(for: word, maxCost: cost)
+                + (word.count >= 4 ? lexicon.missingFirstLetterCorrections(for: word, maxCost: cost) : [])
+            equal(expected, pool.close.map(Candidate.init(native:)))
         }
         let cancelled = try lexicon.generateEnglishCandidates(typed: "coeevitjkn", taps: nil,
             successors: [], prior: nil, retainedStatic: nil, gruTier: false, shouldCancel: { true })

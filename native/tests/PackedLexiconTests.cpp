@@ -142,15 +142,30 @@ static void testSpatialAndIncremental() {
     assert(a && a->x == 0.5 && a->y == 1);
     assert(z && z->x == 1.5 && z->y == 2 && !kb::grid('\''));
     assert(kb::substitutionCost('q', 'q') == 0);
-    assert(kb::substitutionCost('q', 'w') == 0.8);
-    assert(kb::substitutionCost('q', 'w', kb::TouchOffset{-1, 0}) == 0.3);
+    // Fitted constants (tools/evaluation/autocorrect, 27 Oct 2026): neighbour = 1/2 + substitutionBase 0.6.
+    assert(std::abs(kb::substitutionCost('q', 'w') - 1.1) < 1e-12);
+    assert(std::abs(kb::substitutionCost('q', 'w', kb::TouchOffset{-1, 0}) - 0.6) < 1e-12);
+    assert(std::abs(kb::substitutionCost('s', 'z') - 0.9) < 1e-12);   // sound-alike, cheaper than the neighbour's 1.1
+    assert(std::abs(kb::substitutionCost('c', 'k') - 0.9) < 1e-12);   // sound-alike, far apart on the keyboard
     assert(kb::substitutionCost('q', 'q', kb::TouchOffset{0, 0}) == 0);
     assert(kb::substitutionCost('q', 'q', kb::TouchOffset{INFINITY, 0}) == 3);
     assert(kb::substitutionCost('?', '?') == 0 && kb::substitutionCost('?', 'q') == 3);
+    assert(kb::substitutionCost('e', 'a') == kb::vowelSubstitutionCost);   // speach -> speech
+    assert(kb::deletionCostAt('s', 's', 's') == kb::doubledDeletionCost);    // posess -> possess
+    assert(kb::deletionCostAt('n', 'n', 'e') == kb::deletionCost && kb::deletionCostAt('s', 'o', 's') == kb::deletionCost);
+    assert(kb::insertionCostAt('l', 'l', 'l') == kb::doubledInsertionCost);   // excell -> excel
+    assert(kb::insertionCostAt('e', 'e', 'n') == kb::insertionCost);          // coeevitjkn is not connection's nn
     assert(kb::firstLetterPenalty(2, 'n', 'm') == 0);
     assert(kb::firstLetterPenalty(3, 'n', 'm') == 0.35);
-    assert(kb::firstLetterPenalty(4, 'n', 'm') == 0.75);
-    assert(kb::firstLetterPenalty(5, 'n', 'm') == 2.5);
+    assert(kb::firstLetterPenalty(4, 'n', 'm') == 0.2);
+    assert(kb::firstLetterPenalty(5, 'n', 'm') == 1.0);             // neighbouring first key
+    assert(kb::firstLetterPenalty(5, 'p', 'a') == 2.0);             // distant first key
+    assert(kb::firstLetterPenalty(5, 'c', 'o', 'c', 'o') == 0.75);  // ocokies -> cookies: first two swapped
+    assert(kb::firstLetterPenalty(5, 'c', 'o', 'c', 'a') == 2.0);   // bcome -> come is not a swap
+    assert(kb::firstLetterPenalty(5, 'c', 'o', 'c') == 2.0);        // candidate second letter unknown
+    assert(kb::firstLetterPenalty(6, 'i', 'n', 's', 'n') == 1.5);   // nstead -> instead: dropped first letter
+    assert(kb::firstLetterPenalty(4, 'a', 'b', 'o', 'b') == 0.2);   // bove -> above
+    assert(kb::firstLetterPenalty(5, 'a', 'w', 'a', 'w') == 0.75);  // typed wa..., candidate aw...: a swap, not a dropped letter
     assert(kb::firstLetterPenalty(20, 'm', 'm') == 0);
     kb::IncrementalSearch search{{{"the", "the", 1.25}, {"can't", "can't", 2.25},
                                  {"correction", "correction", 3.25}, {"coercion", "coercion", 4.25}}};
@@ -160,11 +175,11 @@ static void testSpatialAndIncremental() {
         return std::numeric_limits<double>::infinity();
     };
     assert(search.advanceNormalized("t") && search.advanceNormalized("te") && search.advanceNormalized("teh"));
-    assert(std::abs(costOf("the", 1) - 0.8) < 1e-9);
+    assert(std::abs(costOf("the", 1) - 0.65) < 1e-9);
     assert(search.advanceNormalized("cant") && std::abs(costOf("can't", 1) - 0.4) < 1e-9);
     assert(search.advanceNormalized("coeevitjkn"));
-    assert(std::abs(costOf("correction", 7.2) - 6.525) < 1e-9);
-    assert(std::isinf(costOf("correction", 6.52)));
+    assert(std::abs(costOf("correction", 7.2) - 6.775) < 1e-9);
+    assert(std::isinf(costOf("correction", 6.77)));
     assert(!search.advanceNormalized("") && search.typed() == "coeevitjkn");
     assert(!search.advanceNormalized("123") && search.typed() == "coeevitjkn");
     assert(search.advanceNormalized("correction") && costOf("correction", 0) == 0);
@@ -261,7 +276,7 @@ static void testMappedSeedSets(unsigned version) {
     assert(two.candidates(0).size() == 1 && two.candidates(0)[0].word == "cat");
     bool found = false;
     for (const auto& c : one.candidates(7.2))
-        if (c.word == "correction") { assert(std::abs(c.cost - 6.525) < 1e-9); found = true; }
+        if (c.word == "correction") { assert(std::abs(c.cost - 6.775) < 1e-9); found = true; }
     assert(found && one.typed() == "coeevitjkn");
     // Equal offsets are accepted by the reader, but Swift seed selection rejects
     // empty words before checking whether their root would be included.
@@ -311,7 +326,7 @@ int main(int argc, char** argv) {
         }
         auto recovery = corpus.search("coeevitjkn", 7.2);
         assert(std::any_of(recovery.begin(), recovery.end(), [](const auto& candidate) {
-            return candidate.word == "correction" && std::abs(candidate.cost - 6.525) <= 1e-9;
+            return candidate.word == "correction" && std::abs(candidate.cost - 6.775) <= 1e-9;
         }));
         assert(corpus.search("coeevitjkn", 7.2, {}, {}, [] { return true; }).empty());
         auto contexts = corpus.trigramContexts();

@@ -1,0 +1,6 @@
+{
+  "description": "Four-layer gated diagonal linear recurrence (selective SSM), width 128, state 256.",
+  "model": {"arch": "ssm", "embed": 96, "dim": 128, "state": 256, "layers": 4, "ffn": 256, "tied": true, "dropout": 0.0},
+  "data": {"weights": {"tatoeba": 3.0, "wikitext": 0.6}},
+  "train": {"batch": 128, "bptt": 48, "tokens": 130000000, "lr": 2e-3, "warmup": 2000, "clip": 1.0, "weight_decay": 0.05, "eval_every": 2000}
+}

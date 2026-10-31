@@ -6,9 +6,9 @@
 #include <numeric>
 namespace kb {
 double frequencyTerm(double frequency, bool compressed) { return compressed ? std::log1p(std::max(frequency, 0.0)) : frequency; }
-double rawScore(const RankedRow& row) {
+double rawScore(const RankedRow& row, double channel) {
     auto prior = row.neural ? 0.7 * *row.neural + (1 - 0.7) * row.language : row.language;
-    return -row.channel.cost + 1.0 * prior + 0.3 * row.channel.logFrequency;
+    return -channel * row.channel.cost + languageWeight * prior + frequencyWeight * row.channel.logFrequency;
 }
 std::vector<RankedRow> prepareRanking(std::span<const RankedRow> rows, const std::optional<RankedRow>& typed) {
     std::vector<RankedRow> out;
@@ -30,8 +30,8 @@ std::vector<RankedRow> shortlist(std::vector<RankedRow> rows, const std::optiona
     auto cap = limit ? std::optional<std::size_t>(*limit - (typed && *limit > 0 ? 1 : 0)) : std::nullopt;
     if (cap && rows.size() > *cap) {
         std::stable_sort(rows.begin(), rows.end(), [&](const auto& a, const auto& b) {
-            auto lhs = -a.channel.cost + 0.3 * frequencyTerm(a.channel.logFrequency, compressed);
-            auto rhs = -b.channel.cost + 0.3 * frequencyTerm(b.channel.logFrequency, compressed);
+            auto lhs = -a.channel.cost + shortlistFrequencyWeight * frequencyTerm(a.channel.logFrequency, compressed);
+            auto rhs = -b.channel.cost + shortlistFrequencyWeight * frequencyTerm(b.channel.logFrequency, compressed);
             return lhs == rhs ? utf8Less(a.key, b.key) : lhs > rhs;
         }); rows.resize(*cap);
     }
@@ -41,8 +41,8 @@ std::vector<RankedRow> shortlist(std::vector<RankedRow> rows, const std::optiona
 std::vector<RankedRow> rank(std::vector<RankedRow> rows, std::string_view typed, bool compressed, std::optional<std::size_t> limit) {
     for (auto& row : rows) {
         auto prior = row.neural ? 0.7 * *row.neural + (1 - 0.7) * row.language : row.language;
-        row.score = -row.channel.cost - (row.key == typed ? 0 : row.safety) + 1.0 * prior
-            + 0.3 * frequencyTerm(row.channel.logFrequency, compressed);
+        row.score = -channelWeight * row.channel.cost - (row.key == typed ? 0 : row.safety) + languageWeight * prior
+            + frequencyWeight * frequencyTerm(row.channel.logFrequency, compressed);
     }
     std::stable_sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.score == b.score ? utf8Less(a.key, b.key) : a.score > b.score; });
     if (limit && rows.size() > *limit) {
@@ -66,6 +66,29 @@ bool accepts(const CorrectionPolicy& p, const CorrectionGate& e) {
         return e.allowsCloseRescue && e.cost <= p.closeRescueMaxCost && e.margin > p.closeRescueMargin && (!e.gap || *e.gap >= p.closeRescueGap);
     }
     return false;
+}
+// longer is shorter plus a regular inflectional ending (test/tests, box/boxes, bake/baked).
+// mis/miss is not one (a word ending in s does not pluralize with a bare s), nor are
+// two-letter bases (we/wed, be/bed, ha/has), which are usually unrelated words.
+bool inflection(std::string_view shorter, std::string_view longer) {
+    if (!longer.starts_with(shorter) || shorter.size() < 3) return false;
+    auto ending = longer.substr(shorter.size());
+    if (ending == "s") return !shorter.ends_with("s");
+    if (ending == "es") return shorter.ends_with("s") || shorter.ends_with("x") || shorter.ends_with("z") ||
+        shorter.ends_with("ch") || shorter.ends_with("sh") || shorter.ends_with("o");
+    if (ending == "d") return shorter.ends_with("e");
+    return ending == "ed" || ending == "'s";
+}
+// Optimal string alignment distance (unit costs, adjacent transpositions).
+std::size_t osaDistance(std::string_view a, std::string_view b) {
+    std::vector<std::vector<std::size_t>> d(a.size() + 1, std::vector<std::size_t>(b.size() + 1));
+    for (std::size_t i = 0; i <= a.size(); ++i) d[i][0] = i;
+    for (std::size_t j = 0; j <= b.size(); ++j) d[0][j] = j;
+    for (std::size_t i = 1; i <= a.size(); ++i) for (std::size_t j = 1; j <= b.size(); ++j) {
+        d[i][j] = std::min({d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] == b[j - 1] ? 0u : 1u)});
+        if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1]) d[i][j] = std::min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+    return d[a.size()][b.size()];
 }
 bool nearForm(std::string_view a, std::string_view b) {
     if ((a.size() > b.size() ? a.size() - b.size() : b.size() - a.size()) > 2) return false;
@@ -93,8 +116,35 @@ CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const Ra
     std::vector<const RankedRow*> eligible;
     for (const auto& r : rows) if (r.channel.word != typed && costs.contains(r.channel.word)) eligible.push_back(&r);
     const RankedRow* best = nullptr;
+    double channel = lexicon.contains(typed) ? realWordChannelWeight : channelWeight;
+    // A non-word is judged against each candidate's correction cost: the same word as a
+    // completion (cost 0, the typed text is its prefix) must not turn the gate into autocomplete
+    // (successfull -> successfully). The real-word gate keeps the completion cost it was
+    // calibrated with (wit -> with).
+    const bool realWord = lexicon.contains(typed);
+    auto rawScore = [&](const RankedRow& row) {
+        auto found = costs.find(row.channel.word);
+        return kb::rawScore(row, channel) - channel * (realWord || found == costs.end() || &row == &*literal ? 0 : found->second - row.channel.cost);
+    };
     double bestScore = -std::numeric_limits<double>::infinity(), typedScore = rawScore(*literal);
-    for (const auto* r : eligible) if (!best || rawScore(*r) > bestScore) { best = r; bestScore = rawScore(*r); }
+    auto pickBest = [&] {
+        best = nullptr; bestScore = -std::numeric_limits<double>::infinity(); typedScore = rawScore(*literal);
+        for (const auto* r : eligible) if (!best || rawScore(*r) > bestScore) { best = r; bestScore = rawScore(*r); }
+    };
+    // The real-word gate only weighs slips (cost <= 1.6): a frequent far word must not hide one.
+    if (realWord && realWordCloseOnly) std::erase_if(eligible, [&](const RankedRow* r) { return costs.at(r->channel.word) > 1.6; });
+    pickBest();
+    // A split that cannot clear its own margin gives way to the best single word (sacreligious
+    // is not "sa religious", nor left alone because of it).
+    if (best && best->channel.word.find(' ') != std::string::npos && bestScore - typedScore <= splitCorrectionMargin) {
+        std::erase_if(eligible, [](const RankedRow* r) { return r->channel.word.find(' ') != std::string::npos; });
+        pickBest();
+    }
+    // Recovery beyond the close search (broad, context injection) is far from what was typed
+    // whatever the candidate: there the gate weighs the channel less, as before 28 Oct.
+    if (best && !lexicon.contains(typed) && loose.contains(best->channel.word) && recoveryChannelWeight != channel) {
+        channel = recoveryChannelWeight; pickBest();
+    }
     auto gap = [&](std::string_view winner, bool unrelated) -> std::optional<double> {
         std::optional<double> other;
         for (const auto* r : eligible) if (r->channel.word != winner && (!unrelated || !nearForm(r->channel.word, winner))) {
@@ -104,6 +154,8 @@ CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const Ra
     };
     auto finish = [&](CorrectionGate gate) {
         bool fire = accepts(policy, gate);
+        // A missing-space split keeps the earlier non-word margin (iamhere is not "ia here").
+        if (fire && gate.candidate.find(' ') != std::string::npos && gate.margin <= splitCorrectionMargin) fire = false;
         double threshold = gate.kind == CorrectionKind::realWord ? policy.realWordMargin
             : gate.kind == CorrectionKind::severe ? std::log(10.0) : policy.oovMargin;
         if (fire && gate.kind == CorrectionKind::close && gate.margin <= policy.oovMargin) threshold = policy.closeRescueMargin;
@@ -115,7 +167,13 @@ CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const Ra
             static const std::unordered_set<std::string> determiners{"my","your","his","her","our","their","a","an","the","valid","fake","user","login","student","employee","email","caller"};
             if (determiners.contains(context.back())) return {};
         }
-        if (length < 2 || !best || !lexicon.contains(best->channel.word) || costs.at(best->channel.word) > 1.6) return {};
+        // At most one added letter: two cheap doubled-letter or completion steps (dog -> doggy) are
+        // not a real-word slip, and the 1.6 cost cap no longer excludes them.
+        if (length < 2 || !best || !lexicon.contains(best->channel.word) || costs.at(best->channel.word) > 1.6 ||
+            best->channel.word.size() > typed.size() + 1) return {};
+        // A valid word is never replaced by its own inflection (tests -> test, base -> bases):
+        // the language model prefers one form, but the user chose the other deliberately.
+        if (inflection(typed, best->channel.word) || inflection(best->channel.word, typed)) return {};
         return finish({CorrectionKind::realWord, best->channel.word, bestScore - typedScore, costs.at(best->channel.word), gap(best->channel.word, false), false});
     }
     if (typed.find('\'') != std::string_view::npos) {
@@ -126,11 +184,15 @@ CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const Ra
         }
     }
     if (length >= 2) if (auto restored = lexicon.apostropheRestoration(typed); restored && !lexicon.isBlocked(*restored)) return {*restored, 100, 0, {}};
-    if (length < 3 || !best) return {};
+    if (double(length) < minimumCorrectionLength || !best) return {};
     auto winner = best->channel.word;
-    if (typed.ends_with("s") && !winner.ends_with("s") && winner.find('\'') == std::string::npos) {
-        auto promoted = winner + "'s";
-        if (lexicon.contains(promoted) && !lexicon.isBlocked(promoted)) winner = promoted;
+    // Promote only when the typed s is not already part of the winner's spelling (minuts ->
+    // minutes, but muts -> must, goos -> good), and then as a plural before a possessive.
+    if (typed.ends_with("s") && !winner.ends_with("s") && winner.find('\'') == std::string::npos &&
+            osaDistance(typed, winner + "s") < osaDistance(typed, winner)) {
+        auto plural = winner + "s", promoted = winner + "'s";
+        if (lexicon.contains(plural) && !lexicon.isBlocked(plural)) winner = plural;
+        else if (lexicon.contains(promoted) && !lexicon.isBlocked(promoted)) winner = promoted;
     }
     bool isLoose = loose.contains(winner), severe = length >= 8 && broad.contains(winner);
     auto cost = costs.contains(winner) ? costs.at(winner) : std::numeric_limits<double>::max();

@@ -2,20 +2,14 @@
 // Swift retains boundary records and Debug/test references for parity.
 import Foundation
 
-// Trie: weighted fuzzy search (Damerau + touch taps) + Candidate — extracted from Keyboardengine.swift.
+// Trie: weighted fuzzy search (Damerau + touch taps) + Candidate.
 
-// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
-// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated struct Candidate { let word: String; let cost: Double; let logFreq: Double }
 
-// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
-// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated final class PriorNode {
 	fileprivate var children: [(UInt8, PriorNode)] = []
 	fileprivate(set) var bonus: Double = 0
 	fileprivate(set) var terminalBonus: Double = 0
-	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func child(_ ch: UInt8) -> PriorNode? {
 		for (c, n) in children where c == ch { return n }
 		return nil
@@ -31,8 +25,6 @@ nonisolated final class PriorNode {
 /// Core ML model is bundled — the search is identical, only the prior improves. Budget only
 /// ever RELAXES (bonus ≥ 0, capped ≈ one edit), so a nil prior reproduces today's exact
 /// pure-channel search and this can never drop a candidate the fixed radius already found.
-// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
-// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 nonisolated final class TrieSearchPrior {
 	fileprivate let root = PriorNode()
     private let funded: [(word: String, bonus: Double)]
@@ -62,8 +54,6 @@ nonisolated final class TrieSearchPrior {
 	/// Lay each `(word, bonus)` along the word's whole prefix path; a shared prefix keeps the MAX
 	/// bonus over the words through it, so common word-starts stay well-funded. Budget only ever
 	/// RELAXES (bonus ≥ 0), so an empty list reproduces the exact pure-channel search.
-	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private init(funded: [(word: String, bonus: Double)]) {
         self.funded = funded.filter { $0.bonus > 0 }.map { ($0.word.lowercased(), $0.bonus) }
 #if DEBUG || KB_REFERENCE_DECODER_YES
@@ -89,19 +79,25 @@ nonisolated final class TrieSearchPrior {
     }
 
 	var isEmpty: Bool { funded.allSatisfy { $0.word.isEmpty } }
-	// MIGRATION: planned CPP_CORE | stage=search | target=SearchFunding
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func rootChild(_ ch: UInt8) -> PriorNode? { root.child(ch) }
 }
 
-// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 /// Native mutable vocabulary façade. The independent Swift implementation is
 /// available only to Debug/test builds and never shadows production mutations.
 nonisolated final class Trie {
     let native = KBMutableTrie()
     let backend: DecoderCoreBackend
-    static let insCost = 1.6, delCost = 1.6, transCost = 0.8, firstLetterPenalty = 2.5
+    static let insCost = SwiftTrie.insCost, delCost = SwiftTrie.delCost, transCost = SwiftTrie.transCost,
+        firstLetterPenalty = SwiftTrie.firstLetterPenalty
+    /// A neighbouring key typed before the word (vfell → fell); 3 = off. Native `extraLeadingKeyCost`.
+    static let extraLeadingKeyCost = 1.6
+    static func deletionCost(_ letter: UInt8, after previous: UInt8, typed: UInt8) -> Double {
+        SwiftTrie.deletionCost(letter, after: previous, typed: typed)
+    }
+    static func insertionCost(_ typed: UInt8, after previous: UInt8, candidate: UInt8) -> Double {
+        SwiftTrie.insertionCost(typed, after: previous, candidate: candidate)
+    }
+    static var minimumDeletionCost: Double { SwiftTrie.minimumDeletionCost }
 #if DEBUG || KB_REFERENCE_DECODER_YES
     private let reference: SwiftTrie?
 #endif
@@ -113,9 +109,11 @@ nonisolated final class Trie {
         precondition(backend == .cpp, "Swift mutable reference requires a test build")
 #endif
     }
-    static func firstLetterPenaltyPolicy(typedLength: Int, candidateFirst: UInt8, typedFirst: UInt8) -> Double {
-        guard candidateFirst != typedFirst, typedLength > 2 else { return 0 }
-        return typedLength == 3 ? 0.35 : typedLength == 4 ? 0.75 : 2.5
+    /// Mirrors native `firstLetterPenalty` (SpatialModel.cpp). Pass 0 when a letter is unknown.
+    static func firstLetterPenaltyPolicy(typedLength: Int, candidateFirst: UInt8, typedFirst: UInt8,
+                                         typedSecond: UInt8 = 0, candidateSecond: UInt8 = 0, spelling: Bool = true) -> Double {
+        SwiftTrie.firstLetterPenaltyPolicy(typedLength: typedLength, candidateFirst: candidateFirst,
+            typedFirst: typedFirst, typedSecond: typedSecond, candidateSecond: candidateSecond, spelling: spelling)
     }
     func insert(_ word: String, freq: Int, id: Int32 = -1) {
 #if DEBUG || KB_REFERENCE_DECODER_YES
@@ -186,8 +184,6 @@ extension Candidate {
 
 #if DEBUG || KB_REFERENCE_DECODER_YES
 nonisolated final class SwiftTrie {
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private final class Node {
 		// Compact child storage: a tiny inline-sorted array beats a Dictionary here —
 		// ≤27 children means linear scan wins, and it saves ~100B of hashed-storage
@@ -205,35 +201,59 @@ nonisolated final class SwiftTrie {
 	// The weighted-DP costs and first-letter policy are shared with the static mmap
 	// trie in LangData — both searches must produce byte-identical costs (and the
 	// Python eval harness mirrors them). Internal, not private, for that reason.
+	// Fitted on the tune half of tools/evaluation/autocorrect (27 Oct 2026); must equal
+	// native SpatialModel.hpp. A dropped letter is a common slip, so a deletion costs less
+	// than an extra typed letter.
 	static let insCost = 1.6
-	static let delCost = 1.6
+	static let delCost = 1.1
 	/// Adjacent-letter swap ("teh" → "the") — the single most common typo class.
 	/// One cheap operation (OSA / restricted Damerau) instead of two full edits.
-	static let transCost = 0.8
-	static let firstLetterPenalty = 2.5
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+	static let transCost = 0.65
+	/// A doubled letter typed once (posess → possess) or a letter typed twice (excell → excel):
+	/// native `doubledDeletionCost` / `doubledInsertionCost`. Only the same letter on both sides.
+	static let doubledDelCost = 0.3, doubledInsCost = 0.6
+	static let minimumDeletionCost = min(delCost, doubledDelCost)
+	/// A candidate letter the user did not type, after the candidate letter `previous` (0 at the
+	/// start), where the typed letter at that point is `typed` (0 before the first); native `deletionCostAt`.
+	static func deletionCost(_ letter: UInt8, after previous: UInt8, typed: UInt8) -> Double {
+		letter == KB.apostrophe ? KB.apostropheSkipCost
+			: letter == previous && letter == typed ? doubledDelCost : delCost
+	}
+	/// An extra typed letter after the typed letter `previous`, where the candidate letter at that
+	/// point is `candidate` (0 before the first); native `insertionCostAt`.
+	static func insertionCost(_ typed: UInt8, after previous: UInt8, candidate: UInt8) -> Double {
+		typed == previous && typed == candidate ? doubledInsCost : insCost
+	}
+	static let firstLetterPenalty = 2.0             // 5+ letters, first key not adjacent
+	static let adjacentFirstLetterPenalty = 1.0     // 5+ letters, neighbouring first key
+	static let spellingFirstLetterPenalty = 2.0     // 5+ letters, vowel for vowel or c/k/s/z (as other keys)
+	static let swappedFirstLetterPenalty = 0.75
+	static let missingFirstLetterPenalty4 = 0.2, missingFirstLetterPenalty = 1.5
+	static let firstLetterPenalty3 = 0.35, firstLetterPenalty4 = 0.2
 	static func firstLetterPenaltyPolicy(
 		typedLength: Int,
 		candidateFirst: UInt8,
-		typedFirst: UInt8
+		typedFirst: UInt8,
+		typedSecond: UInt8 = 0,
+		candidateSecond: UInt8 = 0,
+		spelling: Bool = true
 	) -> Double {
-		guard candidateFirst != typedFirst else { return 0 }
-		
-		switch typedLength {
-		case 0, 1, 2:
-			return 0.0
-		case 3:
-			return 0.35
-		case 4:
-			return 0.75
-		default:
-			return firstLetterPenalty
+		guard candidateFirst != typedFirst, typedLength > 2 else { return 0 }
+		let swapped = typedSecond != 0 && candidateFirst == typedSecond && candidateSecond == typedFirst
+		// A dropped first letter (bove → above): the candidate's second letter is the typed first.
+		if typedLength >= 4, !swapped, candidateSecond == typedFirst {
+			return typedLength == 4 ? missingFirstLetterPenalty4 : missingFirstLetterPenalty
 		}
+		if typedLength == 3 { return firstLetterPenalty3 }
+		if typedLength == 4 { return firstLetterPenalty4 }
+		if swapped { return swappedFirstLetterPenalty }
+		// A spelling confusion (vowel for vowel, c/k, c/s, s/z: krust → crust) pays at most
+		// spellingFirstLetterPenalty; row or diagonal neighbours (squared grid distance ≤ 1.3), as native.
+		let other = spelling && KB.spellingConfusion(candidateFirst, typedFirst)
+			? min(firstLetterPenalty, spellingFirstLetterPenalty) : firstLetterPenalty
+		return KB.neighbouringKeys(candidateFirst, typedFirst) ? min(adjacentFirstLetterPenalty, other) : other
 	}
 	
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func insert(_ word: String, freq: Int, id: Int32 = -1) {
 		var node = root
 		for ch in word.utf8 {
@@ -244,40 +264,26 @@ nonisolated final class SwiftTrie {
 		node.wordID = id
 		node.logFreq = log(Double(max(freq, 1)) + 1)
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func node(for word: String) -> Node? {
 		var node = root
 		for ch in word.utf8 { guard let next = node.child(ch) else { return nil }; node = next }
 		return node
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func contains(_ word: String) -> Bool { node(for: word)?.word != nil }
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func hasPrefix(_ prefix: String) -> Bool { node(for: prefix) != nil }
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func wordID(_ word: String) -> Int32? {
 		guard let n = node(for: word), n.word != nil, n.wordID >= 0 else { return nil }
 		return n.wordID
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func bump(_ word: String) {
 		guard let n = node(for: word), n.word != nil else { return }
 		n.logFreq = log(exp(n.logFreq) + 1)
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func logFreq(_ word: String) -> Double? {
 		guard let n = node(for: word), n.word != nil else { return nil }
 		return n.logFreq
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func search(_ typed: String, maxCost: Double, taps: [KeyTap?]? = nil,
 				prior: TrieSearchPrior? = nil) -> [Candidate] {
 		let chars = Array(typed.utf8)
@@ -294,39 +300,41 @@ nonisolated final class SwiftTrie {
 		// carries), so beyond this depth no row can come back under budget. The prior can
 		// relax the budget by up to maxBonus, so its headroom is added to the depth bound.
 		let priorHeadroom = prior != nil ? TrieSearchPrior.maxBonus : 0
-		let maxDepth = n + Int((maxCost + priorHeadroom) / SwiftTrie.delCost) + 2
+		let maxDepth = n + Int((maxCost + priorHeadroom) / SwiftTrie.minimumDeletionCost) + 2
 		var dp = [Double](repeating: 0, count: (maxDepth + 1) * (n + 1))
 		for i in 0...n { dp[i] = Double(i) * SwiftTrie.insCost }
 		var out: [Candidate] = []
 		for (ch, child) in root.children {
+			// Best case for the candidate's second letter; settled in recurse at depth 2.
 			let firstPenalty = SwiftTrie.firstLetterPenaltyPolicy(typedLength: n,
-				candidateFirst: ch, typedFirst: chars[0])
+				candidateFirst: ch, typedFirst: chars[0], typedSecond: n > 1 ? chars[1] : 0,
+				candidateSecond: chars[0])
 			SwiftTrie.recurse(child, ch, 0, 1, firstPenalty, chars, tapRow,
-				&dp, maxDepth, maxCost, prior?.rootChild(ch), &out)
+				&dp, maxDepth, maxCost, prior?.rootChild(ch), 0, &out)
 		}
 		return out
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
+	/// `parentMin` is the previous DP row's minimum: a transposition reaches back to it, so a
+	/// branch may only be pruned when min(rowMin, parentMin + transCost) is over budget.
 	private static func recurse(_ node: Node, _ letter: UInt8, _ prevLetter: UInt8,
 								_ depth: Int, _ firstPenalty: Double,
 								_ typed: [UInt8], _ taps: [KeyTap?]?,
 								_ dp: inout [Double], _ maxDepth: Int,
 								_ maxCost: Double, _ priorNode: PriorNode?,
+								_ parentMin: Double,
 								_ out: inout [Candidate]) {
 		guard depth <= maxDepth else { return }
 		let n = typed.count
 		let base = depth * (n + 1), prev = base - (n + 1)
 		// Advancing past a candidate letter the typed string omitted: cheap for an
-		// apostrophe (see KB.apostropheSkipCost), a full deletion otherwise.
-		let skip = letter == KB.apostrophe ? KB.apostropheSkipCost : delCost
-		var rowMin = dp[prev] + skip
+		// apostrophe (see KB.apostropheSkipCost) or a doubled letter, a full deletion otherwise.
+		var rowMin = dp[prev] + deletionCost(letter, after: prevLetter, typed: 0)
 		dp[base] = rowMin
 		for col in 1...n {
-			let ins = dp[base + col - 1] + insCost
-			let del = dp[prev + col] + skip
-			let s = KB.subCost(letter, typed: typed[col - 1], tap: taps?[col - 1] ?? nil)
+			let ins = dp[base + col - 1] + insertionCost(typed[col - 1], after: col >= 2 ? typed[col - 2] : 0, candidate: letter)
+			let del = dp[prev + col] + deletionCost(letter, after: prevLetter, typed: typed[col - 1])
+			let s = KB.subCost(letter, typed: typed[col - 1], tap: taps?[col - 1] ?? nil, typedFirst: col == 1)
 			var v = min(ins, del, dp[prev + col - 1] + s)
 			// Transposition: candidate's last two letters match the typed pair swapped.
 			// prev - (n+1) is the depth-2 row, valid whenever depth ≥ 2 (row 0 = init).
@@ -340,28 +348,30 @@ nonisolated final class SwiftTrie {
 		// so a plausible word just outside the base radius is generated (its reported cost
 		// stays the pure channel cost — ranking still owns the LM/frequency decision).
 		let bonus = priorNode?.bonus ?? 0
-		let finalCost = dp[base + n] + firstPenalty
+		// Settle the root's provisional penalty once the candidate's second letter is known.
+		let typedSecond: UInt8 = n > 1 ? typed[1] : 0
+		let bound = depth == 2 ? firstLetterPenaltyPolicy(typedLength: n, candidateFirst: prevLetter,
+			typedFirst: typed[0], typedSecond: typedSecond, candidateSecond: letter) : firstPenalty
+		let settled = depth == 1 ? max(firstPenalty, firstLetterPenaltyPolicy(typedLength: n,
+			candidateFirst: letter, typedFirst: typed[0], typedSecond: typedSecond)) : bound
+		let finalCost = dp[base + n] + settled
 		if let w = node.word, finalCost - (priorNode?.terminalBonus ?? 0) <= maxCost {
 			out.append(Candidate(word: w, cost: finalCost, logFreq: node.logFreq))
 		}
-		if rowMin + firstPenalty - bonus <= maxCost {
+		if min(rowMin, parentMin + transCost) + bound - bonus <= maxCost {
 			for (ch, child) in node.children {
-				recurse(child, ch, letter, depth + 1, firstPenalty, typed, taps,
-					&dp, maxDepth, maxCost, priorNode?.child(ch), &out)
+				recurse(child, ch, letter, depth + 1, bound, typed, taps,
+					&dp, maxDepth, maxCost, priorNode?.child(ch), rowMin, &out)
 			}
 		}
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func completions(prefix: String, limit: Int) -> [Candidate] {
 		guard let node = node(for: prefix) else { return [] }
 		var out: [Candidate] = []
 		collect(node, &out, cap: 256)
 		return Array(out.sorted { $0.logFreq > $1.logFreq }.prefix(limit))
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=MutableLexicon
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func collect(_ node: Node, _ out: inout [Candidate], cap: Int) {
 		if out.count >= cap { return }
 		if let w = node.word { out.append(Candidate(word: w, cost: 0, logFreq: node.logFreq)) }

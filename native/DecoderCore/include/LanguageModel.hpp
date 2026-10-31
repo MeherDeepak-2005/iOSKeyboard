@@ -40,5 +40,8 @@ public:
     CountRows successors(std::span<const std::string> context, const PersonalCounts& personal,
         bool trigram, std::size_t limit) const;
     static std::vector<std::string> nextWords(CountRows tri, CountRows bi, std::size_t limit);
+    // The personal-history boosts scores() adds to the corpus log-probability (log space).
+    static double personalBoost(std::string_view word, std::span<const std::string> context,
+        const PersonalCounts& personal, const GenerationLexicon& lexicon);
 };
 } // namespace kb

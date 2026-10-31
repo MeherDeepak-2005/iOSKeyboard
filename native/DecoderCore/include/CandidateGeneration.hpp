@@ -36,7 +36,19 @@ double probabilityFundingBonus(double logProbability, double logProbabilityFloor
 std::vector<WordFunding> rankFunding(std::span<const std::string> words);
 std::vector<WordFunding> probabilityFunding(std::span<const std::pair<std::string, double>> words,
     double logProbabilityFloor = -12);
+// The search radius by typed length (about 1, 2 and 3 edits), times searchRadiusScale.
+KB_TUNABLE(searchRadiusScale, 1.0);
+KB_TUNABLE(shortSearchRadius, 1.6);   // up to 4 letters: one omission (1.1) and a little slack
+// Broad recovery (severe typos) and context injection search this many times the normal radius
+// (was 2 for every length). With cheaper omissions 1.6 still reaches about four edits; 8+ letter
+// words keep 1.9 so a severe typo with no context (coeevitjkn, 6.775) is still recovered.
+// Latency on the keystroke benchmark: 2 everywhere was 43% over the old p95, this is 20%.
+KB_TUNABLE(broadRecoveryFactor, 1.6);
+KB_TUNABLE(longBroadRecoveryFactor, 1.9);
 double normalSearchCost(std::size_t length) noexcept;
+// A missing space (ofthe -> "of the") and a space-bar slip onto c/v/b/n/m (ofvthe).
+KB_TUNABLE(splitCost, 2.0);
+KB_TUNABLE(spaceKeySplitCost, 0.72);
 // Context injection intentionally uses its original Levenshtein alignment (no
 // transposition or first-letter penalty), distinct from trie OSA search.
 double injectedSpatialCost(std::string_view typed, std::string_view target,
@@ -71,6 +83,8 @@ struct GeneratedCandidates {
     std::vector<ChannelCandidate> close, broad, injected, completions, displayCorrections;
     std::optional<ChannelCandidate> split;
     bool cancelled = false;
+    // The closest dictionary match is a blocked word: leave the typo alone (no autocorrect).
+    bool aimedAtBlocked = false;
 };
 GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon,
     std::string_view typed, std::span<const std::optional<TouchOffset>> taps,

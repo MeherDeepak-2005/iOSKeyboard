@@ -1,11 +1,7 @@
-// MIGRATION-FILE: planned SPLIT | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: CPP_CORE owns vocabulary/search; SWIFT_IOS owns resources, personalization events and epochs.
 import Foundation
 
-// Lexicon: channel model + candidate generator — extracted from Keyboardengine.swift.
+// Lexicon: channel model + candidate generator.
 
-// MIGRATION: planned SPLIT | stage=search | target=LexiconFacade
-// MIGRATION-SPLIT: CPP_CORE owns lookup/search and mutable-trie storage; SWIFT_IOS owns resources, adoption events, reset and revision publication.
 final class Lexicon {
 
 	/// Immutable/base, supplementary, and learned words are separate layers. Resetting
@@ -31,7 +27,7 @@ final class Lexicon {
         boostCache = value
         return value
     }
-    private lazy var nativeVocabulary = KBVocabularyState(blocked: nativeBlockedWords)
+    private lazy var nativeVocabulary = KBVocabularyState(safety: safety?.native)
 
 	/// Highest-frequency words, for the empty-context suggestion bar on a fresh install.
 	private(set) var topWords: [String] = []
@@ -49,9 +45,35 @@ final class Lexicon {
 	// typed input is never censored. nil only if the resource is missing in tests.
 	private let safety = KBSafetyLexicon.bundled()
 
-    var nativeSafetyPenalties: [String: NSNumber] { safety?.nativePenalties ?? [:] }
+    /// The native safety lexicon: the shared engine and vocabulary state read their
+    /// penalties and blocked terms from it directly.
+    var nativeSafety: KBNativeSafetyLexicon? { safety?.native }
 
-    private lazy var nativeBlockedWords = safety?.nativeBlockedWords ?? []
+    /// Residual non-blocking penalties (in-dictionary demote terms), computed natively at load.
+    /// Blocked words never reach ranking: the dictionary's blocked bitset excludes them during
+    /// candidate generation and learning refuses them, so generated English candidates need
+    /// no per-candidate safety lookup. Empty for the shipped pack.
+    private var residualPenalties: [String: Double] = [:]
+    func generatedPenalty(_ word: String) -> Double {
+        residualPenalties.isEmpty ? 0 : residualPenalties[word] ?? 0
+    }
+
+#if DEBUG || KB_REFERENCE_DECODER_YES
+    /// Reference mirror of generateCandidates' closest blocked match: its cost bounds recovery,
+    /// so a typo aimed at a blocked word is left alone. Never a candidate.
+    func closestBlockedCost(_ lw: String, maxCost: Double, taps: [KeyTap?]?) -> Double {
+        lock.lock(); let ld = langData; lock.unlock()
+        return ld?.swiftBlockedTrie?.search(lw, maxCost: maxCost, taps: taps).map(\.cost).min() ?? .infinity
+    }
+#endif
+
+    /// A dictionary word that generation excludes as blocked. The typed literal is never
+    /// censored, so the Swift pool builder re-adds it as its own exact match (as native).
+    func isGenerationBlocked(_ lw: String) -> Bool {
+        lock.lock(); let ld = langData; lock.unlock()
+        guard let ld, let id = ld.trieWordID(lw) else { return false }
+        return ld.isSwiftBlocked(id)
+    }
 
     func nativeGenerationView() -> KBGenerationLexicon {
         lock.lock()
@@ -82,30 +104,18 @@ final class Lexicon {
             retainedStatic: retainedStatic?.map(\.native), gruTier: gruTier, shouldCancel: shouldCancel)
     }
 
-	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
-	// MIGRATION-SPLIT: SWIFT_IOS preserves normalization; CPP_CORE queries the immutable normalized safety view without search-loop callbacks.
 	func isProfane(_ w: String) -> Bool {
 		safety?.isBlocked(w.lowercased()) == true
 	}
 
-	// MIGRATION: planned SPLIT | stage=search | target=SafetyLookup
-	// MIGRATION-SPLIT: SWIFT_IOS preserves normalization; CPP_CORE queries the immutable normalized safety view without search-loop callbacks.
 	func safetyPenalty(_ word: String) -> Double {
-		switch safety?.action(for: word) ?? .allow {
-		case .allow: return 0
-		case .demote: return 4
-		case .suppressSuggest, .suppressAlways: return .infinity
-		}
+		safety?.penalty(for: word) ?? 0
 	}
 
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=VocabularyLifecycle
-	// MIGRATION-NOTE: Publish vocabulary/personalization changes at semantic boundaries; preserve storage, adoption and reset policy.
 	func isSafeToLearn(_ word: String) -> Bool {
 		(safety?.action(for: word) ?? .allow) == .allow
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func contains(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
 		return (staticTrie && langData?.trieContains(lw) == true)
@@ -114,8 +124,6 @@ final class Lexicon {
 	/// True only for words in the immutable corpus (static mmap trie). Used to filter
 	/// user-count boosts in next-word predictions so only dictionary words get personalized
 	/// ranking — OOV strings, adopted typos, and contact names don't flood suggestions.
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func isStaticWord(_ lw: String) -> Bool {
 		lock.lock(); defer { lock.unlock() }
 		return (staticTrie && langData?.trieContains(lw) == true) || (!staticTrie && baseTrie.contains(lw))
@@ -128,8 +136,6 @@ final class Lexicon {
 	/// True when `lw` parses as a known word + standard clitic. Autocorrect uses this
 	/// to protect OOV contractions from being "corrected" to their base ("when's" →
 	/// "when" was a live bug: OOV + the always-correct fallback flattened the 's).
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func isContractionForm(_ lw: String) -> Bool {
 		guard lw.contains("'") else { return false }
 		for suffix in Self.clitics where lw.hasSuffix(suffix) {
@@ -144,8 +150,6 @@ final class Lexicon {
 	/// lock); falls back to SYNTHESIS for contractions the 60k vocab is missing —
 	/// "whens" → "when's" has no trie entry to validate against, so without the
 	/// fallback the OOV correction machinery flattened it to "when".
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func apostropheRestoration(of lw: String) -> String? {
 		lock.lock(); let data = staticTrie ? langData : nil; lock.unlock()
 		let hit = data?.trieApostropheRestoration(of: lw)?.word
@@ -167,8 +171,6 @@ final class Lexicon {
 	private static let ntContractionBases: Set<String> = [
 		"must", "might", "need", "ought", "dare", "shall",
 	]
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	static func syntheticContraction(of lw: String) -> String? {
 		guard !lw.contains("'") else { return nil }
 		if lw.count >= 3, lw.hasSuffix("s"), sContractionBases.contains(String(lw.dropLast())) {
@@ -179,8 +181,6 @@ final class Lexicon {
 		}
 		return nil
 	}
-	// MIGRATION: planned SPLIT | stage=search | target=LexiconView
-	// MIGRATION-SPLIT: CPP_CORE updates mutable vocabulary and supplementary Glide indexes; SWIFT_IOS coordinates locking and publishes vocabulary revisions.
 	func insert(_ lw: String, freq: Int) {
 		lock.lock(); defer { lock.unlock() }
 		supplementaryTrie.insert(lw, freq: freq)
@@ -188,36 +188,26 @@ final class Lexicon {
         nativeVocabulary.supplementary(lw, frequency: freq, glide: Self.isGlideSpelling(lw))
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func glideDynamicWords(limit: Int) -> [String] {
 		lock.lock(); defer { lock.unlock() }
         return nativeVocabulary.dynamicWords(UInt(max(0, limit)))
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private static func isGlideSpelling(_ word: String) -> Bool {
 		word.count >= 2 && word.utf8.allSatisfy {
 			($0 >= UInt8(ascii: "a") && $0 <= UInt8(ascii: "z")) || $0 == KB.apostrophe
 		}
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func wordID(_ lw: String) -> Int32? {
 		lock.lock(); defer { lock.unlock() }
 		return staticTrie ? langData?.trieWordID(lw) : baseTrie.wordID(lw)
 	}
 	/// Immutable mmap snapshot for the dedicated Glide queues. The reference is copied
 	/// under the lock; all trie/ngram bytes are read-only after bundle loading completes.
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=MappedResourceOwner
-	// MIGRATION-NOTE: Expose a lifetime-safe view of the shared backing; do not duplicate the mapped corpus.
 	func languageDataSnapshot() -> LangData? {
 		lock.lock(); defer { lock.unlock() }
 		return staticTrie ? langData : nil
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func corrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
 					 prior: TrieSearchPrior? = nil,
 					 shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
@@ -236,13 +226,42 @@ final class Lexicon {
 		return out
 	}
 
+	/// Static words with one extra leading letter before the typed word (bove → above), boosted
+	/// like `corrections`. Mirrors native generateCandidates beside a retained search.
+	func missingFirstLetterCorrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
+		shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
+		lock.lock()
+		let data = staticTrie ? langData : nil
+		let boostSnapshot = boosts
+		lock.unlock()
+		guard let data else { return [] }
+		return data.trieSearch(lw, maxCost: maxCost, taps: taps, shouldCancel: shouldCancel,
+			missingFirstOnly: true).map { Self.applying(boostSnapshot, to: $0) }
+	}
+
+	/// Static words whose first letter is a spelling confusion of the typed one (emminent →
+	/// imminent), boosted like `corrections`. Mirrors native generateCandidates beside a retained search.
+	func firstLetterVariantCorrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
+		shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
+		let bytes = Array(lw.utf8)
+		guard bytes.count >= 2 else { return [] }
+		let roots = Set((UInt8(ascii: "a")...UInt8(ascii: "z")).filter {
+			$0 != bytes[0] && $0 != bytes[1] && KB.spellingConfusion($0, bytes[0])
+		})
+		lock.lock()
+		let data = staticTrie ? langData : nil
+		let boostSnapshot = boosts
+		lock.unlock()
+		guard let data, !roots.isEmpty else { return [] }
+		return data.trieSearch(lw, maxCost: maxCost, taps: taps, shouldCancel: shouldCancel,
+			roots: roots).map { Self.applying(boostSnapshot, to: $0) }
+	}
+
 	/// Creates the retained static search state once per word. A nil result means the
 	/// pack is legacy/missing or the explicit state cap was exceeded; callers must use
 	/// the full trie walk in that case rather than silently reducing candidate recall.
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func makeIncrementalDecodeSession(typedFirst: UInt8,
-		firstTap: KeyTap?) -> IncrementalDecodeSession? {
+		firstTap: KeyTap?, typedSecond: UInt8 = 0, maxCost: Double = 3.6) -> IncrementalDecodeSession? {
 		lock.lock()
 		let data = staticTrie ? langData : nil
 		let boostSnapshot = boosts
@@ -252,7 +271,7 @@ final class Lexicon {
             // word-session lifetime as the reference; no independent personal DB.
             do {
                 guard let seeds = try data.nativeIncrementalSeeds(typedFirst: typedFirst,
-                    firstTap: firstTap, boosts: boostSnapshot) else { return nil }
+                    firstTap: firstTap, boosts: boostSnapshot, typedSecond: typedSecond, maxCost: maxCost) else { return nil }
                 return try IncrementalDecodeSession(nativeSeeds: seeds)
             } catch {
                 // A rejected native session retains the established full-trie
@@ -261,7 +280,7 @@ final class Lexicon {
             }
         }
         guard let seeds = data?.incrementalSeeds(typedFirst: typedFirst,
-			firstTap: firstTap) else { return nil }
+			firstTap: firstTap, typedSecond: typedSecond, maxCost: maxCost) else { return nil }
 		let adjusted = seeds.map { seed -> IncrementalLexiconSeed in
 			guard let boost = boostSnapshot[seed.word] else { return seed }
 			return IncrementalLexiconSeed(word: seed.word, bytes: seed.bytes,
@@ -272,8 +291,6 @@ final class Lexicon {
 
 	/// Mutable/supplementary layers stay small and are searched conventionally. The
 	/// large immutable retained state is C++-owned through `IncrementalDecodeSession`.
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func mutableCorrections(for lw: String, maxCost: Double,
 		taps: [KeyTap?]? = nil) -> [Candidate] {
 		lock.lock(); defer { lock.unlock() }
@@ -287,8 +304,6 @@ final class Lexicon {
 	/// Wide-radius recovery includes mutable words under the lock, then searches the
 	/// immutable mapped corpus using a brief personalization snapshot. The same prior
 	/// funds terminal candidates in every vocabulary source.
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func broadCorrections(for lw: String, maxCost: Double, taps: [KeyTap?]? = nil,
 						  prior: TrieSearchPrior? = nil,
 						  shouldCancel: (() -> Bool)? = nil) -> [Candidate] {
@@ -308,8 +323,6 @@ final class Lexicon {
 	/// Next-character priors under the current prefix, for key-target resizing:
 	/// log-scaled subtree max frequency, normalized to [0, 1] of the strongest child.
 	/// Read straight off the mmap trie — no heap tables, no language-model call.
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func nextCharPriors(prefix lw: String) -> [Character: Double] {
 		lock.lock(); let ld0 = staticTrie ? langData : nil; lock.unlock()
 		guard let ld = ld0 else { return [:] }
@@ -319,8 +332,6 @@ final class Lexicon {
 	}
 
 	/// The frequency term a word carries in ranking (nil when unknown).
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func logFreq(of lw: String) -> Double? {
 		lock.lock(); defer { lock.unlock() }
 		if staticTrie, let ld = langData, let id = ld.trieWordID(lw) {
@@ -334,8 +345,6 @@ final class Lexicon {
 		}
 		return supplementaryTrie.logFreq(lw) ?? personalTrie.logFreq(lw)
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func completions(prefix lw: String, limit: Int) -> [Candidate] {
 		lock.lock()
 		let data = staticTrie ? langData : nil
@@ -351,8 +360,6 @@ final class Lexicon {
 		return Array(out.sorted { $0.logFreq > $1.logFreq }.prefix(limit))
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private static func applying(_ boosts: [String: Int], to candidate: Candidate) -> Candidate {
 		guard let boost = boosts[candidate.word] else { return candidate }
 		return Candidate(word: candidate.word, cost: candidate.cost,
@@ -361,8 +368,6 @@ final class Lexicon {
 
 	/// Personal-use lift on a static word's frequency term — mirrors what `Trie.bump`
 	/// does to heap nodes: each use adds one effective count. Caller must hold `lock`.
-	// MIGRATION: planned CPP_CORE | stage=search | target=LexiconView
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func boosted(_ c: Candidate) -> Candidate {
 		guard let b = boosts[c.word] else { return c }
 		return Candidate(word: c.word, cost: c.cost, logFreq: log(exp(c.logFreq) + Double(b)))
@@ -370,8 +375,6 @@ final class Lexicon {
 
 	/// Adoption: known words get their frequency bumped; unknown words enter the
 	/// dynamic trie once the user has typed them `adoptAfter` times.
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=VocabularyLifecycle
-	// MIGRATION-NOTE: Publish vocabulary/personalization changes at semantic boundaries; preserve storage, adoption and reset policy.
 	func noteUse(of lw: String, timesUsed: Int, adoptAfter: Int,
 				 allowAdoption: Bool = false) {
 		lock.lock(); defer { lock.unlock() }
@@ -381,8 +384,6 @@ final class Lexicon {
             base: baseTrie.native, supplementary: supplementaryTrie.native, personal: personalTrie.native) { vocabularyEpoch &+= 1 }
 	}
 
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=VocabularyLifecycle
-	// MIGRATION-NOTE: Publish vocabulary/personalization changes at semantic boundaries; preserve storage, adoption and reset policy.
 	func resetPersonalization() {
 		lock.lock()
 		vocabularyEpoch &+= 1
@@ -394,25 +395,25 @@ final class Lexicon {
 
 	/// Capitalize a cold-start opener (the empty bar is a sentence start): the→The,
 	/// i→I, i'm→I'm.
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=VocabularyLifecycle
-	// MIGRATION-NOTE: Publish vocabulary/personalization changes at semantic boundaries; preserve storage, adoption and reset policy.
 	private func sentenceCase(_ w: String) -> String {
 		guard let f = w.first else { return w }
 		return f.uppercased() + w.dropFirst()
 	}
 
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=VocabularyLifecycle
-	// MIGRATION-NOTE: Publish vocabulary/personalization changes at semantic boundaries; preserve storage, adoption and reset policy.
 	func loadFromBundle() {
 		load(from: Bundle.main.url(forResource: "langdata", withExtension: "bin"))
 	}
 
 	/// Explicit resource seam for deterministic engine tests and offline tools. The
 	/// shipping engine calls `loadFromBundle()` and follows the same implementation.
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=VocabularyLifecycle
-	// MIGRATION-NOTE: Publish vocabulary/personalization changes at semantic boundaries; preserve storage, adoption and reset policy.
 	func load(from url: URL?) {
 		if let url, let ld = LangData(url: url) {
+			// Exclude blocked words from candidate generation before any search can run.
+			if let safety, let native = ld.nativeCandidateLexicon {
+				native.installBlocked(fromSafety: safety.native)
+				residualPenalties = native.residualPenalties(fromSafety: safety.native).mapValues(\.doubleValue)
+			}
+			if let safety { ld.installSwiftBlocked(safety.native.blockedTerms) }
 			lock.lock(); langData = ld; lock.unlock()
 			if ld.hasTrie {
 				// v3: the dictionary is searched in place — nothing to copy to the heap.

@@ -1,8 +1,6 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 
-// UIColor hex + blend helpers — extracted from Keyboard.swift.
+// UIColor hex + blend helpers.
 
 extension UIColor {
 	convenience init(hex: UInt32) {

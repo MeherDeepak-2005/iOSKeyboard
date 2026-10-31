@@ -1,9 +1,7 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 import os
 
-// Diagnostics: extension measures, app displays (App Group) — extracted from Keyboard.swift.
+// Diagnostics: extension measures, app displays (App Group).
 
 enum KBDiagnostics {
 

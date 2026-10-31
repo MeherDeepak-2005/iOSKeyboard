@@ -88,7 +88,7 @@ struct NativeSearchParityTests {
         let lexicon = Lexicon()
         lexicon.load(from: root.appendingPathComponent("keyboard/langdata.bin"))
         let session = try #require(lexicon.makeIncrementalDecodeSession(
-            typedFirst: UInt8(ascii: "c"), firstTap: nil))
+            typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8))
         #expect(session.backend == .cpp)
         #expect(!session.hasNativeSearchComparison)
         #expect(session.advance(to: "coeevitjkn"))
@@ -99,14 +99,14 @@ struct NativeSearchParityTests {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let reader = try #require(LangData(url: root.appendingPathComponent("keyboard/langdata.bin")))
         let boosts = ["correction": 37, "coercion": 11, "can't": 5, "notincorpusxyz": 9]
-        let original = try #require(reader.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil))
+        let original = try #require(reader.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8))
         let adjusted = original.map { seed in
             IncrementalLexiconSeed(word: seed.word, bytes: seed.bytes,
                 logFreq: boosts[seed.word].map { log(exp(seed.logFreq) + Double($0)) } ?? seed.logFreq)
         }
         let reference = IncrementalDecodeSession(seeds: adjusted, backend: .swiftReference)
         let mapped = try #require(try reader.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"),
-            firstTap: nil, boosts: boosts))
+            firstTap: nil, boosts: boosts, maxCost: 2.8))
         let production = try IncrementalDecodeSession(nativeSeeds: mapped)
         #expect(production.backend == .cpp)
         #expect(!production.hasNativeSearchComparison)
@@ -167,10 +167,10 @@ struct NativeSearchParityTests {
                 }
             }
         }
-        let count = try #require(data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil)).count
+        let count = try #require(data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8)).count
         for cap in [0, count - 1, count, 24_000] {
-            let swift = data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, stateCap: cap)
-            let cpp = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, stateCap: cap)
+            let swift = data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, stateCap: cap, maxCost: 2.8)
+            let cpp = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, stateCap: cap, maxCost: 2.8)
             #expect((swift == nil) == (cpp == nil))
             #expect(swift?.count == cpp.map { Int($0.seedCount) })
         }
@@ -181,8 +181,8 @@ struct NativeSearchParityTests {
     @Test func mappedSessionsRetainBackingAndHaveIndependentState() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         var reader = LangData(url: root.appendingPathComponent("keyboard/langdata.bin"), compareNativeReads: true)
-        let swiftSeeds = try #require(reader?.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil))
-        var seeds = try reader?.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil)
+        let swiftSeeds = try #require(reader?.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8))
+        var seeds = try reader?.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8)
         let first = try KBIncrementalSearch(seedSet: #require(seeds))
         let second = try KBIncrementalSearch(seedSet: #require(seeds))
         reader = nil; seeds = nil // Sessions must keep the mapped bytes alive.
@@ -277,7 +277,7 @@ struct NativeSearchParityTests {
     @Test func retainedCorpusSeedsMatchIncludingSevereRecoveryAndTaps() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         let data = try #require(LangData(url: root.appendingPathComponent("keyboard/langdata.bin")))
-        let seeds = try #require(data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil))
+        let seeds = try #require(data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8))
         let session = IncrementalDecodeSession(seeds: seeds, compareNativeSearch: true)
         #expect(session.hasNativeSearchComparison)
         for word in ["c", "co", "cor", "corr", "correct", "correction", "cor", "coeevitjkn", "can't", "cant"] {

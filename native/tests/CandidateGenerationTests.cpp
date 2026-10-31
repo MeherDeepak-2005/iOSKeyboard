@@ -25,7 +25,7 @@ int main() {
     GenerationSnapshot snapshot;
     GenerationLexicon lexicon{nullptr, &base, &supplementary, &personal, &snapshot};
     auto typo = base.search("teh", 1.8);
-    assert(typo.size() == 1 && typo[0].word == "the" && typo[0].cost == 0.8);
+    assert(typo.size() == 1 && typo[0].word == "the" && typo[0].cost == kb::transpositionCost);
     auto before = base.logFrequency("hello").value(); base.bump("hello");
     assert(base.logFrequency("hello").value() == std::log(std::exp(before) + 1));
     auto completions = base.completions("hel", 24);
@@ -34,11 +34,11 @@ int main() {
     auto result = generateCandidates(lexicon, "coeevitjkn", {}, successors, {}, {}, false);
     assert(!result.cancelled && !result.broad.empty());
     auto correction = std::find_if(result.broad.begin(), result.broad.end(), [](const auto& c) { return c.word == "correction"; });
-    assert(correction != result.broad.end() && std::abs(correction->cost - 6.525) < 1e-9);
+    assert(correction != result.broad.end() && std::abs(correction->cost - 6.775) < 1e-9);   // within 3.6 x 1.9
     result = generateCandidates(lexicon, "alot", {}, {}, {}, {}, false);
-    assert(result.split && result.split->word == "a lot" && result.split->cost == 1.1);
+    assert(result.split && result.split->word == "a lot" && result.split->cost == splitCost);
     result = generateCandidates(lexicon, "avlot", {}, {}, {}, {}, false);
-    assert(result.split && result.split->word == "a lot" && result.split->cost == 0.72);
+    assert(result.split && result.split->word == "a lot" && result.split->cost == spaceKeySplitCost);
     snapshot.blocked.insert("lot");
     result = generateCandidates(lexicon, "alot", {}, {}, {}, {}, false);
     assert(!result.split);

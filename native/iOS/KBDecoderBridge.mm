@@ -4,11 +4,16 @@
 #include "../DecoderCore/include/CandidateGeneration.hpp"
 #include "../DecoderCore/include/Engine.hpp"
 #include "../DecoderCore/include/Personalization.hpp"
+#include "../DecoderCore/include/Safety.hpp"
 #include <memory>
 #include <cmath>
 #include <stdexcept>
 
 static std::vector<std::optional<kb::TouchOffset>> KBTaps(NSData *, NSData *, std::size_t);
+// Native accessor for other bridge classes; not visible to Swift.
+@interface KBNativeSafetyLexicon ()
+- (const kb::SafetyLexicon *)nativeLexicon;
+@end
 @interface KBPackedLexicon ()
 - (const kb::PackedLexicon *)nativeLexicon;
 @end
@@ -75,6 +80,13 @@ static void KBSetError(NSError **error, const std::exception& failure) {
     _reader->installTextMetadata(values);
 }
 - (void)warmGlideAnchors { _reader->warmAnchors(); }
+- (void)installBlockedFromSafety:(KBNativeSafetyLexicon *)safety { _reader->installBlocked([safety nativeLexicon]->blockedTerms()); }
+- (NSDictionary<NSString *, NSNumber *> *)residualPenaltiesFromSafety:(KBNativeSafetyLexicon *)safety {
+    NSMutableDictionary<NSString *, NSNumber *> *out = [NSMutableDictionary dictionary];
+    for (const auto& [term, penalty] : [safety nativeLexicon]->penalties())
+        if (std::isfinite(penalty) && _reader->wordID(term)) out[[[NSString alloc] initWithBytes:term.data() length:term.size() encoding:NSUTF8StringEncoding]] = @(penalty);
+    return out;
+}
 - (NSArray<NSString *> *)anchorWordsWithFirst:(NSData *)first last:(NSData *)last perBucket:(NSUInteger)cap {
     auto words = _reader->anchorWords({static_cast<const std::uint8_t *>(first.bytes), first.length}, {static_cast<const std::uint8_t *>(last.bytes), last.length}, cap);
     NSMutableArray *out = [NSMutableArray array]; for (const auto& word : words) [out addObject:[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]]; return out;
@@ -172,7 +184,21 @@ static void KBSetError(NSError **error, const std::exception& failure) {
 - (KBIncrementalSeedSet *)incrementalSeedsForTypedFirst:(uint8_t)first firstTapDX:(double)dx
         firstTapDY:(double)dy hasFirstTap:(BOOL)hasTap stateCap:(NSUInteger)cap
         boostWords:(NSArray<NSString *> *)words boostCounts:(NSArray<NSNumber *> *)counts error:(NSError **)error {
+    return [self incrementalSeedsForTypedFirst:first typedSecond:0 firstTapDX:dx firstTapDY:dy hasFirstTap:hasTap
+        stateCap:cap boostWords:words boostCounts:counts error:error];
+}
+- (KBIncrementalSeedSet *)incrementalSeedsForTypedFirst:(uint8_t)first typedSecond:(uint8_t)second
+        firstTapDX:(double)dx firstTapDY:(double)dy hasFirstTap:(BOOL)hasTap stateCap:(NSUInteger)cap
+        boostWords:(NSArray<NSString *> *)words boostCounts:(NSArray<NSNumber *> *)counts error:(NSError **)error {
+    return [self incrementalSeedsForTypedFirst:first typedSecond:second firstTapDX:dx firstTapDY:dy hasFirstTap:hasTap
+        stateCap:cap boostWords:words boostCounts:counts maxCost:3.6 error:error];
+}
+- (KBIncrementalSeedSet *)incrementalSeedsForTypedFirst:(uint8_t)first typedSecond:(uint8_t)second
+        firstTapDX:(double)dx firstTapDY:(double)dy hasFirstTap:(BOOL)hasTap stateCap:(NSUInteger)cap
+        boostWords:(NSArray<NSString *> *)words boostCounts:(NSArray<NSNumber *> *)counts maxCost:(double)maxCost
+        error:(NSError **)error {
     try {
+        if (!std::isfinite(maxCost) || maxCost < 0) throw std::invalid_argument("invalid seed radius");
         if (words.count != counts.count || words.count > 3000)
             throw std::invalid_argument("invalid personalization boost snapshot");
         std::vector<kb::WordFrequencyBoost> boosts;
@@ -187,7 +213,7 @@ static void KBSetError(NSError **error, const std::exception& failure) {
                              static_cast<std::uint32_t>(count)});
         }
         auto seeds = _reader->incrementalSeeds(first,
-            hasTap ? std::optional{kb::TouchOffset{dx, dy}} : std::nullopt, cap, boosts);
+            hasTap ? std::optional{kb::TouchOffset{dx, dy}} : std::nullopt, cap, boosts, second, maxCost);
         return seeds ? [[KBIncrementalSeedSet alloc] initWithNativeSeeds:std::move(seeds) lexicon:self] : nil;
     } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
 }
@@ -421,7 +447,7 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
         _injected = KBCandidates(generation.injected); _completions = KBCandidates(generation.completions);
         _displayCorrections = KBCandidates(generation.displayCorrections);
         _split = generation.split ? [[KBChannelCandidate alloc] initWithCandidate:*generation.split] : nil;
-        _cancelled = generation.cancelled;
+        _cancelled = generation.cancelled; _aimedAtBlocked = generation.aimedAtBlocked;
     }
     return self;
 }
@@ -1056,6 +1082,51 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
     } return self;
 }
 @end
+@implementation KBNativeSafetyLexicon {
+    NSData *_bytes; // Retains the exact bytes the lexicon views.
+    std::unique_ptr<const kb::SafetyLexicon> _lexicon;
+}
+- (instancetype)initWithData:(NSData *)data error:(NSError **)error {
+    if ((self = [super init])) {
+        try {
+            _bytes = [data copy];
+            _lexicon = std::make_unique<const kb::SafetyLexicon>(std::string_view(static_cast<const char *>(_bytes.bytes), _bytes.length));
+        } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
+    } return self;
+}
+- (NSUInteger)entryCount { return _lexicon->size(); }
+- (uint8_t)actionForNormalized:(NSString *)term { return static_cast<uint8_t>(_lexicon->action(KBText(term))); }
+- (uint8_t)languageForNormalized:(NSString *)term { auto language = _lexicon->language(KBText(term)); return language ? static_cast<uint8_t>(*language) : 0; }
+- (double)penaltyForNormalized:(NSString *)term { return _lexicon->penalty(KBText(term)); }
+- (NSArray<NSString *> *)blockedTerms {
+    NSMutableArray<NSString *> *out = [NSMutableArray array];
+    for (const auto& term : _lexicon->blockedTerms()) [out addObject:[[NSString alloc] initWithBytes:term.data() length:term.size() encoding:NSUTF8StringEncoding]];
+    return out;
+}
+- (const kb::SafetyLexicon *)nativeLexicon { return _lexicon.get(); }
+@end
+@interface KBNeuralWordModel ()
+- (std::shared_ptr<const kb::NeuralWordModel>)nativeModel;
+@end
+@implementation KBNeuralWordModel {
+    NSData *_mapping;
+    std::shared_ptr<const kb::NeuralWordModel> _model;
+}
+- (instancetype)initWithURL:(NSURL *)url error:(NSError **)error {
+    if ((self = [super init])) {
+        NSData *mapping = [NSData dataWithContentsOfURL:url options:NSDataReadingMappedAlways error:error];
+        if (!mapping) return nil;
+        try {
+            _model = kb::NeuralWordModel::load({static_cast<const std::byte *>(mapping.bytes), mapping.length},
+                std::shared_ptr<const void>(mapping.bytes, [owner = mapping](const void *) { (void)owner; }));
+        } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
+        _mapping = mapping;
+    } return self;
+}
+- (NSUInteger)vocabularySize { return _model->vocabularySize(); }
+- (NSUInteger)byteCount { return _mapping.length; }
+- (std::shared_ptr<const kb::NeuralWordModel>)nativeModel { return _model; }
+@end
 @implementation KBSharedEngine {
     KBPackedLexicon *_resourceOwner;
     std::shared_ptr<kb::Engine> _engine;
@@ -1064,28 +1135,43 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
     std::shared_ptr<const std::unordered_map<std::string, double>> _penalties;
 }
 - (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model policy:(NSArray<NSNumber *> *)policy
-    penalties:(NSDictionary<NSString *,NSNumber *> *)penalties profile:(BOOL)profile {
+    safety:(KBNativeSafetyLexicon *)safety profile:(BOOL)profile {
+    return [self initWithLexicon:lexicon model:model neural:nil policy:policy safety:safety profile:profile];
+}
+- (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model neural:(KBNeuralWordModel *)neural
+    policy:(NSArray<NSNumber *> *)policy safety:(KBNativeSafetyLexicon *)safety profile:(BOOL)profile {
     if ((self = [super init])) {
         _resourceOwner = [lexicon packedOwner];
         auto view = [lexicon nativeLexicon];
         // _resourceOwner retains the mapping, EngineSession retains Engine.
         auto packed = std::shared_ptr<const kb::PackedLexicon>(view.packed, [owner = _resourceOwner](const kb::PackedLexicon *) { (void)owner; });
         kb::EngineOptions options; options.correction = KBPolicy(policy); options.profile = profile;
-        _engine = std::make_shared<kb::Engine>(packed, options, [model nativeModel]); _session = _engine->createSession();
-        auto table = std::make_shared<std::unordered_map<std::string, double>>();
-        for (NSString *word in penalties) table->emplace(KBText(word), penalties[word].doubleValue);
-        _penalties = std::move(table);
+        // The neural model keeps its own mapping alive (KBNeuralWordModel's owner).
+        _engine = std::make_shared<kb::Engine>(packed, options, [model nativeModel], neural ? [neural nativeModel] : nullptr);
+        _session = _engine->createSession();
+        // Blocked words are excluded during generation (the dictionary's blocked bitset is
+        // installed at load), so ranking only applies residual in-dictionary demote penalties.
+        auto residual = std::make_shared<std::unordered_map<std::string, double>>();
+        if (safety) {
+            if (view.packed) view.packed->installBlocked([safety nativeLexicon]->blockedTerms());   // no-op if already installed
+            for (const auto& [term, penalty] : [safety nativeLexicon]->penalties())
+                if (std::isfinite(penalty) && view.packed && view.packed->wordID(term)) residual->emplace(term, penalty);
+        }
+        _penalties = std::move(residual);
     } return self;
 }
+- (BOOL)supportsNeuralSearchSpace { return _engine->supportsNeuralSearchSpace(); }
 - (KBEngineResult *)decodeWord:(NSString *)word normalized:(NSString *)normalized context:(NSArray<NSString *> *)context
     identity:(NSData *)identity offsets:(NSArray<NSNumber *> *)characterOffsets letterFlags:(NSData *)flags
     tapOffsets:(NSData *)offsets tapValidity:(NSData *)validity lexicon:(KBGenerationLexicon *)lexicon
-    personal:(KBPersonalCounts *)personal topWords:(NSArray<NSString *> *)topWords kept:(BOOL)kept token:(KBCancellationToken *)token error:(NSError **)error {
+    personal:(KBPersonalCounts *)personal topWords:(NSArray<NSString *> *)topWords kept:(BOOL)kept modelTier:(NSString *)modelTier
+    token:(KBCancellationToken *)token error:(NSError **)error {
     try {
         if (identity.length != 7 * sizeof(std::uint64_t)) throw std::invalid_argument("invalid identity shape");
         kb::DecodeInput input; std::uint64_t fields[7]; std::memcpy(fields, identity.bytes, sizeof(fields));
         input.identity = {fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]};
         input.word = KBText(word); input.normalized = KBText(normalized); input.context = KBTexts(context); input.kept = kept;
+        input.modelTier = KBText(modelTier);
         for (NSNumber *offset in characterOffsets) input.characterOffsets.push_back(offset.unsignedIntegerValue);
         const auto *bytes = static_cast<const std::uint8_t *>(flags.bytes); input.letterFlags.assign(bytes, bytes + flags.length);
         input.taps = KBTaps(offsets, validity, input.normalized.size());
@@ -1158,7 +1244,7 @@ static NSDictionary *KBExportContexts(const std::unordered_map<std::string, kb::
 - (void)cancel { _token.cancel(); }
 @end
 @implementation KBVocabularyState { kb::VocabularyState _state; }
-- (instancetype)initWithBlocked:(NSArray<NSString *> *)blocked {if((self=[super init])){std::unordered_set<std::string> words;for(NSString*word in blocked)words.insert(KBText(word));_state.setBlocked(std::move(words));}return self;}
+- (instancetype)initWithSafety:(KBNativeSafetyLexicon *)safety {if((self=[super init])){std::unordered_set<std::string> words;if(safety)for(auto&word:[safety nativeLexicon]->blockedTerms())words.insert(std::move(word));_state.setBlocked(std::move(words));}return self;}
 - (KBGenerationSnapshot *)snapshot {return [[KBGenerationSnapshot alloc] initWithSharedGeneration:_state.snapshot()];}
 - (NSDictionary *)boosts {return KBExportCounts(_state.snapshot()->boosts);}
 - (void)supplementary:(NSString *)word frequency:(NSInteger)frequency glide:(BOOL)glide {_state.supplementary(KBText(word),frequency,glide);}

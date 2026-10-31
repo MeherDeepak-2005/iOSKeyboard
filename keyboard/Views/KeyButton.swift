@@ -1,8 +1,6 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 
-// KeyButton: a dumb key view (KeyboardView owns touches) — extracted from Keyboard.swift.
+// KeyButton: a dumb key view (KeyboardView owns touches).
 
 final class KeyButton: UIView {
 	let widthKind: KeyWidth

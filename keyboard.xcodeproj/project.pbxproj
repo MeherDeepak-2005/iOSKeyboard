@@ -12,6 +12,7 @@
 		5206758E3E61B9687AE8C5FE /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
 		537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
 		564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
+		564C0156B8511197F1D5CAD1 /* native/DecoderCore/src/NeuralLanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE61 /* native/DecoderCore/src/NeuralLanguageModel.cpp */; };
 		693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
 		83C6F30D2FE821180014EA39 /* demo_keyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83C6F3062FE821180014EA39 /* demo_keyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
@@ -33,8 +34,11 @@
 		D22000000000000000000004 /* native/DecoderCore/src/Personalization.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000002 /* native/DecoderCore/src/Personalization.cpp */; };
 		D22000000000000000000005 /* native/DecoderCore/src/EngineWire.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */; };
 		D22000000000000000000006 /* native/DecoderCore/src/EngineWire.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */; };
+		D22000000000000000000007 /* native/DecoderCore/src/Safety.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000004 /* native/DecoderCore/src/Safety.cpp */; };
+		D22000000000000000000008 /* native/DecoderCore/src/Safety.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D21000000000000000000004 /* native/DecoderCore/src/Safety.cpp */; };
 		D319972CC0421BE8B12A84FE /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
 		D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
+		D324FF41223D3892D5DB1F4D /* native/DecoderCore/src/NeuralLanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE61 /* native/DecoderCore/src/NeuralLanguageModel.cpp */; };
 		ED1F51886B6A6B2857E4FA31 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
 /* End PBXBuildFile section */
 
@@ -96,7 +100,9 @@
 		D21000000000000000000001 /* native/DecoderCore/src/Engine.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Engine.cpp; sourceTree = SOURCE_ROOT; };
 		D21000000000000000000002 /* native/DecoderCore/src/Personalization.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Personalization.cpp; sourceTree = SOURCE_ROOT; };
 		D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/EngineWire.cpp; sourceTree = SOURCE_ROOT; };
+		D21000000000000000000004 /* native/DecoderCore/src/Safety.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Safety.cpp; sourceTree = SOURCE_ROOT; };
 		E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralSearch.cpp; sourceTree = SOURCE_ROOT; };
+		E7EC13FF09A92CB8EBA7BE61 /* native/DecoderCore/src/NeuralLanguageModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralLanguageModel.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -112,10 +118,15 @@
 			membershipExceptions = (
 				emoji.bin,
 				Engine/DecodeContract.swift,
-				Engine/GRULanguagePrior.swift,
+				Engine/Decoder/EngineContracts.swift,
+				Engine/Decoder/GlideProfile.swift,
+				Engine/Decoder/KeyboardEngine.swift,
+				"Engine/Decoder/KeyboardEngine+Correction.swift",
+				"Engine/Decoder/KeyboardEngine+Glide.swift",
+				"Engine/Decoder/KeyboardEngine+Ranking.swift",
+				"Engine/Decoder/KeyboardEngine+Suggestions.swift",
 				Engine/GlidePath.swift,
-				Engine/Keyboardengine.swift,
-				Engine/LangData.swift,
+				Engine/GRULanguagePrior.swift,
 				Engine/Lexicon.swift,
 				Engine/MultiwordSearch.swift,
 				Engine/NativeDecoderParity.swift,
@@ -126,6 +137,12 @@
 				Engine/TenglishTransliterator.swift,
 				Engine/Trie.swift,
 				Engine/UserModel.swift,
+				Engine/Vocabulary/IncrementalDecodeSession.swift,
+				Engine/Vocabulary/LangData.swift,
+				"Engine/Vocabulary/LangData+GlideAnchors.swift",
+				"Engine/Vocabulary/LangData+NodeWalk.swift",
+				"Engine/Vocabulary/LangData+PackedTrie.swift",
+				Engine/Vocabulary/ModifiedKneserNeyModel.swift,
 				langdata.bin,
 				safety.kbguard,
 				Shared/HostDocumentReconciler.swift,
@@ -145,8 +162,21 @@
 				tenglish_lexicon.bin,
 				ThirdPartyNotices.txt,
 				Views/ClipboardPanel.swift,
-				Views/Emoji.swift,
-				Views/Keyboard.swift,
+				Views/Emoji/EmojiAtlas.swift,
+				Views/Emoji/EmojiCells.swift,
+				Views/Emoji/EmojiKeyboardView.swift,
+				Views/Emoji/EmojiRecents.swift,
+				Views/Emoji/EmojiSearchHeader.swift,
+				Views/Emoji/EmojiStore.swift,
+				Views/Keyboard/KeyAlternativesView.swift,
+				Views/Keyboard/KeyboardMetrics.swift,
+				Views/Keyboard/KeyboardMetricsPreview.swift,
+				Views/Keyboard/KeyboardView.swift,
+				"Views/Keyboard/KeyboardView+Keys.swift",
+				"Views/Keyboard/KeyboardView+Layout.swift",
+				"Views/Keyboard/KeyboardView+Panels.swift",
+				"Views/Keyboard/KeyboardView+Presentation.swift",
+				"Views/Keyboard/KeyboardView+Touch.swift",
 				Views/KeyboardLayout.swift,
 				Views/KeyboardTheme.swift,
 				Views/KeyButton.swift,
@@ -237,7 +267,9 @@
 				D21000000000000000000001 /* native/DecoderCore/src/Engine.cpp */,
 				D21000000000000000000003 /* native/DecoderCore/src/EngineWire.cpp */,
 				D21000000000000000000002 /* native/DecoderCore/src/Personalization.cpp */,
+				D21000000000000000000004 /* native/DecoderCore/src/Safety.cpp */,
 				E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */,
+				E7EC13FF09A92CB8EBA7BE61 /* native/DecoderCore/src/NeuralLanguageModel.cpp */,
 				80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */,
 				11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */,
 				7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */,
@@ -467,6 +499,7 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/tools/lm/install_internal_gru.sh",
+				"$(SRCROOT)/tools/nss/install_internal_nss.sh",
 			);
 			name = "Install Internal Neural Model";
 			outputFileListPaths = (
@@ -475,7 +508,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# The installer self-gates on INTERNAL_GRU_ENABLED and no-ops otherwise,\n# so ordinary Debug and Release builds bundle no model.\n\"${SRCROOT}/tools/lm/install_internal_gru.sh\"\n";
+			shellScript = "# The installers self-gate on INTERNAL_GRU_ENABLED / INTERNAL_NSS_ENABLED and no-op\n# otherwise, so ordinary Debug and Release builds bundle no model.\n\"${SRCROOT}/tools/lm/install_internal_gru.sh\"\n\"${SRCROOT}/tools/nss/install_internal_nss.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -488,9 +521,11 @@
 				B12000000000000000000009 /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
 				8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */,
 				D22000000000000000000001 /* native/DecoderCore/src/Engine.cpp in Sources */,
+				D22000000000000000000007 /* native/DecoderCore/src/Safety.cpp in Sources */,
 				D22000000000000000000005 /* native/DecoderCore/src/EngineWire.cpp in Sources */,
 				D22000000000000000000003 /* native/DecoderCore/src/Personalization.cpp in Sources */,
 				D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */,
+				D324FF41223D3892D5DB1F4D /* native/DecoderCore/src/NeuralLanguageModel.cpp in Sources */,
 				5206758E3E61B9687AE8C5FE /* native/DecoderCore/src/Multiword.cpp in Sources */,
 				693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */,
 				A188A11F039D8AA323A727B8 /* native/DecoderCore/src/Ranking.cpp in Sources */,
@@ -523,9 +558,11 @@
 				B1200000000000000000000A /* native/DecoderCore/src/CandidateGeneration.cpp in Sources */,
 				D319972CC0421BE8B12A84FE /* native/DecoderCore/src/Adaptation.cpp in Sources */,
 				D22000000000000000000002 /* native/DecoderCore/src/Engine.cpp in Sources */,
+				D22000000000000000000008 /* native/DecoderCore/src/Safety.cpp in Sources */,
 				D22000000000000000000006 /* native/DecoderCore/src/EngineWire.cpp in Sources */,
 				D22000000000000000000004 /* native/DecoderCore/src/Personalization.cpp in Sources */,
 				564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */,
+				564C0156B8511197F1D5CAD1 /* native/DecoderCore/src/NeuralLanguageModel.cpp in Sources */,
 				537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */,
 				8A77364AA091280987C485A1 /* native/DecoderCore/src/Glide.cpp in Sources */,
 				ED1F51886B6A6B2857E4FA31 /* native/DecoderCore/src/Ranking.cpp in Sources */,

@@ -1,0 +1,6 @@
+{
+  "description": "One GRU layer, 512 hidden, projected to the tied 96-wide embedding.",
+  "model": {"arch": "gru", "embed": 96, "hidden": 512, "proj": 96, "layers": 1, "tied": true, "dropout": 0.0},
+  "data": {"weights": {"tatoeba": 3.0, "wikitext": 0.6}},
+  "train": {"batch": 128, "bptt": 48, "tokens": 130000000, "lr": 3e-3, "warmup": 1000, "clip": 1.0, "weight_decay": 0.01, "eval_every": 2000}
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Interactive autocorrect probe — Python twin of KeyboardEngine.correction(from:)
-in Keyboardengine.swift: given a typed string (+ optional left context), generate
+in KeyboardEngine (keyboard/Engine/Decoder): given a typed string (+ optional left context), generate
 noisy-channel candidates from the trie, score each with the pre-trained neural LM
 and the corpus n-gram, blend them (BlendedScorer: 0.7 neural + 0.3 n-gram), and
 apply the SAME margin gate the device uses to decide whether to fire a correction.

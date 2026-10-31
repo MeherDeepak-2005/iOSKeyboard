@@ -42,7 +42,10 @@ def prepare():
         incrementalEvery=20, requests_sha256=sha(OUT / 'requests.jsonl'),
         pack_sha256=manifest['pack_sha256'], source_manifest=manifest,
         source_sha256={str(p): sha(ROOT/p) for p in (
-            Path('keyboard/Engine/NgramScorer.swift'), Path('keyboard/Engine/Keyboardengine.swift'),
+            Path('keyboard/Engine/NgramScorer.swift'),
+            Path('keyboard/Engine/Decoder/KeyboardEngine.swift'),
+            Path('keyboard/Engine/Decoder/KeyboardEngine+Ranking.swift'),
+            Path('keyboard/Engine/Decoder/KeyboardEngine+Correction.swift'),
             Path('keyboardTests/CorrectionCalibrationTests.swift'), Path(__file__).relative_to(ROOT))},
         limits=['Previously inspected synthetic validation corpus; this is a comparative audit, not a fresh blind production test.',
                 'No parameter fitting; prototype strength fixed before this comparison.',

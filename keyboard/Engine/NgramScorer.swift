@@ -31,9 +31,10 @@ final class NgramScorer {
 #endif
         native = KBNativeLanguageModel(packed: data?.nativeCandidateLexicon, smoothing: smoothing.rawValue)
     }
-    func makeSharedEngine(lexicon: KBGenerationLexicon, policy: [NSNumber], penalties: [String: NSNumber], profile: Bool = false) -> KBSharedEngine? {
+    func makeSharedEngine(lexicon: KBGenerationLexicon, policy: [NSNumber], safety: KBNativeSafetyLexicon?,
+                          neural: KBNeuralWordModel? = nil, profile: Bool = false) -> KBSharedEngine? {
         guard let native else { return nil }
-        return KBSharedEngine(lexicon: lexicon, model: native, policy: policy, penalties: penalties, profile: profile)
+        return KBSharedEngine(lexicon: lexicon, model: native, neural: neural, policy: policy, safety: safety, profile: profile)
     }
     func logProbs(_ candidates: [String], context: [String]) -> [Double] {
 #if DEBUG || KB_REFERENCE_DECODER_YES
@@ -122,16 +123,12 @@ final class SwiftNgramScorer {
 	/// in the prediction funnel also protects old packs that still contain them.
 	private static let minCorpusContinuationEvidence = 2
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	init(user: UserModel, backend: DecoderCoreBackend = .cpp,
          smoothing: NgramSmoothing = .wittenBell) {
 		self.user = user
 		self.backend = backend
         self.smoothing = smoothing
 	}
-	// MIGRATION: planned SPLIT | stage=search | target=NgramModelView
-	// MIGRATION-SPLIT: SWIFT_IOS supplies epoch-tagged immutable vocabulary/personalization views; CPP_CORE attaches them without per-word Swift callbacks.
 	func attach(data: LangData?, resolveID: @escaping (String) -> Int32?, lexicon: Lexicon) {
 		self.data = data
 		self.resolveID = resolveID
@@ -146,8 +143,6 @@ final class SwiftNgramScorer {
 
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func logProbs(_ candidates: [String], context: [String]) -> [Double] {
 		let ctx = context.map { $0.lowercased() }
 		return score(candidates.map { $0.lowercased() }, context: ctx)
@@ -156,8 +151,6 @@ final class SwiftNgramScorer {
 	/// log P(a | ctx) + log P(b | ctx + a) — the two-word prior a split correction
 	/// ("alot" → "a lot") is scored with. The n-gram counts handle word pairs
 	/// natively where the single-candidate seam would floor a spaced string.
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func pairLogProb(_ a: String, _ b: String, context: [String]) -> Double {
 		let ctx = context.map { $0.lowercased() }
 		let la = a.lowercased()
@@ -165,8 +158,6 @@ final class SwiftNgramScorer {
 			+ score([b.lowercased()], context: ctx + [la])[0]
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func sequenceLogProb(_ words: [String], context: [String]) -> Double {
 		var ctx = context.map { $0.lowercased() }
 		var total = 0.0
@@ -178,8 +169,6 @@ final class SwiftNgramScorer {
 		return total
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func score(_ words: [String], context: [String]) -> [Double] {
 		let ids = words.map(resolveID)
         let n = context.count
@@ -292,8 +281,6 @@ final class SwiftNgramScorer {
         return count / Double(total) + discountMass / Double(total) * backoff
     }
 
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func personalBoost(_ count: Int, weight: Double) -> Double {
 		guard count >= minPersonalEvidence else { return 0 }
 		return weight * log1p(Double(count - minPersonalEvidence + 1))
@@ -301,8 +288,6 @@ final class SwiftNgramScorer {
 
 	/// Next-word predictions from the combined counts (trigram first, then bigram).
 	/// Returns more than the bar shows so the engine can filter before truncating.
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	func nextWords(context: [String], limit: Int) -> [String] {
 		let ctx = context.map { $0.lowercased() }
 		let n = ctx.count
@@ -327,17 +312,16 @@ final class SwiftNgramScorer {
 		}
 		return Array(out.prefix(limit))
 	}
-	// MIGRATION: planned CPP_CORE | stage=search | target=NgramScorer
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 	private func merged(_ base: [(word: Int32, count: Int)]?, _ userCounts: [String: Int]) -> [String] {
 		// Corpus entries are the foundation; user counts only BOOST corpus words.
 		// OOV strings (typos, adopted words, contact names) are excluded — they must
 		// not surface in next-word predictions just because the user typed them recently.
 		var m: [String: Int] = [:]
-		for e in base ?? [] where e.count >= Self.minCorpusContinuationEvidence {
+		for e in base ?? [] where e.count >= Self.minCorpusContinuationEvidence && !(data?.isSwiftBlocked(e.word) ?? false) {
 			m[data?.word(Int(e.word)) ?? "", default: 0] += e.count
 		}
-		for (w, c) in userCounts where lexicon?.isStaticWord(w) == true {
+		for (w, c) in userCounts where lexicon?.isStaticWord(w) == true
+			&& !(data?.trieWordID(w).map { data?.isSwiftBlocked($0) ?? false } ?? false) {
 			if m[w] != nil, c >= minPersonalEvidence {
 				m[w, default: 0] += min(c - minPersonalEvidence + 1, 8)
 			} else if c >= minNovelPredictionEvidence {

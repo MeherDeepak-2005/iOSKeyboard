@@ -4,7 +4,7 @@ set -eu
 cd "$(dirname "$0")"
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/kb-glide-eval.XXXXXX")
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
-for source_name in Adaptation CandidateGeneration Glide IncrementalSearch LanguageModel Multiword NeuralSearch PackedLexicon Ranking SpatialModel; do
+for source_name in Adaptation CandidateGeneration Engine EngineWire Glide IncrementalSearch LanguageModel Multiword NeuralSearch PackedLexicon Personalization Ranking Safety SpatialModel; do
   xcrun clang++ -std=c++20 -O2 -c "../../native/DecoderCore/src/$source_name.cpp" -o "$work_dir/$source_name.o"
 done
 xcrun clang++ -std=c++20 -O2 -fobjc-arc -c ../../native/iOS/KBDecoderBridge.mm -o "$work_dir/bridge.o"
@@ -12,7 +12,12 @@ swiftc -O -module-cache-path "$work_dir/modules" \
   -import-objc-header ../../native/iOS/Keyboard-Bridging-Header.h \
   ../../keyboard/Engine/SpatialModel.swift \
   ../../keyboard/Engine/Trie.swift \
-  ../../keyboard/Engine/LangData.swift \
+  ../../keyboard/Engine/Vocabulary/IncrementalDecodeSession.swift \
+  ../../keyboard/Engine/Vocabulary/LangData.swift \
+  ../../keyboard/Engine/Vocabulary/LangData+GlideAnchors.swift \
+  ../../keyboard/Engine/Vocabulary/LangData+NodeWalk.swift \
+  ../../keyboard/Engine/Vocabulary/LangData+PackedTrie.swift \
+  ../../keyboard/Engine/Vocabulary/ModifiedKneserNeyModel.swift \
   ../../keyboard/Engine/NativeDecoderParity.swift \
   ../../keyboard/Engine/GlidePath.swift \
   PlatformShim.swift main.swift "$work_dir/"*.o \

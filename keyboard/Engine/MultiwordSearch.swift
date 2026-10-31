@@ -1,17 +1,11 @@
-// MIGRATION-FILE: planned CPP_CORE | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 
 /// Bounded segmentation beam for internal neural decoding. Each hypothesis keeps
 /// its consumed touch position, uncommitted words and true channel cost. The caller
 /// scores the full hypothesized phrase from committed context before pruning, so
 /// the recurrent LM conditions later words on earlier uncommitted words.
-// MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
-// MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
 nonisolated final class MultiwordSearch {
     private var nativeSearch: KBNativeMultiword?
-	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
-	// MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
 	struct Hypothesis {
 		let offset: Int
 		let words: [String]
@@ -53,8 +47,6 @@ nonisolated final class MultiwordSearch {
         return (value.frontier.map(Hypothesis.init(native:)), value.finished.map(Candidate.init(native:)))
     }
 
-	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
-	// MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
 #if DEBUG || KB_REFERENCE_DECODER_YES
 	init(typed: String, taps: [KeyTap?]?, candidates: @escaping (String, [KeyTap?]?) -> [Candidate]) {
 		bytes = Array(typed.utf8)
@@ -63,8 +55,6 @@ nonisolated final class MultiwordSearch {
 	}
 #endif
 
-	// MIGRATION: planned CPP_CORE | stage=policy-glide | target=MultiwordBeam
-	// MIGRATION-NOTE: Preserve current segmentation limits and true channel costs.
 	func expand(_ frontier: [Hypothesis], shouldCancel: @escaping () -> Bool) -> [Hypothesis] {
         if let nativeSearch { return nativeSearch.expand(frontier.map(\.native), shouldCancel: shouldCancel).map(Hypothesis.init(native:)) }
 #if DEBUG || KB_REFERENCE_DECODER_YES

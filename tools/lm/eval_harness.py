@@ -51,7 +51,7 @@ def file_sha256(path):
 
 
 def first_letter_penalty(typed_len):
-    """Mirror Trie.firstLetterPenaltyPolicy in Keyboardengine.swift: the first-letter
+    """Mirror Trie.firstLetterPenaltyPolicy in KeyboardEngine (keyboard/Engine/Decoder): the first-letter
     protection scales with word length, so short first-letter typos (js->is, hw->how)
     can still be generated while long words stay protected."""
     if typed_len <= 2:

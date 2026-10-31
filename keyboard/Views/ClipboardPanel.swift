@@ -1,11 +1,9 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 
 // Clipboard panel — the full history/pins overlay. Shown by KeyboardView OVER the key
 // deck at the SAME height (the emoji-page pattern), so the keyboard never grows. Rows
 // insert on tap and the panel stays up (multi-paste, Gboard-style); swipe left to pin,
-// per-row ✕ to delete. Text only. Add this file to BOTH targets.
+// per-row ✕ to delete. Text only.
 
 final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelegate {
 	var onPick: ((String) -> Void)?

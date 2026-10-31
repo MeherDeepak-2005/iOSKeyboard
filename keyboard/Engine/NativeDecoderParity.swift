@@ -1,4 +1,3 @@
-// MIGRATION-FILE: planned SWIFT_IOS | Native comparison transport and audit helpers.
 import Foundation
 
 /// Production uses C++; the Swift implementation remains an explicit reference.

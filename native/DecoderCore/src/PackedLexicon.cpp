@@ -1,4 +1,5 @@
 #include "../include/PackedLexicon.hpp"
+#include "../include/CandidateGeneration.hpp"   // MutableTrie for the blocked-word trie
 #include "../include/IncrementalSearch.hpp"
 #include <algorithm>
 #include <queue>
@@ -24,6 +25,19 @@ void PackedLexicon::installTextMetadata(std::span<const TextMetadata> values) co
         textMetadata_.emplace(value.id, value);
     }});
 }
+void PackedLexicon::installBlocked(std::span<const std::string> terms) const {
+    std::call_once(blockedOnce_, [&] {
+        std::vector<std::uint64_t> bits((std::size_t(words_) + 63) / 64);
+        std::size_t count = 0;
+        for (const auto& term : terms) if (auto id = wordID(term)) {
+            auto& slot = bits[std::uint32_t(*id) >> 6]; auto mask = std::uint64_t(1) << (std::uint32_t(*id) & 63);
+            if (!(slot & mask)) { slot |= mask; ++count; }
+        }
+        auto trie = std::make_shared<MutableTrie>();
+        for (std::uint32_t id = 0; id < words_; ++id) if (bits[id >> 6] >> (id & 63) & 1) trie->insert(word(id), frequency(id), std::int32_t(id));
+        blocked_ = std::move(bits); blockedCount_ = count; blockedTrie_ = std::move(trie);
+    });
+}
 std::size_t PackedLexicon::characterCount(std::string_view text) const {
     if (auto id = wordID(text)) if (auto found = textMetadata_.find(*id); found != textMetadata_.end()) return found->second.characters;
     return text.size();
@@ -48,7 +62,7 @@ std::vector<std::string> PackedLexicon::anchorWords(std::span<const std::uint8_t
     warmAnchors(); std::vector<std::string> out; std::unordered_map<std::int32_t, bool> seen;
     for (auto a : first) for (auto b : last) if (auto found = anchors_.find(std::uint16_t(a) << 8 | b); found != anchors_.end()) {
         for (std::size_t i = 0; i < std::min(cap, found->second.size()); ++i) {
-            auto id = found->second[i]; if (seen.emplace(id, true).second) out.emplace_back(word(id));
+            auto id = found->second[i]; if (!blocked(std::uint32_t(id)) && seen.emplace(id, true).second) out.emplace_back(word(id));
         }
     }
     return out;
@@ -116,7 +130,9 @@ std::vector<ChannelCandidate> PackedLexicon::completions(std::string_view prefix
     while (!heap.empty() && out.size() < limit) {
         auto e = pop();
         if (e.node == SIZE_MAX) {
-            out.push_back({std::string(word(e.wordID)), 0, std::log(double(std::max(frequency(e.wordID), 1u)) + 1)});
+            // The typed text itself is never censored: a blocked word completes only to itself.
+            if (!blocked(std::uint32_t(e.wordID)) || word(e.wordID) == prefix)
+                out.push_back({std::string(word(e.wordID)), 0, std::log(double(std::max(frequency(e.wordID), 1u)) + 1)});
             continue;
         }
         auto offset = trie_ + nodeSize_ * e.node;
@@ -261,15 +277,18 @@ std::string_view PackedLexicon::word(std::uint32_t id) const {
     return {reinterpret_cast<const char*>(bytes_.data() + blob_ + start), end - start};
 }
 std::shared_ptr<const IncrementalSeedSet> PackedLexicon::incrementalSeeds(
-    std::uint8_t typedFirst, std::optional<TouchOffset> firstTap, std::size_t stateCap, std::span<const WordFrequencyBoost> boosts) const {
+    std::uint8_t typedFirst, std::optional<TouchOffset> firstTap, std::size_t stateCap, std::span<const WordFrequencyBoost> boosts, std::uint8_t typedSecond, double maxCost) const {
     if (!nodes_ || typedFirst < 'a' || typedFirst > 'z') return {};
     std::array<bool, 256> allowed{};
     auto first = u32(trie_ + 2);
     auto count = std::to_integer<unsigned>(bytes_[trie_ + 1]);
-    auto penalty = firstLetterPenalty(8, 'z', typedFirst);
+    // A word with another first letter is reachable within maxCost only through a
+    // direct first-letter substitution (other paths also pay a deletion or insertion), at its
+    // own 5+ letter penalty: neighbouring keys pay less than distant ones.
     for (std::size_t i = first; i < std::size_t(first) + count; ++i) {
         auto label = std::to_integer<std::uint8_t>(bytes_[trie_ + nodeSize_ * i]);
-        if (label == typedFirst || penalty + substitutionCost(label, typedFirst, firstTap) <= 3.6)
+        if (label == typedFirst || (typedSecond && label == typedSecond) ||
+                seedFirstLetterCost(label, typedFirst, firstTap) <= maxCost)
             allowed[label] = true;
     }
     std::unordered_map<std::string_view, std::uint32_t> boostView;
@@ -299,19 +318,20 @@ std::shared_ptr<const IncrementalSeedSet> PackedLexicon::incrementalSeeds(
         if (allowed[label] && !seedIDs_[label].empty()) pending.emplace(seedIDs_[label][0], std::uint16_t(label));
     while (!pending.empty()) {
         const auto [id, label] = pending.top(); pending.pop();
+        if (++positions[label] < seedIDs_[label].size()) pending.emplace(seedIDs_[label][positions[label]], label);
+        if (blocked(id)) continue;
         auto spelling = word(id);
         double logFrequency = std::log(double(std::max(frequency(id), 1u)) + 1);
         if (auto boost = boostView.find(spelling); boost != boostView.end())
             logFrequency = std::log(std::exp(logFrequency) + double(boost->second));
         seeds.entries.push_back({spelling, spelling, logFrequency});
-        if (++positions[label] < seedIDs_[label].size()) pending.emplace(seedIDs_[label][positions[label]], label);
     }
     return std::make_shared<const IncrementalSeedSet>(std::move(seeds));
 }
 std::vector<ChannelCandidate> PackedLexicon::search(std::string_view typed, double maxCost,
         std::span<const std::optional<TouchOffset>> taps,
         std::optional<std::span<const WordFunding>> funding,
-        const std::function<bool()>& shouldCancel) const {
+        const std::function<bool()>& shouldCancel, bool missingFirstOnly, std::span<const std::uint8_t> roots) const {
     if (!nodes_ || typed.empty()) return {};
     if (!std::isfinite(maxCost) || maxCost < 0) throw std::invalid_argument("invalid search radius");
     struct Prior { std::vector<std::pair<std::uint8_t, std::size_t>> children; double bonus = 0, terminal = 0; };
@@ -335,7 +355,7 @@ std::vector<ChannelCandidate> PackedLexicon::search(std::string_view typed, doub
             if (child.first == byte) return child.second;
         return SIZE_MAX;
     };
-    const auto extra = (maxCost + (funding ? 1.6 : 0)) / deletionCost;
+    const auto extra = (maxCost + (funding ? 1.6 : 0)) / std::min(deletionCost, doubledDeletionCost);
     if (extra >= double(std::numeric_limits<std::size_t>::max() / 2))
         throw std::length_error("search depth overflow");
     const auto allowance = static_cast<std::size_t>(extra) + 2;
@@ -354,23 +374,36 @@ std::vector<ChannelCandidate> PackedLexicon::search(std::string_view typed, doub
     auto byteAt = [&](std::size_t node, std::size_t offset) {
         return std::to_integer<std::uint8_t>(bytes_[trie_ + nodeSize_ * node + offset]);
     };
+    // The full search leaves dropped-first-letter candidates (bove -> above) to the
+    // missingFirstOnly pass: admitting that shape here would lower the root bound of every
+    // first letter and open most of the trie on each keystroke.
+    const auto typedFirst = std::uint8_t(typed.front()), typedSecondLetter = n > 1 ? std::uint8_t(typed[1]) : std::uint8_t(0);
+    auto penaltyOf = [&](std::uint8_t candidateFirst, std::uint8_t candidateSecond) {
+        if (!missingFirstOnly && candidateSecond == typedFirst && !(typedSecondLetter && candidateFirst == typedSecondLetter))
+            candidateSecond = 0;
+        return firstLetterPenalty(n, candidateFirst, typedFirst, typedSecondLetter, candidateSecond);
+    };
+    // parentMin is the previous DP row's minimum: a transposition reaches back to it,
+    // so a branch may only be pruned when min(rowMin, parentMin + transposition) is over budget.
     auto visit = [&](auto&& self, std::size_t node, std::uint8_t letter, std::uint8_t previousLetter,
-                     std::size_t depth, double firstPenalty, std::size_t prior) -> void {
+                     std::size_t depth, double firstPenalty, std::size_t prior, double parentMin) -> void {
         if (cancelled || depth > maxDepth) return;
+        const double rootPenalty = firstPenalty;   // best case below the root; exact from depth 2
         ++visits;
         if ((visits & 127) == 0 && shouldCancel && shouldCancel()) { cancelled = true; return; }
         if (!substitutionReady[letter]) {
             for (std::size_t column = 0; column < n; ++column)
                 substitutions[column][letter] = substitutionCost(letter, std::uint8_t(typed[column]),
-                    taps.size() == n ? taps[column] : std::nullopt);
+                    taps.size() == n ? taps[column] : std::nullopt, column == 0);
             substitutionReady[letter] = true;
         }
         const auto base = depth * (n + 1), previous = base - (n + 1);
-        const auto skip = letter == apostrophe ? apostropheSkipCost : deletionCost;
-        double rowMin = dp[previous] + skip; dp[base] = rowMin;
+        double rowMin = dp[previous] + deletionCostAt(letter, previousLetter, 0); dp[base] = rowMin;
         for (std::size_t column = 1; column <= n; ++column) {
-            const double insertion = dp[base + column - 1] + insertionCost;
-            const double deletion = dp[previous + column] + skip;
+            const auto typedLetter = std::uint8_t(typed[column - 1]);
+            const double insertion = dp[base + column - 1] +
+                insertionCostAt(typedLetter, column >= 2 ? std::uint8_t(typed[column - 2]) : 0, letter);
+            const double deletion = dp[previous + column] + deletionCostAt(letter, previousLetter, typedLetter);
             double value = std::min(insertion, std::min(deletion,
                 dp[previous + column - 1] + substitutions[column - 1][letter]));
             if (depth >= 2 && column >= 2 && letter == std::uint8_t(typed[column - 2]) &&
@@ -383,21 +416,31 @@ std::vector<ChannelCandidate> PackedLexicon::search(std::string_view typed, doub
         if (version_ == 5 && id == empty16) id = empty32;
         const double bonus = prior != SIZE_MAX ? priors[prior].bonus : 0;
         const double terminal = prior != SIZE_MAX ? priors[prior].terminal : 0;
+        // The root penalty assumed the best case for the candidate's second letter; settle it.
+        const auto typedSecond = n > 1 ? std::uint8_t(typed[1]) : std::uint8_t(0);
+        if (depth == 1) firstPenalty = std::max(firstPenalty, firstLetterPenalty(n, letter, std::uint8_t(typed.front()), typedSecond));
+        if (depth == 2) firstPenalty = penaltyOf(previousLetter, letter);
         const double finalCost = dp[base + n] + firstPenalty;
-        if (id != empty32 && finalCost - terminal <= maxCost) hits.emplace_back(id, finalCost);
-        if (rowMin + firstPenalty - bonus <= maxCost) {
+        if (id != empty32 && !blocked(id) && finalCost - terminal <= maxCost) hits.emplace_back(id, finalCost);
+        const double bound = depth == 1 ? rootPenalty : firstPenalty;
+        if (std::min(rowMin, parentMin + transpositionCost) + bound - bonus <= maxCost) {
             const auto first = u32(offset + 2); const auto count = byteAt(node, 1);
             for (std::size_t child = first; child < std::size_t(first) + count; ++child) {
                 const auto childByte = byteAt(child, 0);
-                self(self, child, childByte, letter, depth + 1, firstPenalty, priorChild(prior, childByte));
+                if (missingFirstOnly && depth == 1 && childByte != std::uint8_t(typed.front())) continue;
+                self(self, child, childByte, letter, depth + 1, bound, priorChild(prior, childByte), rowMin);
             }
         }
     };
     const auto first = u32(trie_ + 2); const auto count = byteAt(0, 1);
     for (std::size_t node = first; node < std::size_t(first) + count; ++node) {
         const auto letter = byteAt(node, 0);
-        visit(visit, node, letter, 0, 1, firstLetterPenalty(n, letter, std::uint8_t(typed.front())),
-              priorChild(0, letter));
+        // A candidate starting with the typed second letter then the first is a swap (avlot ->
+        // valor), which the full search already emits.
+        if (missingFirstOnly && (letter == typedFirst || (typedSecondLetter && letter == typedSecondLetter))) continue;
+        if (!roots.empty() && std::find(roots.begin(), roots.end(), letter) == roots.end()) continue;
+        visit(visit, node, letter, 0, 1, penaltyOf(letter, typedFirst),
+              priorChild(0, letter), 0.0);
     }
     if (cancelled) return {};
     std::vector<ChannelCandidate> result; result.reserve(hits.size());

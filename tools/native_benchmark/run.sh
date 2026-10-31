@@ -3,14 +3,20 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/kb-native-bench.XXXXXX")
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
-for source_name in Adaptation CandidateGeneration Glide IncrementalSearch LanguageModel Multiword NeuralSearch PackedLexicon Ranking SpatialModel; do
+for source_name in Adaptation CandidateGeneration Engine EngineWire Glide IncrementalSearch LanguageModel Multiword NeuralSearch PackedLexicon Personalization Ranking Safety SpatialModel; do
   xcrun clang++ -std=c++20 -O3 -c "$repo_root/native/DecoderCore/src/$source_name.cpp" -o "$work_dir/$source_name.o"
 done
 xcrun clang++ -std=c++20 -O3 -DKB_REFERENCE_DECODER_YES=1 -fobjc-arc -c "$repo_root/native/iOS/KBDecoderBridge.mm" -o "$work_dir/bridge.o"
 swiftc -O -D KB_BENCHMARK_CLI -D KB_REFERENCE_DECODER_YES -Xcc -DKB_REFERENCE_DECODER_YES=1 -module-cache-path "$work_dir/modules" \
   -import-objc-header "$repo_root/native/iOS/Keyboard-Bridging-Header.h" \
   "$repo_root/keyboard/Engine/SpatialModel.swift" "$repo_root/keyboard/Engine/Trie.swift" \
-  "$repo_root/keyboard/Engine/LangData.swift" "$repo_root/keyboard/Engine/NativeDecoderParity.swift" \
+  "$repo_root/keyboard/Engine/Vocabulary/IncrementalDecodeSession.swift" \
+  "$repo_root/keyboard/Engine/Vocabulary/LangData.swift" \
+  "$repo_root/keyboard/Engine/Vocabulary/LangData+GlideAnchors.swift" \
+  "$repo_root/keyboard/Engine/Vocabulary/LangData+NodeWalk.swift" \
+  "$repo_root/keyboard/Engine/Vocabulary/LangData+PackedTrie.swift" \
+  "$repo_root/keyboard/Engine/Vocabulary/ModifiedKneserNeyModel.swift" \
+  "$repo_root/keyboard/Engine/NativeDecoderParity.swift" \
   "$repo_root/tools/glide_eval/PlatformShim.swift" "$repo_root/keyboardTests/NativePerformanceBenchmark.swift" \
   "$repo_root/tools/native_benchmark/main.swift" "$work_dir/"*.o -lc++ -framework Foundation -framework CoreML -o "$work_dir/benchmark"
 if [ "${1:-}" = "--build-only" ]; then exit 0; fi

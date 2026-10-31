@@ -2,6 +2,7 @@
 NS_ASSUME_NONNULL_BEGIN
 @class KBIncrementalSeedSet;
 @class KBChannelCandidate;
+@class KBNativeSafetyLexicon;
 
 // iOS ownership and transport. Portable algorithms live exclusively in DecoderCore.
 #if DEBUG || KB_REFERENCE_DECODER_YES
@@ -38,6 +39,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)installTextMetadataIDs:(NSArray<NSNumber *> *)ids characterCounts:(NSArray<NSNumber *> *)counts
     firstLetters:(NSArray<NSNumber *> *)first lastLetters:(NSArray<NSNumber *> *)last;
 - (void)warmGlideAnchors;
+// Installs the safety-blocked words as a word-ID bitset, once, before any search: search,
+// completions, retained seeds, anchors and successors never emit them afterwards.
+- (void)installBlockedFromSafety:(KBNativeSafetyLexicon *)safety;
+// Residual non-blocking penalties (in-dictionary demote terms) that ranking still applies.
+- (NSDictionary<NSString *, NSNumber *> *)residualPenaltiesFromSafety:(KBNativeSafetyLexicon *)safety;
 - (NSArray<NSString *> *)anchorWordsWithFirst:(NSData *)first last:(NSData *)last perBucket:(NSUInteger)cap;
 - (NSArray<KBChannelCandidate *> *)completionsForPrefix:(NSString *)prefix limit:(NSUInteger)limit;
 // Prepares immutable native seed metadata directly from the retained mapping.
@@ -49,6 +55,18 @@ NS_ASSUME_NONNULL_BEGIN
         firstTapDX:(double)dx firstTapDY:(double)dy hasFirstTap:(BOOL)hasTap
         stateCap:(NSUInteger)cap boostWords:(NSArray<NSString *> *)words
         boostCounts:(NSArray<NSNumber *> *)counts error:(NSError **)error __attribute__((swift_error(nonnull_error)));
+// typedSecond (0 = unknown) also seeds words starting with it, for a swapped first pair.
+- (nullable KBIncrementalSeedSet *)incrementalSeedsForTypedFirst:(uint8_t)first typedSecond:(uint8_t)second
+        firstTapDX:(double)dx firstTapDY:(double)dy hasFirstTap:(BOOL)hasTap
+        stateCap:(NSUInteger)cap boostWords:(NSArray<NSString *> *)words
+        boostCounts:(NSArray<NSNumber *> *)counts error:(NSError **)error __attribute__((swift_error(nonnull_error)));
+// maxCost: the search radius the seeds must cover (2.8 up to 7 letters, 3.6 from 8);
+// the overloads above use 3.6.
+- (nullable KBIncrementalSeedSet *)incrementalSeedsForTypedFirst:(uint8_t)first typedSecond:(uint8_t)second
+        firstTapDX:(double)dx firstTapDY:(double)dy hasFirstTap:(BOOL)hasTap
+        stateCap:(NSUInteger)cap boostWords:(NSArray<NSString *> *)words
+        boostCounts:(NSArray<NSNumber *> *)counts maxCost:(double)maxCost
+        error:(NSError **)error __attribute__((swift_error(nonnull_error)));
 @end
 NS_ASSUME_NONNULL_END
 
@@ -130,6 +148,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) NSArray<KBChannelCandidate *> *displayCorrections;
 @property(nonatomic, readonly, nullable) KBChannelCandidate *split;
 @property(nonatomic, readonly) BOOL cancelled;
+@property(nonatomic, readonly) BOOL aimedAtBlocked;
 - (instancetype)init NS_UNAVAILABLE;
 @end
 
@@ -371,15 +390,30 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) BOOL cancelled;
 @property(nonatomic, readonly) NSArray<NSNumber *> *phaseMilliseconds;
 @end
+@class KBNativeSafetyLexicon;
+// The word-level neural search space LM (tools/nss `.nsslm`). The file is mapped, not
+// copied: its int8 weights stay clean, evictable pages.
+@interface KBNeuralWordModel : NSObject
+- (nullable instancetype)initWithURL:(NSURL *)url error:(NSError **)error;
+- (instancetype)init NS_UNAVAILABLE;
+@property(nonatomic, readonly) NSUInteger vocabularySize;
+@property(nonatomic, readonly) NSUInteger byteCount;
+@end
 @interface KBSharedEngine : NSObject
 - (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model
-    policy:(NSArray<NSNumber *> *)policy penalties:(NSDictionary<NSString *, NSNumber *> *)penalties profile:(BOOL)profile;
+    policy:(NSArray<NSNumber *> *)policy safety:(nullable KBNativeSafetyLexicon *)safety profile:(BOOL)profile;
+// With `neural`, requests whose model tier is "nss" decode in the neural search space.
+- (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model
+    neural:(nullable KBNeuralWordModel *)neural policy:(NSArray<NSNumber *> *)policy
+    safety:(nullable KBNativeSafetyLexicon *)safety profile:(BOOL)profile;
+@property(nonatomic, readonly) BOOL supportsNeuralSearchSpace;
+// modelTier: "ngram", or "nss" when supportsNeuralSearchSpace.
 - (nullable KBEngineResult *)decodeWord:(NSString *)word normalized:(NSString *)normalized context:(NSArray<NSString *> *)context
     identity:(NSData *)identity offsets:(NSArray<NSNumber *> *)characterOffsets letterFlags:(NSData *)flags
     tapOffsets:(nullable NSData *)offsets tapValidity:(nullable NSData *)validity
     lexicon:(KBGenerationLexicon *)lexicon personal:(KBPersonalCounts *)personal topWords:(NSArray<NSString *> *)topWords
-    kept:(BOOL)kept token:(KBCancellationToken *)token error:(NSError **)error
-    NS_SWIFT_NAME(decode(word:normalized:context:identity:characterOffsets:letterFlags:tapOffsets:tapValidity:lexicon:personal:topWords:kept:token:));
+    kept:(BOOL)kept modelTier:(NSString *)modelTier token:(KBCancellationToken *)token error:(NSError **)error
+    NS_SWIFT_NAME(decode(word:normalized:context:identity:characterOffsets:letterFlags:tapOffsets:tapValidity:lexicon:personal:topWords:kept:modelTier:token:));
 - (void)memoryPressure;
 @end
 NS_ASSUME_NONNULL_END
@@ -415,8 +449,21 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 NS_ASSUME_NONNULL_END
 NS_ASSUME_NONNULL_BEGIN
+// Immutable kb::SafetyLexicon over retained KBGUARD1 bytes: parsing, validation, the
+// action/language/penalty policy and lookups are native. Terms must already be normalized
+// at the platform boundary (KBSafetyLexicon.normalize). Actions: 0 allow, 1 demote,
+// 2 suppress-suggest, 3 suppress-always. Languages: 0 none, 1 English, 2 Telugu, 3 Tenglish.
+@interface KBNativeSafetyLexicon : NSObject
+- (nullable instancetype)initWithData:(NSData *)data error:(NSError **)error;
+@property(nonatomic, readonly) NSUInteger entryCount;
+- (uint8_t)actionForNormalized:(NSString *)term;
+- (uint8_t)languageForNormalized:(NSString *)term;
+- (double)penaltyForNormalized:(NSString *)term;
+// Every suppress-action term (normalized, sorted). For the Debug Swift reference's mirror.
+@property(nonatomic, readonly) NSArray<NSString *> *blockedTerms;
+@end
 @interface KBVocabularyState : NSObject
-- (instancetype)initWithBlocked:(NSArray<NSString *> *)blocked;
+- (instancetype)initWithSafety:(nullable KBNativeSafetyLexicon *)safety;
 @property(nonatomic, readonly) KBGenerationSnapshot *snapshot;
 @property(nonatomic, readonly) NSDictionary<NSString *, NSNumber *> *boosts;
 - (void)supplementary:(NSString *)word frequency:(NSInteger)frequency glide:(BOOL)glide;

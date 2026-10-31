@@ -40,7 +40,7 @@ void IncrementalSearch::resetRows() {
         const auto& spelling = seeds_[index].spelling;
         auto offset = offsets_[index]; previous_[offset] = 0;
         for (std::size_t column = 1; column <= spelling.size(); ++column) {
-            auto skip = std::uint8_t(spelling[column - 1]) == apostrophe ? apostropheSkipCost : deletionCost;
+            auto skip = deletionCostAt(std::uint8_t(spelling[column - 1]), column >= 2 ? std::uint8_t(spelling[column - 2]) : 0, 0);
             previous_[offset + column] = previous_[offset + column - 1] + skip;
         }
     }
@@ -88,11 +88,12 @@ void IncrementalSearch::append(std::uint8_t byte, std::optional<TouchOffset> tap
     const auto seeds_ = seedSet_->seeds();
     const auto offsets_ = seedSet_->offsets();
     auto typedIndex = typed_.size() + 1;
+    const bool repeated = !typed_.empty() && std::uint8_t(typed_.back()) == byte;
     // Geometry depends only on the candidate byte and this typed tap, not on
     // the seed or DP cell. Keep the original Double formula and operation order.
     std::array<double, 256> substitutions;
     for (std::size_t candidate = 0; candidate < substitutions.size(); ++candidate)
-        substitutions[candidate] = substitutionCost(std::uint8_t(candidate), byte, tap);
+        substitutions[candidate] = substitutionCost(std::uint8_t(candidate), byte, tap, typedIndex == 1);
     for (std::size_t index = 0; index < seeds_.size(); ++index) {
         const auto& spelling = seeds_[index].spelling;
         auto offset = offsets_[index]; scratch_[offset] = double(typedIndex) * insertionCost;
@@ -100,6 +101,12 @@ void IncrementalSearch::append(std::uint8_t byte, std::optional<TouchOffset> tap
             auto candidate = std::uint8_t(spelling[column - 1]);
             auto skip = candidate == apostrophe ? apostropheSkipCost : deletionCost;
             auto insertion = previous_[offset + column] + insertionCost;
+            // deletionCostAt / insertionCostAt, specialised for this hot loop: both doubled-letter
+            // discounts need the candidate letter to be the typed one, so the common cell tests once.
+            if (candidate == byte) {
+                if (repeated) insertion = previous_[offset + column] + doubledInsertionCost;
+                if (candidate != apostrophe && column >= 2 && std::uint8_t(spelling[column - 2]) == byte) skip = doubledDeletionCost;
+            }
             auto deletion = scratch_[offset + column - 1] + skip;
             auto substitution = previous_[offset + column - 1] + substitutions[candidate];
             auto value = std::min(insertion, std::min(deletion, substitution));
@@ -121,7 +128,8 @@ std::vector<ChannelCandidate> IncrementalSearch::candidates(double maxCost) cons
     for (std::size_t index = 0; index < seeds_.size(); ++index) {
         const auto& seed = seeds_[index];
         if (seed.spelling.empty()) continue;
-        auto penalty = firstLetterPenalty(typed_.size(), std::uint8_t(seed.spelling.front()), std::uint8_t(typed_.front()));
+        auto penalty = firstLetterPenalty(typed_.size(), std::uint8_t(seed.spelling.front()), std::uint8_t(typed_.front()),
+            typed_.size() > 1 ? std::uint8_t(typed_[1]) : 0, seed.spelling.size() > 1 ? std::uint8_t(seed.spelling[1]) : 0);
         auto cost = previous_[offsets_[index] + seed.spelling.size()] + penalty;
         if (cost <= maxCost) result.push_back({std::string(seed.word), cost, seed.logFrequency});
     }

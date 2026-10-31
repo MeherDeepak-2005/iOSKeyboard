@@ -2,6 +2,7 @@
 #include "../DecoderCore/include/EngineWire.hpp"
 #include "../DecoderCore/include/Safety.hpp"
 #include "MiniJson.hpp"
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <sstream>
@@ -95,6 +96,66 @@ static void replayGoldens(const std::shared_ptr<const PackedLexicon>& reader, co
     assert(mismatches == 0);
     std::cout << "Shared engine matches 132 iOS decode goldens and 60 iOS streaming Glide goldens\n";
 }
+// The bundled safety pack through kb::SafetyLexicon: the same cases as the Swift
+// KBSafetyLexicon test, on input the platform has already normalized.
+static void testSafety(const std::string& root) {
+    const auto blob = slurp(root + "/keyboard/safety.kbguard");
+    SafetyLexicon safety(blob);
+    assert(safety.size() == 997);
+    for (const char* word : {"fuck", "5h1t", "2 girls 1 cup", "xxx", "దెంగు"}) assert(safety.blocked(word));
+    assert(safety.language("దెంగు") == SafetyLanguage::telugu);
+    assert(safety.action("కుక్క") == SafetyAction::demote && safety.penalty("కుక్క") == 4 && !safety.blocked("కుక్క"));
+    for (const char* word : {"class", "meher", "telangana", "prolly", "kukka", ""}) assert(safety.action(word) == SafetyAction::allow && safety.penalty(word) == 0);
+    assert(!safety.blocked("FUCK"));   // case folding belongs to the platform boundary
+    auto table = safety.penalties(); assert(table == parseSafetyPenalties(blob) && table.size() == 997);
+    for (const auto& [word, value] : table) assert(safety.penalty(word) == value);
+    auto blocked = safety.blockedTerms(); assert(blocked.size() == 991 && std::is_sorted(blocked.begin(), blocked.end()));
+    for (std::size_t n = 0; n < blob.size(); ++n) { bool rejected = false; try { SafetyLexicon cut(std::string_view(blob).substr(0, n)); } catch (const std::invalid_argument&) { rejected = true; } assert(rejected); }
+    auto expectRejected = [](std::string bytes) { bool rejected = false; try { SafetyLexicon bad(bytes); } catch (const std::invalid_argument&) { rejected = true; } assert(rejected); };
+    { auto bad = blob; std::swap_ranges(bad.begin() + 24, bad.begin() + 32, bad.begin() + 48); expectRejected(bad); }   // hash order
+    { auto bad = blob; bad[24] = char(bad[24] ^ 1); expectRejected(bad); }                                            // hash != FNV-1a(term)
+    std::cout << "Safety lexicon: 997 entries, lookups, penalties, ordering/hash validation and truncation passed\n";
+}
+// Generation-time exclusion: after setSafety installs the blocked bitset, no generation
+// source emits a blocked word; only the typed text itself stays available.
+static void testBlockedGeneration(const std::shared_ptr<const PackedLexicon>& reader, const std::string& root) {
+    const auto blob = slurp(root + "/keyboard/safety.kbguard");
+    SafetyLexicon safety(blob);
+    auto engine = std::make_shared<Engine>(reader); auto state = engine->createState();
+    state->setSafety(parseSafetyPenalties(blob));   // installs the bitset (once per reader)
+    std::size_t inDictionary = 0;
+    for (const auto& term : safety.blockedTerms()) if (auto id = reader->wordID(term)) { ++inDictionary; assert(reader->blocked(std::uint32_t(*id))); }
+    assert(inDictionary == 279 && reader->blockedCount() == 279);
+    auto isBlockedWord = [&](const std::string& word) { auto id = reader->wordID(word); return id && reader->blocked(std::uint32_t(*id)); };
+    for (const auto& term : safety.blockedTerms()) if (reader->wordID(term)) {
+        for (const auto& hit : reader->search(term, 2.8)) assert(!isBlockedWord(hit.word));
+        for (const auto& c : reader->completions(term, 24)) assert(c.word == term || !isBlockedWord(c.word));
+    }
+    for (char first = 'a'; first <= 'z'; ++first) {
+        for (const auto& c : reader->completions(std::string(1, first), 200)) assert(!isBlockedWord(c.word));
+        if (auto seeds = reader->incrementalSeeds(std::uint8_t(first), {}, 1000000)) for (const auto& seed : seeds->seeds()) assert(!isBlockedWord(std::string(seed.word)));
+    }
+    auto session = engine->createSession(); auto view = state->view();
+    assert(view.penalties && view.penalties->empty());   // no in-dictionary demote terms: no per-row lookups
+    for (std::uint32_t id = 0; id < 400; ++id) {
+        std::vector<std::string> context{std::string(reader->word(id))};
+        for (const auto& word : session->nextWords(context, view, 24)) assert(!isBlockedWord(word));
+    }
+    // The typed literal is never censored: "hoe" (blocked) keeps its exact match and completion.
+    auto pools = generateCandidates(view.lexicon, "hoe", {}, {}, std::nullopt, std::nullopt, false);
+    assert(std::count_if(pools.close.begin(), pools.close.end(), [](const auto& c) { return c.word == "hoe" && c.cost == 0; }) == 1);
+    for (const auto& pool : {pools.close, pools.broad, pools.injected, pools.completions, pools.displayCorrections})
+        for (const auto& c : pool) assert(c.word == "hoe" || !isBlockedWord(c.word));
+    // A typo aimed at a blocked word is left alone, not recovered into an unrelated word.
+    assert(reader->blockedTrie());
+    for (const char* typo : {"biitch", "masterbation", "bicthes"}) {
+        auto decoded = session->decode(input(typo), view);
+        assert(!decoded.correction.word || !isBlockedWord(*decoded.correction.word));
+        for (const auto& s : decoded.suggestions) assert(s == typo || !isBlockedWord(s));
+    }
+    assert(!session->decode(input("biitch"), view).correction.word && !session->decode(input("masterbation"), view).correction.word);
+    std::cout << "Blocked generation: 279 dictionary words excluded from search, completions, seeds and successors; typed literal kept; blocked-aimed typos left alone\n";
+}
 int main(int argc,char**argv) {
     assert(argc == 2 || argc == 4);
     Personalization user; user.reset(4);
@@ -161,6 +222,6 @@ int main(int argc,char**argv) {
         assert(invalidated);
     }
     session->memoryPressure();assert(session->decode(input("hello"),view).suggestions==engine->createSession()->decode(input("hello"),view).suggestions);
-    if (argc == 4) replayGoldens(reader, argv[2], argv[3]);
+    if (argc == 4) { testSafety(argv[2]); testBlockedGeneration(reader, argv[2]); replayGoldens(reader, argv[2], argv[3]); }
     std::cout << "Shared engine, snapshot ownership, deterministic ties, serialization, reset/reuse and cancellation passed\n";
 }

@@ -164,12 +164,14 @@ CountRows LanguageModel::successors(std::span<const std::string> context, const 
     }
     CountRows out;
     auto position = [&](const std::string& word) { return std::find_if(out.begin(), out.end(), [&](const auto& e) { return e.first == word; }); };
-    if (corpus) for (const auto& e : corpus->entries) if (e.count >= 2) {
+    if (corpus) for (const auto& e : corpus->entries) if (e.count >= 2 && !data_->blocked(std::uint32_t(e.word))) {
         std::string word(data_->word(e.word)); auto found = position(word);
         if (found == out.end()) out.emplace_back(word, e.count); else found->second += e.count;
     }
     const auto& learned = trigram ? personal.tri(context[n - 2] + " " + context[n - 1]) : personal.bi(context.back());
-    for (const auto& [word, count] : learned) if (data_ && data_->wordID(word)) {
+    // Learned rows were refused at learn time; history from before the safety gate is
+    // still dropped here by ID, so a blocked word never becomes a successor.
+    for (const auto& [word, count] : learned) if (auto id = data_ ? data_->wordID(word) : std::nullopt; id && !data_->blocked(std::uint32_t(*id))) {
         auto found = position(word);
         if (found != out.end() && count >= 3) found->second += std::min<std::int64_t>(count - 3 + 1, 8);
         else if (count >= 5) {
@@ -179,6 +181,13 @@ CountRows LanguageModel::successors(std::span<const std::string> context, const 
     }
     std::erase_if(out, [](const auto& e) { return e.first.empty(); });
     return out;
+}
+double LanguageModel::personalBoost(std::string_view word, std::span<const std::string> context,
+        const PersonalCounts& personal, const GenerationLexicon& lexicon) {
+    const auto n = context.size();
+    return personalLanguageBoost(double(lexicon.contains(word) ? personal.uni(word) : 0), 0.10)
+        + personalLanguageBoost(double(n ? lookup(personal.bi(context[n - 1]), word) : 0), 0.22)
+        + personalLanguageBoost(double(n >= 2 ? lookup(personal.tri(context[n - 2] + " " + context[n - 1]), word) : 0), 0.28);
 }
 std::vector<std::string> LanguageModel::nextWords(CountRows tri, CountRows bi, std::size_t limit) {
     if (!limit) return {};

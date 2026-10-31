@@ -679,6 +679,30 @@ struct KeyboardTests {
 		#expect(prior.scoredSessions.allSatisfy { $0 == 41 })
 	}
 
+	// The word-level neural search space (tools/nss) runs inside the shared C++ engine: once the
+	// model is mapped, English word sessions select the "nss" tier, candidates take the model's
+	// language scores, and empty-word predictions come from it (a tiny random fixture here).
+	@Test func wordNeuralSearchSpaceTierDecodesInTheSharedEngine() async throws {
+		let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+			.appendingPathComponent("native/tests/fixtures/nss/cifg-tied.nsslm")
+		let engine = KeyboardEngine(languageDataURL: langdataURL(), neuralWordModelURL: fixture)
+		let warm = await decode(engine, word: "hel", context: [])   // returns after startup
+		#expect(warm.modelTier == .ngram)
+		#expect(engine.preferredModelTier(for: .english) == .neuralSearchSpace)
+		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
+		let ngram = await decode(engine, word: "teh", context: ["i", "saw"])
+		let neural = await decode(engine, word: "teh", context: ["i", "saw"], tier: .neuralSearchSpace)
+		#expect(neural.modelTier == .neuralSearchSpace)
+		#expect(!neural.candidates.isEmpty)
+		#expect(neural.candidates.map(\.logLanguageProbability) != ngram.candidates.map(\.logLanguageProbability))
+		let prediction = await decode(engine, word: "", context: ["i", "saw"], tier: .neuralSearchSpace)
+		#expect(prediction.modelTier == .neuralSearchSpace)
+		#expect(!prediction.suggestions.isEmpty)
+		let plain = KeyboardEngine(languageDataURL: langdataURL())
+		_ = await decode(plain, word: "hel", context: [])
+		#expect(plain.preferredModelTier(for: .english) == .ngram)
+	}
+
 	@Test func multiwordSearchPreservesThreeWordPathsAndBoundarySubstitutions() {
 		let dictionary = Set(["i", "am", "here", "hello", "world"])
 		func paths(_ text: String) -> [MultiwordSearch.Hypothesis] {
@@ -1240,13 +1264,19 @@ struct KeyboardTests {
 		})
 	}
 
-	@Test func firstLetterProtectionPreventsMightToNightCandidate() throws {
+	@Test func firstLetterProtectionKeepsMightAheadOfNight() throws {
 		let data = try #require(LangData(url: langdataURL()))
 		let hits = data.trieSearch("might", maxCost: 2.8)
 		#expect(hits.first(where: { $0.word == "might" })?.cost == 0)
-		#expect(!hits.contains(where: { $0.word == "night" }))
+		// A neighbouring first key (n/m) is a real slip, so "night" is a candidate since the
+		// 27 Oct fit, but only at the first-letter penalty plus the substitution: never a
+		// real-word correction (cost ≤ 1.6 required) of a correctly typed "might".
+		let night = try #require(hits.first(where: { $0.word == "night" }))
+		#expect(abs(night.cost - 2.1) < 1e-9)
 		#expect(Trie.firstLetterPenaltyPolicy(typedLength: 5,
-			candidateFirst: UInt8(ascii: "n"), typedFirst: UInt8(ascii: "m")) == 2.5)
+			candidateFirst: UInt8(ascii: "n"), typedFirst: UInt8(ascii: "m")) == 1.0)
+		#expect(Trie.firstLetterPenaltyPolicy(typedLength: 5,
+			candidateFirst: UInt8(ascii: "p"), typedFirst: UInt8(ascii: "m")) == 2.0)
 	}
 
 	@Test func touchProfileLearnsBoundedRowOffsetsWithoutRawHistory() throws {
@@ -1330,7 +1360,7 @@ struct KeyboardTests {
 	@Test func incrementalSearchMatchesFullTrieAndRetainsSevereCandidate() throws {
 		let data = try #require(LangData(url: langdataURL()))
 		let seeds = try #require(data.incrementalSeeds(
-			typedFirst: UInt8(ascii: "c"), firstTap: nil))
+			typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8))
 		let session = IncrementalDecodeSession(seeds: seeds)
 		#expect(session.seedCount > 5_000)
 
@@ -1640,19 +1670,19 @@ struct KeyboardTests {
 
 	// The neural prior funds the trie by PROBABILITY, not rank: a confident context widens the
 	// search narrowly and deeply toward its one likely word; an unsure context funds its top
-	// candidates broadly. Both "got" and "gob" sit one insertion (1.6) beyond a tight 1.0 budget.
+	// candidates broadly. Both "got" and "gob" sit one omission (1.1) beyond a tight 0.5 budget.
 	@Test func trieSearchPriorProbabilityWeightingFundsByConfidence() {
 		let trie = Trie()
 		trie.insert("go", freq: 100)
 		trie.insert("got", freq: 50)
 		trie.insert("gob", freq: 50)
 		// PEAKED: the LM is almost certain the next word is "got" — fund it to the cap, starve "gob".
-		let peaked = trie.search("go", maxCost: 1.0,
+		let peaked = trie.search("go", maxCost: 0.5,
 			prior: TrieSearchPrior(scoredWords: [("got", -0.1), ("gob", -8.0)]))
 		#expect(peaked.contains { $0.word == "got" }, "the confident leader is reached")
 		#expect(!peaked.contains { $0.word == "gob" }, "the starved tail stays outside the radius")
 		// FLAT: the LM can't separate "got" and "gob" — fund both shallowly, and both are reached.
-		let flat = trie.search("go", maxCost: 1.0,
+		let flat = trie.search("go", maxCost: 0.5,
 			prior: TrieSearchPrior(scoredWords: [("got", -1.0), ("gob", -1.05)]))
 		#expect(flat.contains { $0.word == "got" } && flat.contains { $0.word == "gob" },
 			"an unsure context funds its top candidates broadly")
@@ -1694,19 +1724,19 @@ struct KeyboardTests {
 	}
 
 	@Test func readySearchPriorGeneratesAndScoresWithoutTransformer() async throws {
-		// Six input characters have a 2.8 narrow / 5.6 broad budget.
-		// Four missing q characters cost 6.4; retain the final w to avoid
-		// putting the path exactly on the maximum-funded radius.
-		let target = "qqqqqqqqqw"
+		// Six input characters have a 2.8 narrow / 4.48 broad budget (x1.6), 6.08 when funded.
+		// Five missing letters cost 5.5 (alternating, so none is a cheap doubled letter); retain
+		// the final w to avoid putting the path exactly on the maximum-funded radius.
+		let target = "qxqxqxqxqxw"
 		let prior = TestSearchPrior(words: [SearchPriorWord(word: target, logProbability: -0.1)])
 		let engine = KeyboardEngine(languageDataURL: langdataURL(), searchPrior: prior)
 		engine.importSupplementaryLexicon([target])
 		#expect(engine.preferredModelTier(for: .english) == .neuralGRU)
 		#expect(engine.preferredModelTier(for: .telugu) == .ngram)
-		let snapshot = await decode(engine, word: "qqqqqw", context: ["fixture"], tier: .neuralGRU)
+		let snapshot = await decode(engine, word: "qxqxqw", context: ["fixture"], tier: .neuralGRU)
 		let candidate = try #require(snapshot.candidates.first { $0.word == target })
 		#expect(candidate.neuralLogProbability == -0.1)
-		#expect(candidate.spatialCost > 5.6 && candidate.spatialCost <= 7.2)
+		#expect(candidate.spatialCost > 4.48 && candidate.spatialCost <= 6.08)
 		#expect(snapshot.modelTier == .neuralGRU)
 		#expect(snapshot.correction == target)
 		#expect(snapshot.suggestions.first == target)
@@ -1714,7 +1744,7 @@ struct KeyboardTests {
 			let empty = TestSearchPrior(words: [], ready: available)
 			let fallback = KeyboardEngine(languageDataURL: langdataURL(), searchPrior: empty)
 			fallback.importSupplementaryLexicon([target])
-			let result = await decode(fallback, word: "qqqqqw", context: ["fixture"])
+			let result = await decode(fallback, word: "qxqxqw", context: ["fixture"])
 			#expect(!result.candidates.contains { $0.word == target })
 		}
 	}

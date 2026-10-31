@@ -89,7 +89,7 @@ std::vector<ChannelCandidate> MutableTrie::search(std::string_view typed, double
         std::optional<std::span<const WordFunding>> funding) const {
     if (typed.empty()) return {};
     if (!std::isfinite(maxCost) || maxCost < 0) throw std::invalid_argument("invalid search radius");
-    const double extra = (maxCost + (funding ? 1.6 : 0)) / deletionCost;
+    const double extra = (maxCost + (funding ? 1.6 : 0)) / std::min(deletionCost, doubledDeletionCost);
     if (extra > 1'000'000 || typed.size() > 1'000'000) throw std::length_error("search input too large");
     const auto n = typed.size(), maxDepth = n + std::size_t(extra) + 2;
     if (maxDepth + 1 > SIZE_MAX / (n + 1)) throw std::length_error("search DP overflow");
@@ -98,18 +98,20 @@ std::vector<ChannelCandidate> MutableTrie::search(std::string_view typed, double
     std::vector<double> dp((maxDepth + 1) * (n + 1));
     for (std::size_t i = 0; i <= n; ++i) dp[i] = double(i) * insertionCost;
     std::vector<ChannelCandidate> out;
+    // As in PackedLexicon::search: a transposition can reach back to the parent row.
     auto visit = [&](auto&& self, std::size_t index, std::uint8_t letter, std::uint8_t previousLetter,
-                     std::size_t depth, double penalty, std::size_t prior) -> void {
+                     std::size_t depth, double penalty, std::size_t prior, double parentMin) -> void {
         if (depth > maxDepth) return;
         auto base = depth * (n + 1), previous = base - (n + 1);
-        auto skip = letter == apostrophe ? apostropheSkipCost : deletionCost;
-        double rowMin = dp[previous] + skip; dp[base] = rowMin;
+        double rowMin = dp[previous] + deletionCostAt(letter, previousLetter, 0); dp[base] = rowMin;
         for (std::size_t column = 1; column <= n; ++column) {
-            const auto insertion = dp[base + column - 1] + insertionCost;
-            const auto deletion = dp[previous + column] + skip;
+            const auto typedLetter = std::uint8_t(typed[column - 1]);
+            const auto insertion = dp[base + column - 1] +
+                insertionCostAt(typedLetter, column >= 2 ? std::uint8_t(typed[column - 2]) : 0, letter);
+            const auto deletion = dp[previous + column] + deletionCostAt(letter, previousLetter, typedLetter);
             auto value = std::min(insertion, std::min(deletion,
                 dp[previous + column - 1] + substitutionCost(letter, std::uint8_t(typed[column - 1]),
-                    taps.size() == n ? taps[column - 1] : std::nullopt)));
+                    taps.size() == n ? taps[column - 1] : std::nullopt, column == 1)));
             if (depth >= 2 && column >= 2 && letter == std::uint8_t(typed[column - 2]) &&
                 previousLetter == std::uint8_t(typed[column - 1]))
                 value = std::min(value, dp[previous - (n + 1) + column - 2] + transpositionCost);
@@ -118,14 +120,18 @@ std::vector<ChannelCandidate> MutableTrie::search(std::string_view typed, double
         const auto& item = nodes_[index];
         const auto terminal = prior == SIZE_MAX ? 0 : priors[prior].terminal;
         const auto bonus = prior == SIZE_MAX ? 0 : priors[prior].bonus;
-        auto cost = dp[base + n] + penalty;
+        // The root penalty assumed the best case for the candidate's second letter; settle it.
+        const auto typedFirst = std::uint8_t(typed.front()), typedSecond = n > 1 ? std::uint8_t(typed[1]) : std::uint8_t(0);
+        const auto bound = depth == 2 ? firstLetterPenalty(n, previousLetter, typedFirst, typedSecond, letter) : penalty;
+        const auto settled = depth == 1 ? std::max(penalty, firstLetterPenalty(n, letter, typedFirst, typedSecond)) : bound;
+        auto cost = dp[base + n] + settled;
         if (item.word && cost - terminal <= maxCost) out.push_back({*item.word, cost, item.logFrequency});
-        if (rowMin + penalty - bonus <= maxCost) for (const auto& [label, next] : item.children)
-            self(self, next, label, letter, depth + 1, penalty, child(priors, prior, label));
+        if (std::min(rowMin, parentMin + transpositionCost) + bound - bonus <= maxCost) for (const auto& [label, next] : item.children)
+            self(self, next, label, letter, depth + 1, bound, child(priors, prior, label), rowMin);
     };
     for (const auto& [label, next] : nodes_[0].children)
-        visit(visit, next, label, 0, 1, firstLetterPenalty(n, label, std::uint8_t(typed.front())),
-            child(priors, 0, label));
+        visit(visit, next, label, 0, 1, firstLetterPenalty(n, label, std::uint8_t(typed.front()), n > 1 ? std::uint8_t(typed[1]) : 0, std::uint8_t(typed.front())),
+            child(priors, 0, label), 0.0);
     return out;
 }
 std::vector<ChannelCandidate> MutableTrie::completions(std::string_view prefix, std::size_t limit) const {
@@ -171,7 +177,7 @@ std::vector<WordFunding> probabilityFunding(std::span<const std::pair<std::strin
     }
     return out;
 }
-double normalSearchCost(std::size_t length) noexcept { return length <= 4 ? 1.8 : length <= 7 ? 2.8 : 3.6; }
+double normalSearchCost(std::size_t length) noexcept { return searchRadiusScale * (length <= 4 ? shortSearchRadius : length <= 7 ? 2.8 : 3.6); }
 double injectedSpatialCost(std::string_view typed, std::string_view target,
         std::span<const std::optional<TouchOffset>> taps) {
     std::vector<double> previous(target.size() + 1), current(target.size() + 1);
@@ -180,7 +186,7 @@ double injectedSpatialCost(std::string_view typed, std::string_view target,
         current[0] = double(i) * 1.6;
         for (std::size_t j = 1; j <= target.size(); ++j) {
             auto sub = previous[j - 1] + substitutionCost(std::uint8_t(target[j - 1]), std::uint8_t(typed[i - 1]),
-                i <= taps.size() ? taps[i - 1] : std::nullopt);
+                i <= taps.size() ? taps[i - 1] : std::nullopt, i == 1);
             auto skip = std::uint8_t(target[j - 1]) == apostrophe ? apostropheSkipCost : 1.6;
             current[j] = std::min(sub, std::min(previous[j] + 1.6, current[j - 1] + skip));
         }
@@ -294,12 +300,44 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
         if (lexicon.supplementary) append(out.close, lexicon.supplementary->search(typed, normal, taps));
         if (lexicon.personal) append(out.close, lexicon.personal->search(typed, normal, taps));
     } else out.close = lexicon.corrections(typed, normal, taps, {}, false, cancel);
+    // Neither the retained search (seeded by the typed first letters) nor the packed full search
+    // emits dropped-first-letter candidates (bove -> above); one narrow pass adds them.
+    auto boosted = [&](ChannelCandidate word) {
+        if (auto count = lexicon.boost(word.word)) word.logFrequency = std::log(std::exp(word.logFrequency) + double(*count));
+        return word;
+    };
+    if (lexicon.packed && length >= 4) for (auto& word : lexicon.packed->search(typed, normal, taps, {}, cancel, true))
+        out.close.push_back(boosted(std::move(word)));
+    // The retained search seeds only the typed first letters (and their keyboard neighbours within
+    // reach); a first letter a speller confuses (vowel for vowel, c/k/s/z: emminent -> imminent,
+    // ceratin -> keratin) is searched in one narrow pass over those roots instead.
+    const bool ascii = typed.size() == length;
+    if (retainedStatic && lexicon.packed && ascii && length >= 5) {
+        std::vector<std::uint8_t> roots;
+        for (std::uint8_t letter = 'a'; letter <= 'z'; ++letter)
+            if (letter != std::uint8_t(typed[0]) && letter != std::uint8_t(typed[1]) && spellingConfusion(letter, std::uint8_t(typed[0]))) roots.push_back(letter);
+        if (!roots.empty()) for (auto& word : lexicon.packed->search(typed, normal, taps, {}, cancel, false, roots))
+            out.close.push_back(boosted(std::move(word)));
+    }
+    // A neighbouring key typed before a non-word (vfell -> fell): the rest, plus extraLeadingKeyCost.
+    if (extraLeadingKeyCost < 3.0 && ascii && length >= 3 && neighbouringKeys(std::uint8_t(typed[0]), std::uint8_t(typed[1])) && !lexicon.contains(typed)) {
+        const auto radius = normalSearchCost(length - 1) - extraLeadingKeyCost;
+        const auto rest = taps.size() == length ? taps.subspan(1) : std::span<const std::optional<TouchOffset>>{};
+        if (radius >= 0) for (auto& word : lexicon.corrections(typed.substr(1), radius, rest, {}, false, cancel)) {
+            word.cost += extraLeadingKeyCost; out.close.push_back(std::move(word));
+        }
+    }
     if (cancelled()) return out;
-    const auto budget = normal * 2;
+    // Blocked words are skipped during generation, but the typed text itself is never
+    // censored: a blocked dictionary word typed in full keeps its exact (cost 0) match.
+    if (lexicon.packed) if (auto id = lexicon.packed->wordID(typed); id && lexicon.packed->blocked(std::uint32_t(*id)) &&
+            std::none_of(out.close.begin(), out.close.end(), [&](const auto& c) { return c.word == typed; }))
+        out.close.push_back({std::string(typed), 0, lexicon.logFrequency(typed).value_or(0)});
+    const auto budget = normal * (length >= 8 ? longBroadRecoveryFactor : broadRecoveryFactor);
     std::vector<ChannelCandidate> injected;
     if (length >= 4) for (const auto& successor : successors) {
         const auto& word = successor.word;
-        if (lexicon.isBlocked(word) || word.empty()) continue;
+        if (word.empty()) continue;
         auto difference = length > successor.characterCount ? length - successor.characterCount : successor.characterCount - length;
         if (difference > 3) continue;
         auto cost = injectedSpatialCost(typed, word, taps);
@@ -310,10 +348,26 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
     out.completions = lexicon.completions(typed, 24);
     auto closest = std::numeric_limits<double>::infinity();
     for (const auto& word : out.close) closest = std::min(closest, word.cost);
-    const bool recover = length >= 6 && !lexicon.contains(typed) && out.completions.empty() &&
-        (length >= 8 || out.close.empty() || closest > 0.65);
+    // A typo aimed at a blocked word is left alone rather than recovered into an unrelated
+    // correction (biitch must not become "both"). The closest blocked dictionary match's cost
+    // bounds the search exactly as when blocked words were generated and dropped at ranking;
+    // the blocked word itself is never a candidate.
+    // Searched only when `closest` can change a decision below (recovery is possible, or the
+    // ceiling filters context injections), and only below the current closest: same result.
+    auto blockedClosest = std::numeric_limits<double>::infinity();
+    const bool recoverable = length >= 6 && !lexicon.contains(typed) && out.completions.empty();
+    if ((recoverable || !injected.empty()) && lexicon.packed) if (const auto* blocked = lexicon.packed->blockedTrie())
+        for (const auto& word : blocked->search(typed, std::min(normal, closest), taps)) blockedClosest = std::min(blockedClosest, word.cost);
+    // Strictly closer than every clean candidate: the typo is aimed at the blocked word.
+    const bool aimedAtBlocked = blockedClosest < closest;
+    out.aimedAtBlocked = aimedAtBlocked;
+    closest = std::min(closest, blockedClosest);
+    const bool recover = recoverable && !aimedAtBlocked &&
+        (length >= 8 || (out.close.empty() && !std::isfinite(blockedClosest)) || closest > 0.65);
+    const auto ceiling = closest <= normal ? closest + 1.6 : std::numeric_limits<double>::infinity();
     if (recover) {
-        out.broad = lexicon.corrections(typed, budget, taps, funding, true, cancel);
+        // Broad words above the ceiling are dropped below, so the walk need not reach them.
+        out.broad = lexicon.corrections(typed, std::min(budget, ceiling), taps, funding, true, cancel);
         std::stable_sort(out.broad.begin(), out.broad.end(), [](const auto& a, const auto& b) {
             auto lhs = a.cost - 0.12 * a.logFrequency, rhs = b.cost - 0.12 * b.logFrequency;
             return lhs == rhs ? a.word < b.word : lhs < rhs;
@@ -321,7 +375,6 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
         if (!gruTier && out.broad.size() > 24) out.broad.resize(24);
     }
     if (cancelled()) return out;
-    const auto ceiling = closest <= normal ? closest + 1.6 : std::numeric_limits<double>::infinity();
     std::erase_if(out.broad, [&](const auto& word) { return word.cost > ceiling; });
     std::unordered_set<std::string> seen;
     for (const auto& word : out.close) seen.insert(word.word);
@@ -338,16 +391,16 @@ GeneratedCandidates generateCandidates(const GenerationLexicon& lexicon, std::st
         auto consider = [&](std::string_view a, std::string_view b, std::size_t aLength, std::size_t bLength, double cost) {
             if (!(aLength >= 2 || a == "a" || a == "i") || !(bLength >= 2 || b == "a" || b == "i") ||
                 !lexicon.contains(a) || !lexicon.contains(b) || lexicon.isBlocked(std::string(a)) ||
-                lexicon.isBlocked(std::string(b))) return;
+                lexicon.isBlocked(std::string(b)) || lexicon.isBlocked(std::string(a) + " " + std::string(b))) return;
             auto fa = lexicon.logFrequency(a), fb = lexicon.logFrequency(b);
             if (!fa || !fb) return;
             auto frequency = std::min(*fa, *fb), score = frequency - cost;
             if (score > strength) { strength = score; out.split = {std::string(a) + " " + std::string(b), cost, frequency}; }
         };
         for (std::size_t i = 1; i < length; ++i) {
-            consider(typed.substr(0, offsets[i]), typed.substr(offsets[i]), i, length - i, 1.1);
+            consider(typed.substr(0, offsets[i]), typed.substr(offsets[i]), i, length - i, splitCost);
             if (offsets[i + 1] - offsets[i] == 1 && std::string_view("cvbnm").find(typed[offsets[i]]) != std::string_view::npos && i + 1 < length)
-                consider(typed.substr(0, offsets[i]), typed.substr(offsets[i + 1]), i, length - i - 1, 0.72);
+                consider(typed.substr(0, offsets[i]), typed.substr(offsets[i + 1]), i, length - i - 1, spaceKeySplitCost);
         }
     }
     return out;

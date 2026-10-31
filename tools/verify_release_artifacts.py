@@ -14,7 +14,7 @@ NO_NEURAL_EXTENSION_CAP = 14_000_000
 NEURAL_EXTENSION_CAP = 25_000_000
 NEURAL_CONTAINER_SUFFIXES = (
     ".mlmodelc", ".mlpackage", ".mlmodel", ".pt", ".pth", ".ckpt",
-    ".safetensors", ".onnx", ".tflite",
+    ".safetensors", ".onnx", ".tflite", ".nsslm",
 )
 NEURAL_RESOURCE_NAMES = {
     "tokenizer.bin", "tokenizer.json", "tokenizer.model",

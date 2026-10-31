@@ -9,7 +9,7 @@ import Testing
 nonisolated enum NativePerformanceHarness {
     static func seeds(_ url: URL) throws -> [IncrementalLexiconSeed] {
         guard let data = LangData(url: url, backend: .swiftReference), let seeds = data.incrementalSeeds(
-            typedFirst: UInt8(ascii: "c"), firstTap: nil) else {
+            typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8) else {
             throw NSError(domain: "NativeBenchmark", code: 1)
         }
         return seeds
@@ -50,7 +50,7 @@ nonisolated enum NativePerformanceHarness {
         let prepared: KBIncrementalSeedSet?
         if mappedSeeds {
             guard let data = LangData(url: url, compareNativeReads: false),
-                  let set = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil) else {
+                  let set = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8) else {
                 throw NSError(domain: "NativeBenchmark.mappedSeeds", code: 4)
             }
             prepared = set
@@ -137,7 +137,7 @@ nonisolated enum NativePerformanceHarness {
     static func memoryRun(url: URL, backend: String) throws -> [String: Any] {
         if backend == "native_mapped" {
             guard let data = LangData(url: url, compareNativeReads: true),
-                  let set = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil) else {
+                  let set = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8) else {
                 throw NSError(domain: "NativeBenchmark.mappedSeeds", code: 4)
             }
             let session = try KBIncrementalSearch(seedSet: set)
@@ -147,7 +147,7 @@ nonisolated enum NativePerformanceHarness {
             return ["backend": backend, "seeds": set.seedCount, "dp_cells": set.cellCount, "candidate_count": count]
         }
         guard let data = LangData(url: url, backend: .swiftReference), var seeds = data.incrementalSeeds(
-            typedFirst: UInt8(ascii: "c"), firstTap: nil) else {
+            typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8) else {
             throw NSError(domain: "NativeBenchmark.memorySetup", code: 6)
         }
         let count = seeds.count, cells = seeds.reduce(0) { $0 + $1.bytes.count + 1 }
@@ -170,8 +170,8 @@ nonisolated enum NativePerformanceHarness {
 
     static func runInitialization(url: URL, iterations: Int, environment: String) throws -> [String: Any] {
         guard let data = LangData(url: url, compareNativeReads: true),
-              let preparedSwift = data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil),
-              let preparedNative = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil) else {
+              let preparedSwift = data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8),
+              let preparedNative = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8) else {
             throw NSError(domain: "NativeBenchmark.setup", code: 5)
         }
         var rows: [[String: Any]] = [], checksum = 0
@@ -200,19 +200,19 @@ nonisolated enum NativePerformanceHarness {
                             }
                             if name == "seed_preparation" {
                                 if backend == "swift" {
-                                    swiftSeeds = data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil)!
+                                    swiftSeeds = data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8)!
                                     return swiftSeeds!.count
                                 }
-                                nativeSeeds = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil)!
+                                nativeSeeds = try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8)!
                                 return Int(nativeSeeds!.seedCount)
                             }
                             if backend == "native_mapped" {
                                 nativeSeeds = name == "prepared_session_init" ? preparedNative
-                                    : try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil)!
+                                    : try data.nativeIncrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8)!
                                 nativeSession = try KBIncrementalSearch(seedSet: nativeSeeds!)
                             } else {
                                 swiftSeeds = name == "prepared_session_init" ? preparedSwift
-                                    : data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil)!
+                                    : data.incrementalSeeds(typedFirst: UInt8(ascii: "c"), firstTap: nil, maxCost: 2.8)!
                                 if backend == "swift" { swiftSession = IncrementalDecodeSession(seeds: swiftSeeds!, backend: .swiftReference) }
                                 else { nativeSession = try native(swiftSeeds!) }
                             }

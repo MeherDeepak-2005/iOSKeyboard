@@ -10,12 +10,17 @@ The agreed sequence is **parity first, then Neural Search Space (NSS)**. English
 
 ## Reading the source markings
 
-- `CPP_CORE`: planned portable C++20 algorithm/data ownership, independent of Apple frameworks.
-- `SWIFT_IOS`: planned continued Swift/iOS ownership, including scheduling and public façades.
-- `OBJCXX_BRIDGE`: planned Objective-C++ ownership of native conversion, Core ML execution, tensor/state access and error translation.
-- `SPLIT`: the following `MIGRATION-SPLIT` comment explicitly assigns the parts to the labels above.
+The `MIGRATION:` / `MIGRATION-FILE:` / `MIGRATION-NOTE:` / `MIGRATION-SPLIT:` comments this
+plan introduced were removed from the sources once the C++ engine became the production
+path. They described planned destinations, not behaviour, and repeated the same two lines
+hundreds of times. The ownership table below, the file headers in `keyboard/Engine/` and
+the declaration index at the end of this document are the surviving record; the labels
+keep their original meanings:
 
-Each affected file has a `MIGRATION-FILE: planned ...` header. Migration-bound declarations have `MIGRATION: planned ... | stage=... | target=...` comments. Nested helpers inherit their enclosing ownership unless explicitly marked. Whole platform files inherit their Swift header. The stage and target name a future responsibility, not an existing C++ implementation. A mathematical body may move while its asynchronous wrapper remains Swift; neither its callback queue nor its identity checks may disappear.
+- `CPP_CORE`: portable C++20 algorithm/data ownership, independent of Apple frameworks.
+- `SWIFT_IOS`: Swift/iOS ownership, including scheduling and public façades.
+- `OBJCXX_BRIDGE`: Objective-C++ ownership of native conversion, Core ML execution, tensor/state access and error translation.
+- `SPLIT`: ownership divided between the labels above.
 
 ## Ownership inventory
 
@@ -23,14 +28,14 @@ Paths are relative to the repository root. The detailed declaration index at the
 
 | Existing source | Planned responsibilities |
 | --- | --- |
-| [LangData.swift](keyboard/Engine/LangData.swift) | **CPP_CORE:** binary validation/reads, words/frequencies, n-grams, packed trie traversal, completions, anchor indexes and all incremental-session DP. **SWIFT_IOS:** discover/open/retain mapped resources. Initialization is split. |
+| `keyboard/Engine/Vocabulary/` | **CPP_CORE:** binary validation/reads, words/frequencies, n-grams, packed trie traversal, completions, anchor indexes and all incremental-session DP. **SWIFT_IOS:** discover/open/retain mapped resources. Initialization is split. |
 | [Trie.swift](keyboard/Engine/Trie.swift) | **CPP_CORE:** `PriorNode`, `TrieSearchPrior`, mutable nodes/storage, insertion/lookup/search/recurse/completions and first-letter penalties. Preserve separate traversal funding and terminal funding/identity. |
 | [Lexicon.swift](keyboard/Engine/Lexicon.swift) | **CPP_CORE:** lookup, corrections, broad recovery, incremental sessions, completions, frequency and mutable-trie/index updates. **SWIFT_IOS:** bundle loading, adoption/learning decisions, reset coordination and vocabulary revision publication. Insert and safety wrappers are split. |
 | [SpatialModel.swift](keyboard/Engine/SpatialModel.swift) | **CPP_CORE:** `KB.subCost`, key geometry, row selection, tap adjustment and bucket statistics. **SWIFT_IOS:** `KeyTap` boundary record, defaults, serialization, saving/reset and lifecycle. Profile wrappers are split. |
 | [NgramScorer.swift](keyboard/Engine/NgramScorer.swift) | **CPP_CORE:** score/interpolate/personal boosts, sequence/pair probabilities, successor merge and next words. Attach immutable vocabulary and personal views; eliminate per-word Swift lookup callbacks. |
 | [MultiwordSearch.swift](keyboard/Engine/MultiwordSearch.swift) | **CPP_CORE:** hypotheses, segment cache, expansion, boundary costs, deduplication and per-position pruning. Preserve repaired current limits during parity. |
 | [GlidePath.swift](keyboard/Engine/GlidePath.swift) | **CPP_CORE:** resampling, velocity/tangent features, pivots, nearest keys, retained candidates, decode, shape costs and beam heaps. **SWIFT_IOS:** extract UIKit geometry and convert points/layout once into numeric buffers. |
-| [Keyboardengine.swift](keyboard/Engine/Keyboardengine.swift) | **CPP_CORE:** English candidate generation, costs, frequency/n-gram ranking, correction gates, contractions/splits, character priors, retained/multiword search and Glide mathematics. **SWIFT_IOS:** queues, request revisions, language routing, cancellation entrypoints, settings, persistence, diagnostics and main-thread publication. Decode/rank/neural expansion/Glide session methods are explicitly split. `GlideProfile` statistics move; persistence, locks and reset epochs stay Swift. |
+| `keyboard/Engine/Decoder/` | **CPP_CORE:** English candidate generation, costs, frequency/n-gram ranking, correction gates, contractions/splits, character priors, retained/multiword search and Glide mathematics. **SWIFT_IOS:** queues, request revisions, language routing, cancellation entrypoints, settings, persistence, diagnostics and main-thread publication. Decode/rank/neural expansion/Glide session methods are explicitly split. `GlideProfile` statistics move; persistence, locks and reset epochs stay Swift. |
 | [GRULanguagePrior.swift](keyboard/Engine/GRULanguagePrior.swift) | **CPP_CORE:** tokenizer algorithms, constrained top-k, beam expansion, exact complete-word probability, boundary log-sum-exp and search-cache policy. **OBJCXX_BRIDGE:** model validation/prediction, tensor buffers, recurrent-state transport and native errors. **SWIFT_IOS:** protocol façades, artifact selection, readiness/lifecycle, settings and diagnostics. Neural network operations continue to use Core ML. |
 | [DecodeContract.swift](keyboard/Engine/DecodeContract.swift) | **SWIFT_IOS:** public requests/snapshots, validity, casing and protocol façades. Portable mirror records are described below; no C++ containers reach controller code. |
 | [UserModel.swift](keyboard/Engine/UserModel.swift) | **SWIFT_IOS:** learning, pruning, persistence/migration and reset epochs. Publish planned immutable count/adoption/confirmation snapshots to C++; never create a second independently mutable personal database. |
@@ -38,8 +43,8 @@ Paths are relative to the repository root. The detailed declaration index at the
 
 These files and all their platform processes remain planned **SWIFT_IOS**:
 
-- [KeyboardViewController.swift](demo_keyboard/KeyboardViewController.swift): touch collection, layout extraction, accessibility, document insertion and UI/request ownership.
-- `keyboard/Views/`: `Keyboard.swift`, `KeyboardLayout.swift`, `KeyButton.swift`, `SuggestionBar.swift`, `KeyboardTheme.swift`, `Emoji.swift`, `ClipboardPanel.swift`, `MediaPanel.swift`.
+- `demo_keyboard/Controller/`: touch collection, layout extraction, accessibility, document insertion and UI/request ownership.
+- `keyboard/Views/`: `Keyboard/` (view, touch, layout, keys, panels), `Emoji/`, `KeyboardLayout.swift`, `KeyButton.swift`, `SuggestionBar.swift`, `KeyboardTheme.swift`, `ClipboardPanel.swift`, `MediaPanel.swift`.
 - `keyboard/Engine/`: `NativeDecoderParity.swift` (comparison transport), `TeluguComposer.swift`, `TeluguLexicon.swift`, `TenglishTransliterator.swift`.
 - `keyboard/Shared/`: `KBSettings.swift`, `KBPersonalData.swift`, `KBDiagnostics.swift`, `KBStats.swift`, `LanguagePackHealth.swift`, `KBClipboard.swift`, `KBMediaCache.swift`, `KBKlipy.swift`, `UIColor+Hex.swift`. Settings/App Group storage, personal reset, diagnostics, clipboard/media and external API integrations stay Swift.
 
@@ -145,7 +150,7 @@ Swift syntax parsing and whitespace checks supplement that comparison. Runtime t
 
 All destinations in this index are **planned**. File headers apply to platform-only files; their declarations are not individually repeated. Signatures below are the first source line of an existing declaration, including overloads; use the adjoining comments for the full ownership rationale.
 
-### `demo_keyboard/KeyboardViewController.swift` — planned SWIFT_IOS
+### `demo_keyboard/Controller/` (was `KeyboardViewController.swift`) — planned SWIFT_IOS
 
 All declarations inherit the file-level SWIFT_IOS ownership.
 
@@ -271,7 +276,7 @@ All declarations inherit the file-level SWIFT_IOS ownership.
 | `private static func gridCenter(_ ch: Character) -> CGPoint? {` | CPP_CORE / policy-glide / GlideSearch | Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering. |
 | `private static func dist(_ a: CGPoint, _ b: CGPoint) -> Double { Double(hypot(a.x - b.x, a.y - b.y)) }` | CPP_CORE / policy-glide / GlideSearch | Convert platform geometry once at the boundary; preserve resampling, DTW, dwell detection and beam ordering. |
 
-### `keyboard/Engine/Keyboardengine.swift` — planned SPLIT
+### `keyboard/Engine/Decoder/` (was `Keyboardengine.swift`) — planned SPLIT
 
 | Existing declaration (first line) | Planned destination / stage / target | Responsibility |
 | --- | --- | --- |
@@ -362,7 +367,7 @@ All declarations inherit the file-level SWIFT_IOS ownership.
 | `var sigma: Double {` | SPLIT / policy-glide / GlideAdaptation | CPP_CORE bounded calculation; SWIFT_IOS locked epoch-tagged snapshot. |
 | `var gate: Double {` | SPLIT / policy-glide / GlideAdaptation | CPP_CORE bounded calculation; SWIFT_IOS locked epoch-tagged snapshot. |
 
-### `keyboard/Engine/LangData.swift` — planned SPLIT
+### `keyboard/Engine/Vocabulary/` (was `LangData.swift`) — planned SPLIT
 
 | Existing declaration (first line) | Planned destination / stage / target | Responsibility |
 | --- | --- | --- |
@@ -626,7 +631,7 @@ All declarations inherit the file-level SWIFT_IOS ownership.
 
 All declarations inherit the file-level SWIFT_IOS ownership.
 
-### `keyboard/Views/Emoji.swift` — planned SWIFT_IOS
+### `keyboard/Views/Emoji/` (was `Emoji.swift`) — planned SWIFT_IOS
 
 All declarations inherit the file-level SWIFT_IOS ownership.
 
@@ -634,7 +639,7 @@ All declarations inherit the file-level SWIFT_IOS ownership.
 
 All declarations inherit the file-level SWIFT_IOS ownership.
 
-### `keyboard/Views/Keyboard.swift` — planned SWIFT_IOS
+### `keyboard/Views/Keyboard/` (was `Keyboard.swift`) — planned SWIFT_IOS
 
 All declarations inherit the file-level SWIFT_IOS ownership.
 

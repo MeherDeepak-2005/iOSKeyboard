@@ -1,9 +1,7 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 import Darwin
 
-// Shared settings + theming model (App Group) — extracted from Keyboard.swift.
+// Shared settings + theming model (App Group).
 
 enum KBWordCase {
 	static func sentenceDisplay(_ word: String, capitalized: Bool) -> String {
@@ -39,13 +37,12 @@ nonisolated enum KBLanguageMode: String, Codable, CaseIterable, Identifiable, Se
 		}
 	}
 
+	/// Parsing alone is insufficient: a stale or partially copied resource may still have
+	/// a valid header, so activation uses the manifest/hash verdict the companion app shows.
 	var isRuntimeAvailable: Bool {
 		switch self {
 		case .english: return true
 		case .tenglishToTelugu, .romanTelugu, .telugu:
-			// Parsing alone is insufficient: a stale or partially copied resource may
-			// still have a valid header. Runtime activation uses the same manifest/hash
-			// verdict surfaced by the companion app.
 			return LanguagePackHealthInspector.bundledHealth(for: self).isReady
 		}
 	}
@@ -258,14 +255,6 @@ enum KBSettings {
 			postConfigurationChange()
 		}
 	}
-	/// Effective mode for this process/session. The caller can safely build a keyboard
-	/// from this value while the preferred mode remains available for recovery UI.
-	static var effectiveLanguageMode: KBLanguageMode {
-		let preferred = preferredLanguageMode
-		return preferred.isRuntimeAvailable ? preferred : .english
-	}
-	/// Source-compatibility alias. New code should state whether it wants preferred or
-	/// effective semantics explicitly.
 	static var languageMode: KBLanguageMode {
 		get { preferredLanguageMode }
 		set { preferredLanguageMode = newValue }
@@ -372,11 +361,6 @@ enum KBSettings {
 		set { store.set(newValue, forKey: Key.glideCap) }
 	}
 
-	/// URL of the on-device personalisation model in the shared App Group container.
-	/// Both the app and the extension resolve to the same file, so the app can delete it directly.
-	static var userModelURL: URL? {
-		KBPersonalData.modelURL(for: KBPersonalData.currentEpoch)
-	}
 
 	// MARK: Theme Studio
 

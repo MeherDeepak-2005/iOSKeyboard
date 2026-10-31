@@ -764,37 +764,6 @@ private struct FirstRunView: View {
 	}
 }
 
-struct EnableKeyboardRow: View {
-	var body: some View {
-		Button {
-				if let url = URL(string: UIApplication.openSettingsURLString) {
-					UIApplication.shared.open(url)
-				}
-		} label: {
-			HStack(spacing: 12) {
-				Image(systemName: "keyboard.badge.ellipsis")
-					.font(.system(size: 16, weight: .semibold))
-					.foregroundStyle(.white)
-					.frame(width: 32, height: 32)
-					.background(Color(uiColor: .systemGreen), in: RoundedRectangle(cornerRadius: 8))
-				VStack(alignment: .leading, spacing: 2) {
-					Text("Enable Glyph")
-						.font(.subheadline.weight(.semibold))
-					Text("Add the keyboard in Settings, then use it once.")
-						.font(.caption)
-						.foregroundStyle(.secondary)
-				}
-				Spacer()
-				Image(systemName: "arrow.up.forward")
-					.font(.caption.weight(.semibold))
-					.foregroundStyle(.secondary)
-			}
-		}
-		.buttonStyle(.plain)
-		.padding(.vertical, 2)
-	}
-}
-
 #Preview {
 	ContentView()
 }

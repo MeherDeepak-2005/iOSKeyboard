@@ -18,5 +18,11 @@ INTERNAL_GRU_TOKENIZER_MODEL =
 INTERNAL_GRU_SCORE_PACKAGE =
 INTERNAL_GRU_ENABLED = NO
 
+// Word-level neural search space LM (tools/nss, an .nsslm file). Same opt-in rule:
+// INTERNAL_NSS_ENABLED = YES with the INTERNAL_NSS Swift compile flag bundles the model
+// and selects the shared C++ engine's "nss" tier; ordinary builds stay n-gram-only.
+INTERNAL_NSS_MODEL =
+INTERNAL_NSS_ENABLED = NO
+
 #include? "Secrets.xcconfig"
 #include? "Klipy.xcconfig"

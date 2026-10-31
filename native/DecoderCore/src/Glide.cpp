@@ -165,7 +165,7 @@ std::vector<ChannelCandidate> decodeGlide(std::span<const Point> points, const P
     auto addPath = [&](Point p, std::int64_t parent) { arena.push_back({p, parent}); return std::int64_t(arena.size() - 1); };
     std::vector<ChannelCandidate> result; std::unordered_map<std::string, std::size_t> indices;
     auto emit = [&](std::size_t node, std::int64_t index) {
-        auto record = lexicon.trieRecord(node); if (!record.wordID) return;
+        auto record = lexicon.trieRecord(node); if (!record.wordID || lexicon.blocked(std::uint32_t(*record.wordID))) return;
         std::string word(lexicon.word(*record.wordID)); if (word.size() < 2) return;
         std::vector<Point> path;
         while (index >= 0) { path.push_back(arena[index].point); index = arena[index].parent; }
@@ -283,7 +283,7 @@ void StreamingGlide::augment(const GenerationLexicon& lexicon, std::span<const s
     for (auto word : proposed) {
         if (candidates_.size() >= 384) break;
         for (auto& c : word) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
-        if (lexicon.characterCount(word) < 2 || words_.contains(word) || lexicon.isBlocked(word)) continue;
+        if (lexicon.characterCount(word) < 2 || words_.contains(word)) continue;
         auto path = idealPath(word, 24); if (!path) continue;
         OnlineGlide candidate(std::move(*path)); candidate.consume(resampler_.samples);
         candidates_.emplace_back(word, std::move(candidate)); words_.insert(word);
@@ -300,11 +300,10 @@ std::vector<ChannelCandidate> augmentGlide(const GenerationLexicon& lexicon, std
         std::span<const Point> points, std::span<const std::string> contextWords, std::span<const std::string> dynamicWords,
         double gate, const std::function<bool()>& cancel) {
     if (cancel && cancel()) return {};
-    std::erase_if(beam, [&](const auto& c) { return lexicon.isBlocked(c.word); });
     std::unordered_set<std::string> known;
     for (const auto& c : beam) known.insert(c.word);
     auto add = [&](const std::string& word) {
-        if (known.contains(word) || lexicon.characterCount(word) < 2 || lexicon.isBlocked(word)) return;
+        if (known.contains(word) || lexicon.characterCount(word) < 2) return;
         if (auto cost = shapeCost(word, points, 4, 0); cost && *cost <= gate) { beam.push_back({word, *cost, 0}); known.insert(word); }
     };
     for (const auto& word : contextWords) { if (cancel && cancel()) return {}; add(word); }

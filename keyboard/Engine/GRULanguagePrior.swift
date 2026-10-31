@@ -1,5 +1,3 @@
-// MIGRATION-FILE: planned SPLIT | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: CPP_CORE owns tokenizer/search mathematics; OBJCXX_BRIDGE owns Core ML/tensors; SWIFT_IOS owns lifecycle façades.
 import Foundation
 import CoreML
 
@@ -12,8 +10,6 @@ import CoreML
 /// just extends by the newly committed word instead of rebuilding.
 private let neuralContextWordCap = 8
 
-// MIGRATION: planned CPP_CORE | stage=neural | target=Tokenizer
-// MIGRATION-NOTE: Preserve existing token IDs, byte fallback, English tag and word-boundary convention.
 private nonisolated final class KeyboardSentencePieceTokenizer: @unchecked Sendable {
     let native: KBNeuralTokenizer
     let padID: Int32
@@ -57,16 +53,10 @@ private nonisolated final class KeyboardSentencePieceTokenizer: @unchecked Senda
 /// compiles against the generic MLModel API, but its numeric path — and the streaming-vs-
 /// batched score-export choice — can only be validated with the real model plus a running
 /// keyboard. See the GRU integration walkthrough.
-// MIGRATION: planned SPLIT | stage=neural | target=NeuralFacade
-// MIGRATION-SPLIT: CPP_CORE owns tokenization/search/score policy; OBJCXX_BRIDGE owns Core ML execution/tensor transport; SWIFT_IOS keeps protocol and lifecycle façades.
 final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked Sendable {
 	let modelTier: DecodeModelTier = .neuralGRU
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NativeErrors
-	// MIGRATION-SPLIT: OBJCXX_BRIDGE translates model-output failures; SWIFT_IOS retains readiness/cancellation and protocol-facing error presentation.
 	private enum GRUError: Error { case notReady, badOutput, cancelled }
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 	private struct Session { let contextTokens: [Int32] }
 
 	private let compiledURL: URL?
@@ -104,8 +94,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 	private var nextLoadUptime: Double = 0
 	private var searchPriorCache: [SearchPriorQuery: [SearchPriorWord]] = [:]
 	private var searchPriorOrder: [SearchPriorQuery] = []
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 	private struct WarmJob {
 		let query: SearchPriorQuery
 		let epoch: UInt64
@@ -123,8 +111,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 	}
 	private static let searchPriorCacheCapacity = 48
 
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=NeuralLifecycle
-	// MIGRATION-NOTE: Keep bundle selection, runtime-state diagnostics, platform notifications and lifecycle coordination in Swift.
 	static func bundled() -> GRULanguagePrior {
 		GRULanguagePrior(
 			compiledURL: Bundle.main.url(forResource: "gru", withExtension: "mlmodelc"),
@@ -134,8 +120,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 			scorePackageURL: Bundle.main.url(forResource: "gru_score", withExtension: "mlpackage"))
 	}
 
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=NeuralLifecycle
-	// MIGRATION-NOTE: Keep bundle selection, runtime-state diagnostics, platform notifications and lifecycle coordination in Swift.
 	init(compiledURL: URL?, packageURL: URL?, tokenizerURL: URL?,
 		scoreCompiledURL: URL? = nil, scorePackageURL: URL? = nil,
 		layers: Int = 2, hidden: Int = 256) {
@@ -155,8 +139,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 	/// rather than the single-step path). Only meaningful once `isReady`.
 	var usesBatchedScorer: Bool { lock.lock(); defer { lock.unlock() }; return scoreModel != nil }
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS selects artifacts, applies memory/cooldown gates and readiness policy; OBJCXX_BRIDGE loads/validates Core ML models.
 	func prepareForSelection() {
 		lock.lock()
 		guard ProcessInfo.processInfo.systemUptime >= nextLoadUptime,
@@ -174,8 +156,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		queue.async { [weak self] in self?.loadModel(epoch: epoch) }
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS owns resource selection, epochs and state publication; OBJCXX_BRIDGE compiles/loads/validates Core ML models.
 	private func loadModel(epoch: UInt64) {
 		do {
 			let url: URL
@@ -206,8 +186,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		}
 	}
 
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
 	private func validateStepModel(_ model: MLModel) throws {
 		let inputs = model.modelDescription.inputDescriptionsByName
 		let outputs = model.modelDescription.outputDescriptionsByName
@@ -218,8 +196,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		else { throw GRUError.badOutput }
 	}
 
-	// MIGRATION: planned OBJCXX_BRIDGE | stage=neural | target=KBCoreMLBackend
-	// MIGRATION-NOTE: Own MLModel/MLMultiArray interaction and checked tensor transport; expose portable numeric results and translated errors.
 	private func loadScoreModel(configuration: MLModelConfiguration) -> MLModel? {
 		do {
 			let url: URL
@@ -234,8 +210,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		} catch { return nil }
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 	func prepareContext(_ words: [String], wordSessionID: UInt64) {
 		guard let tokenizer else { return }
 		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
@@ -243,14 +217,10 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		lock.lock(); sessions[wordSessionID] = Session(contextTokens: tokens); lock.unlock()
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 	func discardSession(_ wordSessionID: UInt64) {
 		lock.lock(); sessions[wordSessionID] = nil; lock.unlock()
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS handles pressure/epochs/cooldown; CPP_CORE clears search caches; OBJCXX_BRIDGE releases model/tensor/state resources.
 	func handleMemoryPressure() {
 		lock.lock()
 		modelEpoch &+= 1
@@ -264,8 +234,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		lock.unlock()
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 	func cancelPendingSearch() {
 		lock.lock()
 		pendingWarmJobs.removeAll(); latestWarmQueries.removeAll()
@@ -342,8 +310,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		return result
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns exact query keys, cache lookup and LRU; SWIFT_IOS supplies vocabulary/model epochs and records hit/miss diagnostics.
 	func searchPriorWords(_ query: SearchPriorQuery) -> [SearchPriorWord]? {
 		lock.lock(); defer { lock.unlock() }
 		let key = searchPriorCache[query] != nil ? query : query.withoutPrefix
@@ -354,8 +320,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		return words
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS coalesces/schedules and publishes current readiness; CPP_CORE owns query/seed and search-cache policy; OBJCXX_BRIDGE executes model batches.
 	func warmSearchPrior(_ query: SearchPriorQuery, lexicon: KBGenerationLexicon) {
 		guard tokenizer != nil, !query.context.isEmpty else { return }
 		let queries = query.prefix == nil ? [query] : [query.withoutPrefix, query]
@@ -370,15 +334,11 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		if schedule { queue.async { [weak self] in self?.drainWarmJobs() } }
 	}
 
-	// MIGRATION: planned SWIFT_IOS | stage=platform | target=NeuralLifecycle
-	// MIGRATION-NOTE: Keep bundle selection, runtime-state diagnostics, platform notifications and lifecycle coordination in Swift.
 	private func isCurrent(_ job: WarmJob) -> Bool {
 		lock.lock(); defer { lock.unlock() }
 		return modelEpoch == job.epoch && latestWarmQueries.contains(job.query) && model != nil
 	}
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: SWIFT_IOS owns job scheduling, epoch/cancellation checks and notifications; CPP_CORE generates/ranks and manages cache policy; OBJCXX_BRIDGE executes predictions.
 	private func drainWarmJobs() {
 		while true {
 			lock.lock()
@@ -420,8 +380,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 		}
 	}
 
-	// MIGRATION: planned CPP_CORE | stage=neural | target=NeuralSearch
-	// MIGRATION-NOTE: Preserve existing coverage, ordering, costs, limits and score conventions.
 
 
 	/// GRU log P(word | context) for each supplied word, best first, WITH the log-prob attached.
@@ -429,8 +387,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 	/// scale. Best-effort: a Core ML failure yields [] and the caller keeps the n-gram pool. The
 	/// supplied set is the GRU's GENERATED next-words unioned with the n-gram pool, so ranking spans
 	/// both sources — the GRU no longer merely re-orders what the n-gram already proposed.
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 	private func rankPool(_ pool: [String], context: [String], model: MLModel,
 		tokenizer: KeyboardSentencePieceTokenizer, shouldCancel: () -> Bool = { false }) -> [SearchPriorWord] {
 		var tokens = tokenizer.englishModeID.map { [$0] } ?? []
@@ -455,12 +411,8 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 	// word helps only if the trie can emit it). Validated against the PyTorch checkpoint in
 	// tools/lm/generate_next_words.py, whose beam this mirrors step for step.
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns token/beam/context/complete-word score policy; OBJCXX_BRIDGE owns model execution and tensor/state transport; SWIFT_IOS owns session/epoch/cancellation coordination.
 
 
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: CPP_CORE owns legal-token filtering, beam hypotheses and complete-word scoring; OBJCXX_BRIDGE predicts recurrent steps; SWIFT_IOS supplies cancellation/epoch validity.
 	private func generateNextWords(context: [String], model: MLModel,
 		tokenizer: KeyboardSentencePieceTokenizer, firstLetters: Set<Character>?, limit: Int,
 		beamWidth: Int = 12, branch: Int = 8, maxPieces: Int = 6,
@@ -488,8 +440,6 @@ final class GRULanguagePrior: NeuralLanguagePrior, NeuralSearchPrior, @unchecked
 
 	/// Dense log-softmax read straight off the logits buffer (no per-element NSNumber
 	/// boxing on the beam's hot loop).
-	// MIGRATION: planned SPLIT | stage=neural | target=NeuralPipeline
-	// MIGRATION-SPLIT: OBJCXX_BRIDGE extracts checked stride-aware logits; CPP_CORE calculates finite log-softmax values.
 	private func runContext(_ tokens: [Int32], model: MLModel) throws -> MLMultiArray {
 		lock.lock()
 		let epoch = modelEpoch

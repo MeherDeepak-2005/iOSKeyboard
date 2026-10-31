@@ -1,0 +1,6 @@
+{
+  "description": "As the reference, but separate input and output embeddings (6.2M parameters; Gboard reports 6.4M).",
+  "model": {"arch": "lstm", "embed": 96, "hidden": 670, "proj": 96, "cifg": true, "layers": 1, "tied": false, "dropout": 0.0},
+  "data": {"weights": {"tatoeba": 3.0, "wikitext": 0.6}},
+  "train": {"batch": 128, "bptt": 48, "tokens": 130000000, "lr": 3e-3, "warmup": 1000, "clip": 1.0, "weight_decay": 0.01, "eval_every": 2000}
+}

@@ -13,6 +13,7 @@ add_library(DecoderCore STATIC
     DecoderCore/src/IncrementalSearch.cpp
     DecoderCore/src/LanguageModel.cpp
     DecoderCore/src/Multiword.cpp
+    DecoderCore/src/NeuralLanguageModel.cpp
     DecoderCore/src/NeuralSearch.cpp
     DecoderCore/src/PackedLexicon.cpp
     DecoderCore/src/Ranking.cpp
@@ -37,6 +38,14 @@ if(KB_BUILD_TESTS)
     add_test(NAME neural-search COMMAND neural-search-tests)
     add_executable(neural-search-tests tests/NeuralSearchTests.cpp)
     target_link_libraries(neural-search-tests PRIVATE DecoderCore)
+    add_executable(nss-word-model-tests tests/NeuralLanguageModelTests.cpp)
+    target_link_libraries(nss-word-model-tests PRIVATE DecoderCore)
+    foreach(model cifg-tied lstm-untied gru-projected)
+        add_test(NAME nss-word-model-${model} COMMAND nss-word-model-tests
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/nss/${model}.nsslm"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/nss/${model}.goldens.json"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")
+    endforeach()
     add_executable(decoder-core-tests tests/PackedLexiconTests.cpp)
     target_link_libraries(decoder-core-tests PRIVATE DecoderCore)
     # These small portable executables use assert for their independent goldens.
@@ -46,6 +55,7 @@ if(KB_BUILD_TESTS)
         target_compile_options(candidate-generation-tests PRIVATE -UNDEBUG)
         target_compile_options(neural-search-tests PRIVATE -UNDEBUG)
         target_compile_options(decoder-core-tests PRIVATE -UNDEBUG)
+        target_compile_options(nss-word-model-tests PRIVATE -UNDEBUG)
     endif()
     add_test(NAME decoder-core-parity COMMAND decoder-core-tests
         "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")

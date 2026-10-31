@@ -62,6 +62,19 @@ xcodebuild -scheme keyboard -configuration Release -sdk iphoneos \
   ENABLE_USER_SCRIPT_SANDBOXING=NO build
 ```
 
+The word-level NSS model (`tools/nss`, an `.nsslm` file run by the shared C++ engine,
+not Core ML) follows the same rule: `INTERNAL_NSS_MODEL` is read only when
+`INTERNAL_NSS_ENABLED=YES`, and the `INTERNAL_NSS` Swift condition makes
+`KeyboardEngine.shared` map it and select the `nss` decoder tier:
+
+```sh
+xcodebuild -scheme keyboard -configuration Release -sdk iphoneos \
+  -destination 'generic/platform=iOS' INTERNAL_NSS_ENABLED=YES \
+  INTERNAL_NSS_MODEL="$PWD/keyboard/nss-english.nsslm" \
+  SWIFT_ACTIVE_COMPILATION_CONDITIONS=INTERNAL_NSS \
+  ENABLE_USER_SCRIPT_SANDBOXING=NO build
+```
+
 This is an internal artifact, not the shipping configuration. Audit its extension
 with `tools/verify_release_artifacts.py --allow-neural`. A normal Release build omits
 the model and is still checked against the stricter 14 MB/no-neural gate.

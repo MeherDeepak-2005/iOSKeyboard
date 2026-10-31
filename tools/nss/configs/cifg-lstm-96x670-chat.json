@@ -1,0 +1,7 @@
+{
+  "description": "The NSS reference model on the v2 corpus (data-v2: build_corpus --sources tatoeba wikitext soda --stock-name-keep 0.25): SODA dialogues as the messaging register, Tatoeba without most Tom/Mary sentences, less WikiText.",
+  "model": {"arch": "lstm", "embed": 96, "hidden": 670, "proj": 96, "cifg": true, "layers": 1, "tied": true, "dropout": 0.0},
+  "data": {"weights": {"soda": 0.45, "tatoeba": 2.0, "wikitext": 0.3}},
+  "train": {"batch": 128, "bptt": 48, "tokens": 130000000, "lr": 3e-3, "warmup": 1000, "clip": 1.0, "weight_decay": 0.01, "eval_every": 2000,
+            "valid": ["soda", "tatoeba", "wikitext"]}
+}

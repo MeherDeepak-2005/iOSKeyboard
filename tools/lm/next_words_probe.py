@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Interactive next-word prediction probe — Python twins of the two production
-next-word paths in KeyboardEngine.nextWords (Keyboardengine.swift):
+next-word paths in KeyboardEngine.nextWords (KeyboardEngine (keyboard/Engine/Decoder)):
 
   n-gram   NgramScorer.nextWords    — trigram->bigram->top-unigram backoff over
                                        langdata.bin's corpus counts (no user model

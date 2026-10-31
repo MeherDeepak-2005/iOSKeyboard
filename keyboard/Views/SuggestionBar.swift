@@ -1,8 +1,6 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 
-// Suggestion bar (its own taps) — extracted from Keyboard.swift.
+// Suggestion bar (its own taps).
 
 enum KeyboardTool: String, CaseIterable {
     case clipboard, emoji, gifs, stickers
@@ -25,12 +23,9 @@ final class SuggestionBar: UIView {
     private(set) var showingTools = false
     private static let toolsWidth: CGFloat = 44
     private let toolsSeparator = UIView()
-	private let primaryBackground = UIView()
 	private let sep1 = UIView(), sep2 = UIView()
 	private let textColor: UIColor
 	private let dimColor: UIColor
-	private let primaryFill: UIColor
-	private let primaryBorder: UIColor
 
 	private var rankedSuggestions: [String] = []
 	private var currentPrefix: String?
@@ -42,19 +37,10 @@ final class SuggestionBar: UIView {
 	init(theme: KeyboardTheme) {
 		self.textColor = theme.keyText
 		self.dimColor = theme.keyText.withAlphaComponent(0.45)
-		self.primaryFill = theme.suggestionHighlight
-		self.primaryBorder = theme.suggestionHighlightBorder
 		super.init(frame: .zero)
 		backgroundColor = .clear
 		isOpaque = false
 
-		primaryBackground.isUserInteractionEnabled = false
-		primaryBackground.backgroundColor = primaryFill
-		primaryBackground.layer.cornerCurve = .continuous
-		primaryBackground.layer.borderWidth = 0.75
-		primaryBackground.layer.borderColor = primaryBorder.cgColor
-		primaryBackground.isHidden = true
-		addSubview(primaryBackground)
         toolsButton.tintColor = theme.specialKeyText
         toolsButton.accessibilityIdentifier = "suggestion.tools"
         toolsButton.addAction(UIAction { [weak self] _ in
@@ -89,7 +75,7 @@ final class SuggestionBar: UIView {
 		for i in 0..<3 {
 			let b = UIButton(type: .custom)
 			let base = UIFont.systemFont(ofSize: 17,
-				weight: i == 1 || UIAccessibility.isBoldTextEnabled ? .semibold : .regular)
+				weight: UIAccessibility.isBoldTextEnabled ? .semibold : .regular)
 			b.titleLabel?.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: base,
 				maximumPointSize: 21)
 			b.titleLabel?.adjustsFontSizeToFitWidth = true
@@ -128,14 +114,6 @@ final class SuggestionBar: UIView {
 			button.frame = CGRect(x: clipW + CGFloat(index) * w, y: visualOffsetY,
 							  width: w, height: bounds.height)
 		}
-		let highlightInset: CGFloat = 4
-		primaryBackground.frame = CGRect(
-			x: clipW + w + highlightInset,
-			y: highlightInset + visualOffsetY,
-			width: max(0, w - highlightInset * 2),
-			height: max(0, bounds.height - highlightInset * 2)
-		)
-		primaryBackground.layer.cornerRadius = max(0, min(15, primaryBackground.bounds.height / 2))
 		let inset: CGFloat = 7
 		let separatorHeight = max(0, bounds.height - inset * 2)
 		sep1.frame = CGRect(x: clipW + w, y: inset + visualOffsetY, width: 0.5, height: separatorHeight)
@@ -160,8 +138,7 @@ final class SuggestionBar: UIView {
         buttons.forEach { $0.isHidden = show }
         sep1.isHidden = show
         sep2.isHidden = show
-        if show { primaryBackground.isHidden = true }
-        else { renderStablePresentation() }
+        if !show { renderStablePresentation() }
     }
 
     private func updateToolsButton() {
@@ -196,11 +173,10 @@ final class SuggestionBar: UIView {
 			b.isEnabled = false
 			b.backgroundColor = .clear
 		}
-		primaryBackground.alpha = confident ? 1 : 0.72
 		setPrimaryHighlighted(true)
 	}
 
-	/// Keep the word that was actually committed in the shaded middle slot. The two
+	/// Keep the word that was actually committed in the middle slot. The two
 	/// nearest alternatives remain available on either side for one-tap correction.
 	func setGlideResult(_ winner: String, alternatives: [String]) {
 		stableGlideResult = (winner, alternatives)
@@ -258,8 +234,6 @@ final class SuggestionBar: UIView {
 	}
 
 	private func setPrimaryHighlighted(_ on: Bool) {
-		primaryBackground.isHidden = showingTools || !on
-		if !on { primaryBackground.alpha = 1 }
 		buttons.indices.forEach { index in
 			buttons[index].accessibilityTraits = index == 1 && on ? [.button, .selected] : .button
 		}

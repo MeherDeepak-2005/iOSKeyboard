@@ -1,5 +1,3 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 
 nonisolated struct TeluguHostEdit: Equatable, Sendable {
@@ -139,10 +137,6 @@ nonisolated enum TeluguComposer {
 		return rules.output(for: value)
 	}
 
-	static func isTeluguScalar(_ scalar: UnicodeScalar,
-		 rules: TeluguCompositionRules? = TeluguLanguagePack.shared.composition) -> Bool {
-		rules?.isScriptScalar(scalar) ?? false
-	}
 }
 
 private extension KeyOutput {

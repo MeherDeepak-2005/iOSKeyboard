@@ -1,8 +1,6 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import UIKit
 
-// Theme + key model enums + KeySpec — extracted from Keyboard.swift.
+// Theme + key model enums + KeySpec.
 
 struct KeyboardTheme {
 	let name: String
@@ -13,7 +11,6 @@ struct KeyboardTheme {
 	let accentStart, accentEnd: UIColor             // action-button gradient stops (full accent)
 	let accentSoft, accentSoftText: UIColor         // optional soft accent colors
 	let pressedOverlay: UIColor
-	let suggestionHighlight, suggestionHighlightBorder: UIColor
 	let popupFill, popupText: UIColor
 	let shadowColor: UIColor
 	let shadowOpacity: Float
@@ -87,8 +84,6 @@ struct KeyboardTheme {
 				accentStart: actionStart, accentEnd: actionEnd,
 				accentSoft: accentSoftFill, accentSoftText: UIColor(hex: 0xECECF0),
 				pressedOverlay: UIColor.white.withAlphaComponent(highContrast ? 0.25 : 0.18),
-				suggestionHighlight: UIColor.white.withAlphaComponent(highContrast ? 0.27 : 0.17),
-				suggestionHighlightBorder: UIColor.white.withAlphaComponent(highContrast ? 0.42 : 0.12),
 				popupFill: UIColor(hex: highContrast ? 0x55555C : 0x48484E),
 				popupText: UIColor(hex: 0xFAFAFC),
 					shadowColor: .white, shadowOpacity: 0, cornerRadius: 8, isDark: true, isSystemAppearance: system)
@@ -105,8 +100,6 @@ struct KeyboardTheme {
 				accentStart: actionStart, accentEnd: actionEnd,
 				accentSoft: accentSoftFill, accentSoftText: UIColor(hex: 0x1B1B1D),
 				pressedOverlay: UIColor.black.withAlphaComponent(highContrast ? 0.18 : 0.11),
-				suggestionHighlight: UIColor.white.withAlphaComponent(highContrast ? 0.88 : 0.62),
-				suggestionHighlightBorder: UIColor.black.withAlphaComponent(highContrast ? 0.22 : 0.08),
 				popupFill: .white,
 				popupText: UIColor(hex: 0x151517),
 					shadowColor: UIColor(white: 0, alpha: 1), shadowOpacity: 0, cornerRadius: 8, isDark: false, isSystemAppearance: system)
@@ -140,8 +133,6 @@ struct KeyboardTheme {
 			accentStart: accentStart, accentEnd: accentEnd,
 			accentSoft: softAccent, accentSoftText: bestContrastingText(over: [softAccent]),
 			pressedOverlay: c.dark ? UIColor.white.withAlphaComponent(0.18) : UIColor.black.withAlphaComponent(0.11),
-			suggestionHighlight: c.dark ? UIColor.white.withAlphaComponent(0.18) : UIColor.white.withAlphaComponent(0.62),
-			suggestionHighlightBorder: c.dark ? UIColor.white.withAlphaComponent(0.13) : UIColor.black.withAlphaComponent(0.08),
 			popupFill: c.dark ? UIColor(hex: 0x48484E) : .white,
 			popupText: c.dark ? UIColor(hex: 0xFAFAFC) : UIColor(hex: 0x151517),
 				shadowColor: c.dark ? .white : UIColor(white: 0, alpha: 1),

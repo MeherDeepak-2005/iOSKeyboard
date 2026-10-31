@@ -76,8 +76,9 @@ struct CorrectionCalibrationTests {
         #expect(!policy.accepts(gate(2, 3, kind: .loose)))
         #expect(!policy.accepts(gate(4, 8, kind: .realWord)))
         #expect(policy.accepts(gate(6, nil, kind: .realWord)))
-        #expect(CorrectionPolicy.baseline.accepts(gate(4, 0)))
-        #expect(!CorrectionPolicy.baseline.accepts(gate(3, 10)))
+        // Baseline oovMargin is -0.5 (28 Oct): a large gap still cannot bypass it.
+        #expect(CorrectionPolicy.baseline.accepts(gate(0, 0)))
+        #expect(!CorrectionPolicy.baseline.accepts(gate(-1, 10)))
         let cautious = CorrectionPolicy(oovMargin: 3, realWordMargin: 5,
             closeRescueMargin: 1.5, closeRescueGap: 2, minimumCloseGap: 0.5)
         #expect(!cautious.accepts(gate(8, 0.2)))

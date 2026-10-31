@@ -16,6 +16,19 @@ Android dictionary.
 | Android adapter | C++ with JNI | `native/android/SharedEngineJni.cpp` | Read-only file mapping, lifetime-safe opaque handles, one serialized engine lane per handle, byte-array input and versioned `EngineWire` output |
 | Android application/library façade | Kotlin | `android/decoder/` | Asset extraction, checksum/version lifecycle, worker scheduling boundary, resource closing; future InputMethodService/UI/personal persistence |
 
+### Swift source layout
+
+The Swift side is grouped by responsibility; each group is one type whose behaviour is
+split across extensions, with all stored state on the type itself.
+
+| Group | Contents |
+|---|---|
+| `keyboard/Engine/Decoder/` | `KeyboardEngine` (state, lifecycle, tuning) plus `+Correction`, `+Glide`, `+Ranking`, `+Suggestions`; `EngineContracts.swift` holds the request/snapshot contracts and `GlideProfile.swift` the on-device glide adaptation |
+| `keyboard/Engine/Vocabulary/` | `LangData` mmap reader plus `+PackedTrie`, `+GlideAnchors`, `+NodeWalk`; `IncrementalDecodeSession` and `ModifiedKneserNeyModel` |
+| `keyboard/Views/Keyboard/` | `KeyboardView` plus `+Touch`, `+Layout`, `+Keys`, `+Panels`, `+Presentation`; metrics and the alternatives popup |
+| `keyboard/Views/Emoji/` | store, atlas, cells, palette and search header |
+| `demo_keyboard/Controller/` | `KeyboardViewController` plus `+HostDocument`, `+Keys`, `+Suggestions`, `+Autocorrect`, `+AutoShift`, `+Glide`, `+Clipboard`, `+WordParsing` |
+
 Kotlin follows Android's [Kotlin-first guidance](https://developer.android.com/kotlin/first).
 CMake/NDK integration follows the [official NDK toolchain](https://developer.android.com/ndk/guides/cmake).
 JNI keeps algorithm work and ownership inside native calls, following
@@ -62,7 +75,8 @@ fallback; it is not a second production search engine.
 | Glide anchor/index access and selected n-gram count extraction | Swift reading the shared, natively validated map | C++ packed view |
 | Mutable/adopted/supplementary trie storage and traversal | C++ by default; Swift reference in tests | Implemented; learning/persistence remains Swift |
 | Tap proposal generation, recovery admission, contraction/split proposals | C++ for ASCII typed input; Swift reference/Unicode fallback | [Candidate generation details](docs/decoder-platform/CPP_CANDIDATE_GENERATION.md) |
-| Final ranking, correction gates and neural multiword policy | Swift | C++ policy layer after independent parity |
+| Final ranking and correction gates, n-gram tier | C++ `Ranking.cpp` via `KBSharedEngine` (gate margins passed from Swift `KeyboardEngine.correctionPolicy`, default `.baseline`) | Implemented |
+| GRU-tier ranking and neural multiword policy | Swift | C++ policy layer after independent parity |
 | Context/personal distribution extraction and next-word merging | Swift; score mathematics are C++ | C++ vocabulary/personal/safety views |
 | Glide geometry/search/shape ranking | Swift | C++ after policy/Glide parity |
 | Neural tokenizer/search math and Core ML execution façade | Existing Swift; no trained artifacts available | C++ math plus iOS Objective-C++ Core ML backend |

@@ -19,6 +19,7 @@ struct Continuation { std::int32_t word; std::uint32_t count; };
 struct Continuations { std::uint32_t total; std::vector<Continuation> entries; };
 struct TrigramContext { std::int32_t first, second; };
 struct ChannelCandidate;
+class MutableTrie;
 struct WordFunding { std::string word; double bonus; };
 struct WordFrequencyBoost { std::string word; std::uint32_t count; };
 
@@ -32,6 +33,16 @@ public:
     struct TextMetadata { std::int32_t id; std::size_t characters; std::optional<std::uint8_t> first, last; };
     std::vector<std::int32_t> textMetadataIDs() const;
     void installTextMetadata(std::span<const TextMetadata> metadata) const;
+    // Safety-blocked words as a word-ID bitset, installed once at load and before any
+    // search. search, completions, incrementalSeeds and anchorWords never emit them, so
+    // they are excluded during candidate generation (traversal still passes through them:
+    // a blocked word can prefix a clean one). Terms not in the dictionary are ignored.
+    void installBlocked(std::span<const std::string> terms) const;
+    bool blocked(std::uint32_t id) const noexcept { return id < words_ && !blocked_.empty() && (blocked_[id >> 6] >> (id & 63) & 1); }
+    std::size_t blockedCount() const noexcept { return blockedCount_; }
+    // The blocked dictionary words alone, searched once per keystroke for the closest blocked
+    // match's cost (never a candidate). Null until installBlocked.
+    const MutableTrie* blockedTrie() const noexcept { return blockedTrie_.get(); }
     std::size_t characterCount(std::string_view word) const;
     void warmAnchors() const;
     std::vector<std::string> anchorWords(std::span<const std::uint8_t> first, std::span<const std::uint8_t> last, std::size_t perBucket) const;
@@ -50,17 +61,25 @@ public:
                                         std::size_t limit = SIZE_MAX) const;
     // Validation/parity enumeration only; not a callback into a Swift hot path.
     std::vector<TrigramContext> trigramContexts() const;
-    // Same root gate, vocabulary-ID order, cap and log-frequency as Swift.
+    // Same root gate, vocabulary-ID order, cap and log-frequency as Swift. maxCost is the
+    // search radius the seeds must cover (default: words of 8+ letters).
     // A null result means unsupported input/no trie/cap overflow/empty word;
     // an empty nonnull set is valid. Caller retains backing for all sessions.
     std::shared_ptr<const IncrementalSeedSet> incrementalSeeds(
         std::uint8_t typedFirst, std::optional<TouchOffset> firstTap = {},
         std::size_t stateCap = 24'000,
-        std::span<const WordFrequencyBoost> boosts = {}) const;
+        std::span<const WordFrequencyBoost> boosts = {}, std::uint8_t typedSecond = 0,
+        double maxCost = 3.6) const;
+    // missingFirstOnly limits the search to candidates whose first letter the user dropped
+    // (one extra leading letter, then the typed word: bove -> above): at most 26 descents.
+    // The full search (missingFirstOnly false) never emits that shape, and the retained
+    // incremental search seeds only by the typed first letters, so this pass is their only source.
+    // roots, when not empty, limits the search to candidates starting with one of those letters.
     std::vector<ChannelCandidate> search(std::string_view typed, double maxCost,
         std::span<const std::optional<TouchOffset>> taps = {},
         std::optional<std::span<const WordFunding>> funding = {},
-        const std::function<bool()>& shouldCancel = {}) const;
+        const std::function<bool()>& shouldCancel = {}, bool missingFirstOnly = false,
+        std::span<const std::uint8_t> roots = {}) const;
 private:
     struct Range { std::uint32_t total, start, count; };
     std::span<const std::byte> bytes_;
@@ -75,7 +94,10 @@ private:
     Continuations readRange(std::size_t base, Range range, std::size_t limit) const;
     void validateRange(Range range, std::uint32_t count) const;
     void validate();
-    mutable std::once_flag metadataOnce_, anchorsOnce_, seedIndexOnce_;
+    mutable std::once_flag metadataOnce_, anchorsOnce_, seedIndexOnce_, blockedOnce_;
+    mutable std::vector<std::uint64_t> blocked_;
+    mutable std::size_t blockedCount_ = 0;
+    mutable std::shared_ptr<const MutableTrie> blockedTrie_;
     mutable std::array<std::vector<std::uint32_t>, 256> seedIDs_;
     mutable bool emptySeedWord_ = false;
     mutable std::unordered_map<std::int32_t, TextMetadata> textMetadata_;

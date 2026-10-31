@@ -92,3 +92,7 @@ android/local.properties
 
 # Editor settings
 .vscode/
+
+# NSS word LM workspace: tokenized corpora and training runs (tools/nss/README.md)
+tools/nss/data/
+tools/nss/runs/

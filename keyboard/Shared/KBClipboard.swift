@@ -1,5 +1,3 @@
-// MIGRATION-FILE: planned SWIFT_IOS | See CPP_IOS_MIGRATION_PLAN.md.
-// MIGRATION-NOTE: Keep current runtime behavior; destination ownership is planned only.
 import Foundation
 
 // KBClipboard: the clipboard-history store shared between app and extension.
@@ -8,7 +6,7 @@ import Foundation
 // for UserDefaults churn). Privacy contract: pasteboard CONTENTS are read only on
 // an explicit user tap (Clipboard in the tools row); detection of "something new was
 // copied" uses metadata alone (changeCount / hasStrings), which iOS does not surface
-// as a paste. Add this file to BOTH targets.
+// as a paste.
 //
 // Hardening over the original afda5b4 implementation (Improvements.md P0 §3):
 //  • Unpinned items EXPIRE (`retentionInterval`, 1h like Gboard); pins never expire.
@@ -105,10 +103,6 @@ enum KBClipboard {
 
 	static func remove(_ text: String, at url: URL? = nil) {
 		save(all(at: url).filter { $0.text != text }, at: url)
-	}
-
-	static func clearUnpinned(at url: URL? = nil) {
-		save(all(at: url).filter(\.pinned), at: url)
 	}
 
 	// MARK: Sensitive-content filter
