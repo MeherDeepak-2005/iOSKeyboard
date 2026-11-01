@@ -75,6 +75,15 @@ struct KeyboardConsistencyTests {
         #expect(tracker.observe(state("typo", after: nil, id: id)) == .unchanged)
     }
 
+    @Test func smartPunctuationOfOurOwnApostropheIsNotAChange() {
+        let id = UUID()
+        var tracker = HostDocumentReconciler()
+        #expect(tracker.observe(state("I think it's ", id: id)) == .initial)
+        #expect(tracker.observe(state("I think it\u{2019}s ", id: id)) == .unchanged)
+        #expect(tracker.observe(state("I think its ", id: id)) == .changed)
+        #expect(HostDocumentSnapshot.folded("\u{201C}don\u{2019}t\u{201D}") == "\"don't\"")
+    }
+
     @Test func recoveryFindsClearWithoutCallbacksAndStops() async throws {
         let id = UUID()
         var tracker = HostDocumentReconciler()

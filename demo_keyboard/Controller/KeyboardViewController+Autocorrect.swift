@@ -83,7 +83,8 @@ extension KeyboardViewController {
 	/// word ("js" → "is"), which demotes the erased word.
 	func resolveManualFix(_ committed: String) {
 		defer { resetEraseTracking() }
-		let erased = erasedWord
+		// Erased characters come from the host, which may store a correction's ' as ’.
+		let erased = HostDocumentSnapshot.folded(erasedWord)
 		guard erased.count >= 2, !committed.isEmpty,
 			  erased.lowercased() != committed.lowercased(), !isSecureField else { return }
 		if let hit = recentCorrections.last(where: { $0.corrected.lowercased() == erased.lowercased() }),

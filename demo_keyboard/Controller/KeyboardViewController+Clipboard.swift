@@ -151,7 +151,7 @@ extension KeyboardViewController {
 			let decodeContext = currentDecodeSnapshot?.request.context ?? currentContextBuffer
 			resolveManualFix(typedWord)
 			var correction = applyAutocorrectIfNeeded()
-			if correction == nil, activeLanguageMode == .english, permitsTypingData {
+			if correction == nil, activeLanguageMode == .english, permitsLearning {
 				engine.learnTouchProfile(word: typedWord, taps: wordTaps)
 			}
 			let committedWord = correction?.corrected ?? typedWord
@@ -323,7 +323,7 @@ extension KeyboardViewController {
 		let decodeContext = currentDecodeSnapshot?.request.context ?? currentContextBuffer
 		resolveManualFix(typedWord)
 		var correction = applyAutocorrectIfNeeded()
-		if correction == nil, activeLanguageMode == .english, permitsTypingData {
+		if correction == nil, activeLanguageMode == .english, permitsLearning {
 			engine.learnTouchProfile(word: typedWord, taps: wordTaps)
 		}
 		let committedWord = correction?.corrected ?? typedWord

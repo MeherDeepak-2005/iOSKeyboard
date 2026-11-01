@@ -620,6 +620,10 @@ extension KeyboardEngine {
 					if let decision {
 						result.removeAll { $0.caseInsensitiveCompare(decision) == .orderedSame }
 						result.insert(decision, at: 0)
+					} else if self.isKept(lw) {
+						// An undone correction keeps the typed word in the middle; as native placeDecision.
+						result.removeAll { $0.caseInsensitiveCompare(currentWord) == .orderedSame }
+						result.insert(currentWord, at: 0)
 					} else if !result.contains(where: {
 						$0.caseInsensitiveCompare(currentWord) == .orderedSame
 					}) {

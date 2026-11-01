@@ -22,17 +22,19 @@ extension KeyboardViewController {
 	}
 
 	func learnCommittedWord(context: [String], word: String) {
-		guard activeLanguageMode == .english, permitsTypingData else { return }
+		guard activeLanguageMode == .english, permitsLearning else { return }
 		engine.learn(context: context, word: word)
 	}
 
 	func recordReplacement(original: String, replacement: String) {
-		guard activeLanguageMode == .english, permitsTypingData else { return }
+		guard activeLanguageMode == .english, permitsLearning else { return }
 		engine.wordReplaced(original: original, with: replacement)
 	}
 
+	/// The user undid a correction: the next boundary must not redo it. Not tied to the
+	/// recorder's or learning's field checks, which once left undos forgotten.
 	func rejectCorrection(_ word: String) {
-		guard activeLanguageMode == .english, permitsTypingData else { return }
+		guard activeLanguageMode == .english, !isSecureField else { return }
 		engine.dontCorrect(word)
 	}
 
@@ -98,11 +100,11 @@ extension KeyboardViewController {
 	func replaceHostSuffix(_ suffix: String, with replacement: String) -> Bool {
 		lastReplaceDeleteCount = 0
 		guard let initial = textDocumentProxy.documentContextBeforeInput else { return false }
-		// Parsed words carry ASCII apostrophes; smart-punctuation hosts store ’ (canonical is
+		// Parsed words carry ASCII apostrophes; smart-punctuation hosts store ’ (folding is
 		// one-to-one per Character), so replace the host's own spelling of the same word.
 		let hostSuffix = String(initial.suffix(suffix.count))
 		let matched = hostSuffix.count == suffix.count
-			&& String(hostSuffix.map(canonical)) == String(suffix.map(canonical)) ? hostSuffix : suffix
+			&& HostDocumentSnapshot.folded(hostSuffix) == HostDocumentSnapshot.folded(suffix) ? hostSuffix : suffix
 		guard let plan = HostSuffixReplacementPlan(contextBeforeInput: initial,
 				suffix: matched, replacement: replacement) else { return false }
 		return plan.apply(initialContext: initial,

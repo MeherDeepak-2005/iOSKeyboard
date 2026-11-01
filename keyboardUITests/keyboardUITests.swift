@@ -277,7 +277,8 @@ final class keyboardUITests: XCTestCase {
 	}
 
 	/// What the strip shows in the middle for a contraction typed without its apostrophe must
-	/// be what Space commits. Logs CONTRACTION lines with the strip and the committed word.
+	/// be what Space commits, and the intended word; "she lets" keeps the verb.
+	/// Logs CONTRACTION lines with the strip and the committed word.
 	@MainActor
 	func testContractionsCommitWhatTheStripShows() throws {
 		try selectLanguage(identifier: "language.english", title: "English")
@@ -289,7 +290,7 @@ final class keyboardUITests: XCTestCase {
 		let field = host.textFields["runtime.text"]
 		let cases = [("dont", "don't"), ("im", "i'm"), ("cant", "can't"), ("thats", "that's"),
 			("youre", "you're"), ("didnt", "didn't"), ("hows", "how's"), ("whys", "why's"),
-			("ill", "i'll"), ("its", "it's")]
+			("ill", "i'll"), ("its", "it's"), ("she", "she"), ("lets", "lets")]
 		var previous = fieldText(field), mismatches: [String] = []
 		for (typed, intended) in cases {
 			for ch in typed { tapLetter(String(ch), in: host) }
@@ -303,12 +304,71 @@ final class keyboardUITests: XCTestCase {
 				.replacingOccurrences(of: "\u{2019}", with: "'")
 			previous = text
 			NSLog("CONTRACTION %@ strip=[%@] committed=[%@] want=[%@]", typed, shown, committed, intended)
-			let showsIntended = shown.replacingOccurrences(of: "\u{2019}", with: "'").lowercased() == intended
-			if showsIntended && committed.lowercased() != intended {
+			let strip = shown.replacingOccurrences(of: "\u{2019}", with: "'").lowercased()
+			if strip != committed.lowercased() {
 				mismatches.append("\(typed): strip \(shown), committed \(committed)")
 			}
+			if committed.lowercased() != intended { NSLog("CONTRACTION-MISS %@ committed=[%@] want=[%@]", typed, committed, intended) }
 		}
-		XCTAssertEqual(mismatches, [], "Space committed something other than the contraction the strip showed")
+		// Which word the model picks is accuracy (logged as CONTRACTION-MISS); the strip's middle
+		// differing from what Space commits is a bug.
+		XCTAssertEqual(mismatches, [], "Space must commit the strip's middle word")
+	}
+
+	/// A Backspace right after an autocorrection restores the typed word, the strip then shows
+	/// that word in the middle, and the next Space keeps it: the undo must stick. Dictionary
+	/// words only, so the undo it teaches leaves nothing new in the phone's learned words.
+	/// Logs UNDO lines with non-ASCII characters spelled out.
+	@MainActor
+	func testBackspaceUndoOfACorrectionSticks() throws {
+		try selectLanguage(identifier: "language.english", title: "English")
+		let host = launchRuntimeHost()
+		guard host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 10) else {
+			throw XCTSkip("Glyph is not the active software keyboard")
+		}
+		let field = host.textFields["runtime.text"]
+		let primary = host.descendants(matching: .any)["suggestion.primary"]
+		func spelled(_ text: String) -> String {
+			text.unicodeScalars.map { $0.isASCII ? String($0) : String(format: "<U+%04X>", $0.value) }.joined()
+		}
+		func folded(_ text: String) -> String { text.replacingOccurrences(of: "\u{2019}", with: "'").lowercased() }
+		func lastWord(_ text: String) -> String { String(text.split(separator: " ").last ?? "") }
+		func type(_ word: String) {
+			for ch in word { tapLetter(String(ch), in: host) }
+			RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+		}
+		var failures: [String] = [], undone = 0
+		for (typed, corrected) in [("shed", "she'd"), ("shell", "she'll"), ("well", "we'll"), ("hell", "he'll")] {
+			type("I"); host.keys["Space"].tap()
+			type("think"); host.keys["Space"].tap()
+			type(typed)
+			let before = fieldText(field)
+			host.keys["Space"].tap()
+			let afterSpace = waitForText(field, toDifferFrom: before)
+			host.keys["Delete"].tap()
+			let afterUndo = waitForText(field, toDifferFrom: afterSpace)
+			RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+			let shown = primary.exists ? primary.label : ""
+			host.keys["Space"].tap()
+			let afterRetry = waitForText(field, toDifferFrom: afterUndo)
+			NSLog("UNDO %@ space=[%@] backspace=[%@] strip=[%@] space=[%@]", typed,
+				spelled(afterSpace), spelled(afterUndo), shown, spelled(afterRetry))
+			// Whether the model corrects is accuracy; once it has, the undo must stick.
+			guard folded(lastWord(afterSpace)) != typed else {
+				NSLog("UNDO-SKIP %@ was not corrected (want %@)", typed, corrected)
+				continue
+			}
+			undone += 1
+			if folded(lastWord(afterUndo)) != typed {
+				failures.append("\(typed): Backspace did not restore it: [\(afterUndo)]")
+			} else if folded(shown) != typed {
+				failures.append("\(typed): strip middle after the undo was [\(shown)]")
+			} else if folded(lastWord(afterRetry)) != typed {
+				failures.append("\(typed): Space redid the correction after the undo: [\(afterRetry)]")
+			}
+		}
+		XCTAssertGreaterThan(undone, 0, "No case was corrected, so no undo was tested")
+		XCTAssertEqual(failures, [])
 	}
 
 	@MainActor

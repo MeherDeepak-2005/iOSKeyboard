@@ -14,6 +14,21 @@ const PersonalCounts& counts(const EngineView& view) { return view.personal ? *v
 std::unordered_set<std::string> words(std::span<const ChannelCandidate> rows) {
     std::unordered_set<std::string> out; for (const auto& row : rows) out.insert(row.word); return out;
 }
+// The middle of the strip is what Space commits: the correction, or the typed word when the user
+// undid a correction of it this session (kept), which otherwise sat beside the very contraction
+// Space no longer applies. Without either, the typed word stays among the three; typedFirst puts
+// it in the middle (raw decoding commits the typed word whenever no completion outscores it).
+void placeDecision(DecodeOutput& out, const std::string& typed, const DecodeInput& input, bool typedFirst = false) {
+    if (out.correction.word) {
+        std::erase(out.suggestions, *out.correction.word); out.suggestions.insert(out.suggestions.begin(), *out.correction.word);
+    } else if ((input.kept || typedFirst) && !typed.empty()) {
+        std::erase(out.suggestions, typed); std::erase(out.suggestions, input.word);
+        out.suggestions.insert(out.suggestions.begin(), input.word);
+    } else if (std::find(out.suggestions.begin(), out.suggestions.end(), typed) == out.suggestions.end()) {
+        if (out.suggestions.size() >= 3) out.suggestions.back() = input.word; else out.suggestions.push_back(input.word);
+    }
+    if (out.suggestions.size() > 3) out.suggestions.resize(3);
+}
 }
 double EngineView::penalty(std::string_view word) const {
     // Blocked words are excluded during generation (PackedLexicon blocked bitset, learn-time
@@ -183,12 +198,7 @@ DecodeOutput EngineSession::decode(const DecodeInput& input, const EngineView& v
         // A typo aimed at a blocked word is left alone (biitch must not become "british").
         out.correction = correction(view.lexicon, ranked, costs, typed, length, input.letterFlags, input.context, input.kept || pools.aimedAtBlocked, loose, broad, engine_->options_.correction);
     }
-    if (out.correction.word) {
-        std::erase(out.suggestions, *out.correction.word); out.suggestions.insert(out.suggestions.begin(), *out.correction.word);
-    } else if (std::find(out.suggestions.begin(), out.suggestions.end(), typed) == out.suggestions.end()) {
-        if (out.suggestions.size() >= 3) out.suggestions.back() = input.word; else out.suggestions.push_back(input.word);
-    }
-    if (out.suggestions.size() > 3) out.suggestions.resize(3);
+    placeDecision(out, typed, input);
     if (engine_->options_.profile) out.timings.policy = elapsed(t);
     if (cancelled()) { out = {}; out.identity = input.identity; out.status = EngineStatus::cancelled; }
     return out;
@@ -450,12 +460,7 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
     out.correction = correction(view.lexicon, correctionRows, costs, typed, length, input.letterFlags, input.context, input.kept || aimedAtBlocked, loose, broad, policy, nssChannelWeight);
     static const std::unordered_set<std::string> iForms{"i", "i'm", "i'll", "i've", "i'd"};
     if (input.word == typed && iForms.contains(typed)) out.correction = {typed, 100, 0, {}};
-    if (out.correction.word) {
-        std::erase(out.suggestions, *out.correction.word); out.suggestions.insert(out.suggestions.begin(), *out.correction.word);
-    } else if (std::find(out.suggestions.begin(), out.suggestions.end(), typed) == out.suggestions.end()) {
-        if (out.suggestions.size() >= 3) out.suggestions.back() = input.word; else out.suggestions.push_back(input.word);
-    }
-    if (out.suggestions.size() > 3) out.suggestions.resize(3);
+    placeDecision(out, typed, input);
     if (engine_->options_.profile) out.timings.generation = elapsed(started);
     return out;
 }
@@ -533,12 +538,7 @@ DecodeOutput EngineSession::decodeRaw(const DecodeInput& input, const EngineView
         if (out.candidates.size() < 24) out.candidates.push_back({row, row.key == typed ? CandidateSource::typed
             : row.key.find(' ') != std::string::npos ? CandidateSource::splitCorrection : CandidateSource::fuzzyLexicon, row.score - typedRow.score});
     }
-    if (out.correction.word) {
-        std::erase(out.suggestions, *out.correction.word); out.suggestions.insert(out.suggestions.begin(), *out.correction.word);
-    } else {
-        if (out.suggestions.size() >= 3) out.suggestions.back() = input.word; else out.suggestions.push_back(input.word);
-    }
-    if (out.suggestions.size() > 3) out.suggestions.resize(3);
+    placeDecision(out, typed, input, true);
     if (engine_->options_.profile) out.timings.generation = elapsed(started);
     return out;
 }

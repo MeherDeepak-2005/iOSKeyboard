@@ -32,7 +32,9 @@ extension KeyboardViewController {
 			// original typed word ("coeevitjkn") into the now-cleared field.
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 			let expected = c.corrected + c.trailing
-			guard !expected.isEmpty, ctx.hasSuffix(expected) else {
+			// Smart punctuation stores the correction's ' as ’: compare as the keyboard wrote it.
+			guard !expected.isEmpty,
+				HostDocumentSnapshot.folded(ctx).hasSuffix(HostDocumentSnapshot.folded(expected)) else {
 				if pendingGlideVerdict {
 					pendingGlideVerdict = false
 					engine.glideRejected()

@@ -25,22 +25,31 @@ nonisolated struct HostDocumentSnapshot: Equatable, Sendable {
             let observed = result.before, !observed.isEmpty else { return false }
         guard let previous = before ?? (isEmpty ? "" : nil),
             observed.count >= previous.count else { return false }
-        func canonical(_ value: String) -> String {
-            value.replacingOccurrences(of: "’", with: "'")
-                .replacingOccurrences(of: "ʼ", with: "'")
-        }
-        let expected = canonical(previous + text)
-        let actual = canonical(observed)
+        let expected = Self.folded(previous + text)
+        let actual = Self.folded(observed)
         return expected.hasSuffix(actual) || actual.hasSuffix(expected)
     }
 
     /// Same document and text. Hosts report an empty context as nil or "" from one read to the
-    /// next; treating those as different reset the strip mid-word and dropped pending corrections.
+    /// next, and smart punctuation rewrites the keyboard's ' as ’ after the edit; treating either
+    /// as a change reset the strip and forgot the correction a Backspace should undo.
     func matches(_ other: Self) -> Bool {
         guard documentID == other.documentID else { return false }
         if isEmpty && other.isEmpty { return true }
-        return hasText == other.hasText && (before ?? "") == (other.before ?? "")
-            && (after ?? "") == (other.after ?? "") && (selection ?? "") == (other.selection ?? "")
+        return hasText == other.hasText && Self.folded(before) == Self.folded(other.before)
+            && Self.folded(after) == Self.folded(other.after) && Self.folded(selection) == Self.folded(other.selection)
+    }
+
+    /// The text as the keyboard wrote it: smart punctuation's ’ ‘ ʼ and “ ” back to ' and ".
+    /// One character for one, so lengths and suffixes are unchanged.
+    static func folded(_ text: String?) -> String {
+        String((text ?? "").map { character -> Character in
+            switch character {
+            case "\u{2019}", "\u{2018}", "\u{02BC}": return "'"
+            case "\u{201C}", "\u{201D}": return "\""
+            default: return character
+            }
+        })
     }
 }
 

@@ -1,6 +1,22 @@
 import UIKit
 
 extension KeyboardViewController {
+    /// On-device personalization (learned words, touch profile): everything but secrets,
+    /// codes, account and contact fields. Wider than the recorder's allowlist below, which
+    /// guards text that can be exported. An undo is remembered wherever autocorrect ran.
+    var permitsLearning: Bool {
+        guard !isSecureField else { return false }
+        switch textDocumentProxy.textContentType {
+        case .password, .newPassword, .oneTimeCode, .username, .emailAddress,
+             .telephoneNumber, .creditCardNumber: return false
+        default: break
+        }
+        switch textDocumentProxy.keyboardType ?? .default {
+        case .default, .asciiCapable, .twitter: return true
+        default: return false
+        }
+    }
+
     /// Only general prose; do not collect credentials, codes, addresses or numeric fields.
     var permitsTypingData: Bool {
         guard !isSecureField else { return false }
