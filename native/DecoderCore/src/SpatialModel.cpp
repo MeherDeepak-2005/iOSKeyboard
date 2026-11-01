@@ -1,6 +1,7 @@
 #include "../include/SpatialModel.hpp"
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <string_view>
 namespace kb {
 // Key centres in key widths: rows offset 0, 0.5 and 1.5. Built once; looked up per trie node.
@@ -35,7 +36,17 @@ static double spellingSubstitution(std::uint8_t intended, std::uint8_t typed, do
     if (pair('c', 'k') || pair('c', 's') || pair('s', 'z')) return soundAlikeSubstitutionCost;
     return 3.0;
 }
+static double touch(std::uint8_t intended, std::uint8_t typed, TouchOffset tap, double sigma, double vowelCost) noexcept {
+    if (intended == typed) return 0;
+    auto a = grid(intended), t = grid(typed);
+    if (!a || !t) return 3.0;
+    const auto px = t->x + tap.dx, py = t->y + tap.dy;
+    const auto toIntended = (a->x - px) * (a->x - px) + (a->y - py) * (a->y - py), toTyped = tap.dx * tap.dx + tap.dy * tap.dy;
+    const auto spatial = std::max(0.0, toIntended - toTyped) / (2 * sigma * sigma) + substitutionBase;
+    return std::min({3.0, spatial, spellingSubstitution(intended, typed, vowelCost)});
+}
 static double substitution(std::uint8_t intended, std::uint8_t typed, std::optional<TouchOffset> tap, double vowelCost) noexcept {
+    if (tap && touchSigma > 0 && std::isfinite(tap->dx) && std::isfinite(tap->dy)) return touch(intended, typed, *tap, touchSigma, vowelCost);
     auto a = grid(intended), t = grid(typed);
     if (!tap || !a || !t) {
         if (intended == typed) return 0;
@@ -55,13 +66,7 @@ double substitutionCost(std::uint8_t intended, std::uint8_t typed, std::optional
     return substitution(intended, typed, tap, typedFirst ? firstVowelSubstitutionCost : vowelSubstitutionCost);
 }
 double touchSubstitutionCost(std::uint8_t intended, std::uint8_t typed, TouchOffset tap, double sigma, bool typedFirst) noexcept {
-    if (intended == typed) return 0;
-    auto a = grid(intended), t = grid(typed);
-    if (!a || !t) return 3.0;
-    const auto px = t->x + tap.dx, py = t->y + tap.dy;
-    const auto toIntended = (a->x - px) * (a->x - px) + (a->y - py) * (a->y - py), toTyped = tap.dx * tap.dx + tap.dy * tap.dy;
-    const auto spatial = std::max(0.0, toIntended - toTyped) / (2 * sigma * sigma) + substitutionBase;
-    return std::min({3.0, spatial, spellingSubstitution(intended, typed, typedFirst ? firstVowelSubstitutionCost : vowelSubstitutionCost)});
+    return touch(intended, typed, tap, sigma, typedFirst ? firstVowelSubstitutionCost : vowelSubstitutionCost);
 }
 double geometricSubstitutionCost(std::uint8_t intended, std::uint8_t typed, std::optional<TouchOffset> tap) noexcept {
     auto a = grid(intended), t = grid(typed);

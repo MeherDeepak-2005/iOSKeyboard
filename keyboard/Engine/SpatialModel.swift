@@ -98,6 +98,9 @@ nonisolated enum KB {
 	/// Floor for pressing a different key than the intended one; equals native
 	/// `substitutionBase` (fitted on tools/evaluation/autocorrect, 27 Oct 2026).
 	static let substitutionBase = 0.6
+	/// Touch spread in key widths for a tap measured against the key it landed on; equals native
+	/// `touchSigma` (0: the tap is measured from the intended key's centre).
+	static let touchSigma = 0.7
 	static let apostrophe = UInt8(ascii: "'")
 	/// Skipping an apostrophe the candidate has but the typed string omitted costs a
 	/// fraction of a real deletion: people drop apostrophes constantly (whats, dont,
@@ -155,10 +158,11 @@ nonisolated enum KB {
 		guard let a = letter.asciiValue else { return nil }
 		return pos[a]
 	}
-	/// Continuous variant: distance from the intended key's center to the actual
-	/// landing point. Parity with the discrete table when the tap is dead-center
-	/// (cost → 0 for the pressed key); the substitutionBase cross-key floor still separates
-	/// neighbors so a centered tap never reads as ambiguous.
+	/// Continuous variant; native `substitutionCost` with a tap. A finite tap is measured against
+	/// the key it landed on (native `touchSubstitutionCost` at `touchSigma`): the pressed key costs
+	/// 0 however far off-centre, another key (d(intended)² − d(pressed)²) / 2σ² plus the
+	/// substitutionBase floor, so a centered tap never reads as ambiguous. With `touchSigma` 0 or a
+	/// non-finite tap, the distance from the intended key's center to the landing point.
 	static func subCost(_ intended: UInt8, typed: UInt8, tap: KeyTap?, typedFirst: Bool = false) -> Double {
 		subCost(intended, typed: typed, tap: tap, vowelCost: typedFirst ? firstVowelSubstitutionCost : vowelSubstitutionCost)
 	}
@@ -166,6 +170,11 @@ nonisolated enum KB {
 		guard let tap, let a = pos[intended], let t = pos[typed] else { return subCost(intended, typed, vowelCost: vowelCost) }
 		let px = t.0 + tap.dx, py = t.1 + tap.dy
 		let d2 = (a.0 - px) * (a.0 - px) + (a.1 - py) * (a.1 - py)
+		if touchSigma > 0, tap.dx.isFinite, tap.dy.isFinite {
+			if intended == typed { return 0 }
+			let spatial = max(0, d2 - (tap.dx * tap.dx + tap.dy * tap.dy)) / (2 * touchSigma * touchSigma) + substitutionBase
+			return min(3.0, spatial, spellingSubstitution(intended, typed, vowelCost: vowelCost))
+		}
 		let base = d2 / (2 * sigma * sigma)
 		return intended == typed ? min(3.0, base)
 			: min(3.0, base + substitutionBase, spellingSubstitution(intended, typed, vowelCost: vowelCost))

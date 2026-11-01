@@ -56,6 +56,35 @@ extension KeyboardEngine {
 		}
 	}
 
+	static let spellingPatternMargin = 1.5   // native spellingPatternMargin
+	static let spellingPatternGap = 1.0      // native spellingPatternGap
+	/// Mirrors native `spellingSkeleton`: the consonant frame of an ASCII word, empty otherwise.
+	static func spellingSkeleton(_ word: String) -> String {
+		var letters: [UInt8] = []
+		for var c in word.utf8 {
+			if c >= 65 && c <= 90 { c += 32 }
+			guard c >= 97 && c <= 122 else { return "" }
+			letters.append(c)
+		}
+		func vowel(_ c: UInt8) -> Bool { "aeiouy".utf8.contains(c) }
+		let star = UInt8(ascii: "*")
+		var sounds: [UInt8] = []
+		var i = 0
+		while i < letters.count {
+			var c = letters[i]
+			let next: UInt8 = i + 1 < letters.count ? letters[i + 1] : 0
+			if c == UInt8(ascii: "p") && next == UInt8(ascii: "h") { c = UInt8(ascii: "f"); i += 1 }
+			else if c == UInt8(ascii: "c") && next == UInt8(ascii: "k") { c = UInt8(ascii: "k"); i += 1 }
+			else if c == UInt8(ascii: "c") { c = "eiy".utf8.contains(next) ? UInt8(ascii: "s") : UInt8(ascii: "k") }
+			else if c == UInt8(ascii: "z") { c = UInt8(ascii: "s") }
+			else if i > 0 && vowel(c) { c = star }
+			if sounds.last != c { sounds.append(c) }
+			i += 1
+		}
+		if letters.count > 2, letters.last == UInt8(ascii: "e"), sounds.count > 1, sounds.last == star,
+		   !vowel(letters[letters.count - 2]) { sounds.removeLast() }
+		return String(decoding: sounds, as: UTF8.self)
+	}
 	/// Mirrors native `osaDistance` (unit costs, adjacent transpositions) over UTF-8 bytes.
 	private static func osaDistance(_ a: String, _ b: String) -> Int {
 		let x = Array(a.utf8), y = Array(b.utf8)
@@ -263,7 +292,14 @@ extension KeyboardEngine {
                 && !bestWord.contains("'") && lw.count >= 4)
         correctionObserver?(gate)
         // A missing-space split keeps the earlier non-word margin (iamhere is not "ia here"); as native.
-        let fire = policy.accepts(gate) && !(bestWord.contains(" ") && margin <= splitCorrectionMargin)
+        var fire = policy.accepts(gate) && !(bestWord.contains(" ") && margin <= splitCorrectionMargin)
+        // Same sounds, different spelling (accomadated → accommodated); as native spellingPatternMargin.
+        if !fire, lw.count >= 4, !bestWord.contains(" "), !bestWord.contains("'"),
+           margin > policy.oovMargin - Self.spellingPatternMargin,
+           gate.candidateGap.map({ $0 >= Self.spellingPatternGap }) ?? true {
+            let skeleton = Self.spellingSkeleton(lw)
+            fire = !skeleton.isEmpty && skeleton == Self.spellingSkeleton(bestWord)
+        }
         let loggedThreshold = fire && gate.kind == .close && margin <= policy.oovMargin
             ? policy.closeRescueMargin : requiredMargin
 		KBDiagnostics.logDecision(typed: lw, best: bestWord, margin: margin,

@@ -31,6 +31,14 @@ KB_TUNABLE(adjacentFirstLetterPenalty, 1.0);
 KB_TUNABLE(otherFirstLetterPenalty, 2.0);
 // Substitution: squared key distance / 2 + substitutionBase for a different key.
 KB_TUNABLE(substitutionBase, 0.6);
+// Touch spread in key widths for a tap: substitutionCost scores a tap against the key it landed
+// on (touchSubstitutionCost at this spread), so an off-centre tap on the typed key costs nothing.
+// 0 measures the tap from the intended key's centre, as before 1 Nov 2026: every letter of a
+// candidate paid for an off-centre tap and the typed text did not, so typos were left alone.
+// 0.7 (1 Nov, tune half with make_taps.py's taps): ECPS fixed 88.1% -> 91.8%, the most real
+// misspellings of the spreads whose guardrails are no worse than without taps; 0.5 and 0.6 fixed
+// fewer real-word errors than without taps, 0.85 and 1.0 fewer ECPS and Birkbeck misspellings.
+KB_TUNABLE(touchSigma, 0.7);
 // Spelling confusions (vowel for vowel: speach -> speech; c/k, c/s, s/z), whatever the key distance.
 KB_TUNABLE(vowelSubstitutionCost, 1.5);
 // Vowel for vowel at the typed first letter (emminent -> imminent). The retained search does not
@@ -59,7 +67,8 @@ inline double insertionCostAt(std::uint8_t typedLetter, std::uint8_t previous, s
 }
 std::optional<GridPoint> grid(std::uint8_t letter) noexcept;
 // typedFirst: the typed letter is the word's first, where vowel for vowel costs
-// firstVowelSubstitutionCost instead.
+// firstVowelSubstitutionCost instead. A finite tap is scored as touchSubstitutionCost at
+// touchSigma; with touchSigma 0, or a non-finite tap, from the intended key's centre.
 double substitutionCost(std::uint8_t intended, std::uint8_t typed,
                         std::optional<TouchOffset> tap = {}, bool typedFirst = false) noexcept;
 // A tap scored against the key it landed on: (d(intended)^2 - d(typed)^2) / (2 sigma^2), plus

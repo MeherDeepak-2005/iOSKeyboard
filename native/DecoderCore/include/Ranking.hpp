@@ -28,6 +28,14 @@ inline constexpr double shortlistFrequencyWeight = 0.3;
 // Shortest typed non-word (in characters) the gate may replace: two-letter slips (ro -> to,
 // yu -> you) are common, and an undo teaches the word (Swift dontCorrect -> confirmSpelling).
 KB_TUNABLE(minimumCorrectionLength, 2);
+// A typed non-word whose winner spells the same sounds (spellingSkeleton: doubled letters,
+// vowel confusions, ph/f, ck/k, soft c/s) may fire this much below the non-word margin when it
+// leads the next candidate by spellingPatternGap (accomadated -> accommodated). 0 is off.
+// 1.5 (1 Nov 2026, taps, tune half): held ECPS fixed 89.94 -> 90.22%, Birkbeck 41.40 -> 42.63%,
+// Wikipedia 79.45 -> 80.64%, no case lost; guardrails unchanged (names 73.6 -> 74.3%, p 0.5;
+// rare words 39.0 -> 39.2%, p 0.25). 3 failed the rare-words guardrail on the tune half.
+KB_TUNABLE(spellingPatternMargin, 1.5);
+KB_TUNABLE(spellingPatternGap, 1.0);
 struct CorrectionPolicy {
     // oovMargin -0.5 (28 Oct), with the channel weighted 4: the most misspellings fixed while
     // changing no more of the unknown names a user meant (make_keep.py, tune half) than the
@@ -58,6 +66,10 @@ double frequencyTerm(double frequency, bool compressed);
 double rawScore(const RankedRow& row, double channel = channelWeight);
 bool accepts(const CorrectionPolicy& policy, const CorrectionGate& gate);
 bool nearForm(std::string_view a, std::string_view b);
+// Lowercase ASCII consonant frame: ph->f, ck->k, soft c->s, other c->k, z->s, doubled letters
+// collapsed, every vowel run after the first letter one '*', a final silent e dropped.
+// Empty for anything but letters.
+std::string spellingSkeleton(std::string_view word);
 CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const RankedRow> rows,
     const std::unordered_map<std::string, double>& costs, std::string_view typed, std::size_t characterCount,
     std::span<const std::uint8_t> letterFlags, std::span<const std::string> context, bool kept, const std::unordered_set<std::string>& loose,

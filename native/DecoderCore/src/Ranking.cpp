@@ -90,6 +90,27 @@ std::size_t osaDistance(std::string_view a, std::string_view b) {
     }
     return d[a.size()][b.size()];
 }
+std::string spellingSkeleton(std::string_view word) {
+    std::string letters;
+    for (auto c : word) {
+        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+        if (c < 'a' || c > 'z') return {};
+        letters += c;
+    }
+    auto vowel = [](char c) { return c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' || c == 'y'; };
+    std::string sounds;
+    for (std::size_t i = 0; i < letters.size(); ++i) {
+        char c = letters[i], next = i + 1 < letters.size() ? letters[i + 1] : 0;
+        if (c == 'p' && next == 'h') { c = 'f'; ++i; }
+        else if (c == 'c' && next == 'k') { c = 'k'; ++i; }
+        else if (c == 'c') c = next == 'e' || next == 'i' || next == 'y' ? 's' : 'k';
+        else if (c == 'z') c = 's';
+        else if (i > 0 && vowel(c)) c = '*';
+        if (sounds.empty() || sounds.back() != c) sounds += c;
+    }
+    if (letters.size() > 2 && letters.back() == 'e' && sounds.size() > 1 && sounds.back() == '*' && !vowel(letters[letters.size() - 2])) sounds.pop_back();
+    return sounds;
+}
 bool nearForm(std::string_view a, std::string_view b) {
     if ((a.size() > b.size() ? a.size() - b.size() : b.size() - a.size()) > 2) return false;
     std::vector<std::size_t> previous(b.size() + 1), current(b.size() + 1);
@@ -154,6 +175,12 @@ CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const Ra
     };
     auto finish = [&](CorrectionGate gate) {
         bool fire = accepts(policy, gate);
+        if (!fire && spellingPatternMargin > 0 && gate.kind != CorrectionKind::realWord && length >= 4 &&
+                gate.candidate.find_first_of(" '") == std::string::npos && gate.margin > policy.oovMargin - spellingPatternMargin &&
+                (!gate.gap || *gate.gap >= spellingPatternGap)) {
+            auto skeleton = spellingSkeleton(typed);
+            fire = !skeleton.empty() && skeleton == spellingSkeleton(gate.candidate);
+        }
         // A missing-space split keeps the earlier non-word margin (iamhere is not "ia here").
         if (fire && gate.candidate.find(' ') != std::string::npos && gate.margin <= splitCorrectionMargin) fire = false;
         double threshold = gate.kind == CorrectionKind::realWord ? policy.realWordMargin
