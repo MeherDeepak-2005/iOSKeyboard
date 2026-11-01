@@ -8,7 +8,7 @@ The new decoder implements the published dynamic NSS graph and joint search, but
 
 The implementation is closer to the paper, but quality is mixed and it fails an existing safety guardrail. Synthetic correction improves; real-misspelling correction and several external-set scores regress. Correct ECPS words are changed more often (0.378% → 0.704%, paired McNemar p = 7.84e-7). It should remain an internal experiment, not replace the default decoder. `INTERNAL_NSS_ENABLED` remains `NO`.
 
-**Update, 1 November 2026.** The sequential latency replay is now [below](#latency-and-memory): `d77aa92` takes 8.3 ms per typed word (4.9× the old decoder) and 50 ms per next-word prediction. Commit `428e985` cuts these to 7.0 ms and 1.5 ms. The chat-register retrain finished; it models dialogue far better but does not improve the typing benchmark. See [the follow-up](#follow-up-exact-scoring-and-retrained-models-1-november-2026).
+**Update, 1 November 2026.** The sequential latency replay is now [below](#latency-and-memory): `d77aa92` takes 8.3 ms per typed word (4.9× the old decoder) and 50 ms per next-word prediction. Commit `428e985` cuts these to 7.0 ms and 1.5 ms. The chat-register retrain finished; it models dialogue far better but does not improve the typing benchmark. See [the follow-up](#follow-up-exact-scoring-and-retrained-models-1-november-2026). With [product rules](#nss-tier-with-product-rules-1-november-2026) restored on top, the NSS tier fixes 1.8 pp more real misspellings and changes a seventh as many correct words as before, but still trails the n-gram tier on severe misspellings. With simulated taps and a touch model scored against the touched key, it beats the n-gram tier receiving the same taps everywhere except Birkbeck.
 
 ## Method
 
@@ -205,6 +205,76 @@ On MASC's 63,863 lexicon-word targets the production n-gram's perplexity is 750.
 - **Chat retrain:** a much better dialogue model (SODA perplexity 80 → 23) and a worse written-English one. On this benchmark it is no better than generic-final, ECPS's informal contexts included, though it is the fastest NSS model. A dialogue-register typing set would test it where it should help.
 - `INTERNAL_NSS_ENABLED` remains `NO`.
 
+## NSS tier with product rules (1 November 2026)
+
+The NSS production tier (`EngineSession::decodeNeural`) now applies product rules on top of the joint search (`c3fdf3d`); raw mode (`KB_RAW=1`) still measures the models without them. The rules and their defaults are tunables in `native/DecoderCore/include/Engine.hpp`:
+
+- The n-gram tier's recovered candidates (narrow first-letter passes, broad recovery, and context injection of the model's 24 likeliest next words) join the gate as close words, and a typo aimed at a blocked word is left alone (`nssRecovery` 1).
+- A leading apostrophe on text that is not itself a word opens a quote: the rest is decoded and the quote kept (`'accidentaly` → `'accidentally`; `'happy` stays).
+- A typed "id" is never shortened to "i" (I think id → I'd).
+- Typed text outside the lexicon scores P(`<unk>`) in context (`nssUnknownLiteral`), and a non-word typed capitalized after a sentence's first word needs 3 more margin (`nssCapitalMargin`), so names and new words are likelier to stand.
+- Candidates are rescored with a quarter of the production n-gram's score (`nssNgramWeight` 0.25) and 0.1 × the pack's log frequency (`nssFrequencyWeight`, typed text only). Both separate a common word from a rare one a cheaper edit away (`abot` → about, not abbot).
+- The non-word margin is 1.5 lower than the n-gram tier's (`nssOovMarginShift`).
+- A tap is scored against the key it landed on (`touchSubstitutionCost`, spread `nssTouchSigma` 0.7 key widths): the typed key costs nothing however far off-centre, and a tap on the border between two keys makes both nearly equal. The shared `substitutionCost`, which the n-gram tier keeps, charges an off-centre tap on the right key as if it were an error.
+
+Method: 49 configurations on the tune half (29,808 main and 1,821 name, slang and rare-word cases; the external lists, held-out only, untouched), each replayed in four shards. The chosen configuration was then replayed in full on the held split, the external lists and the next-word rows. [validation/rules-2026-11-01/tune-sweep.json](validation/rules-2026-11-01/tune-sweep.json) lists every configuration with its tune-half rates.
+
+Held split, percentages:
+
+| Metric | | Before rules | With rules | With rules, generic-final | n-gram production |
+| --- | :---: | ---: | ---: | ---: | ---: |
+| ECPS real misspellings fixed | ↑ | 86.89 | 88.70 | 88.48 | 89.33 |
+| ECPS target in top 3 | ↑ | 94.00 | 95.48 | 95.32 | 94.75 |
+| Synthetic typos fixed | ↑ | 91.76 | 91.96 | 92.10 | 88.67 |
+| ext_birkbeck fixed | ↑ | 29.78 | 31.47 | 31.06 | 40.20 |
+| ext_holbrook fixed | ↑ | 36.44 | 39.33 | 39.11 | 45.33 |
+| ext_aspell fixed | ↑ | 46.84 | 50.63 | 49.79 | 54.43 |
+| ext_wikipedia fixed | ↑ | 79.00 | 79.09 | 79.09 | 79.18 |
+| GUARD false corrections, ECPS correct | ↓ | 0.55 | 0.08 | 0.15 | 0.45 |
+| GUARD false corrections, MacKenzie clean | ↓ | 0.18 | 0.28 | 0.18 | 0.37 |
+| GUARD hard valid words changed | ↓ | 16.84 | 15.79 | 17.89 | 20.00 |
+| GUARD unknown names changed | ↓ | 59.25 | 52.05 | 50.34 | 75.00 |
+| GUARD rare dictionary words changed | ↓ | 14.48 | 14.62 | 14.34 | 39.12 |
+| GUARD real-word errors fixed | ↑ | 48.16 | 49.29 | 49.15 | 44.21 |
+| GUARD contractions restored | ↑ | 93.75 | 95.00 | 95.00 | 93.75 |
+| GUARD next word in top 3 | ↑ | 17.27 | 17.27 | 20.31 | 17.54 |
+| Keystroke savings | ↑ | 47.97 | 48.83 | 49.64 | 45.23 |
+
+"Before rules" is the installed model on `428e985`; "With rules" is `c3fdf3d` with the installed model. Next-word rows were rerun after the frequency prior was limited to typed text ([next-word.json](validation/rules-2026-11-01/next-word.json)); typed-word decisions are unchanged by that. Against the original NSS tier, the rules fix 1.81 pp more real misspellings (p = 3e-23), cut correct ECPS words changed from 0.55% to 0.08% and names changed from 59% to 52% (names typed in a sentence: 58% → 42%). Against the n-gram tier they trail only on real misspellings (−0.63 pp, p = 0.018) and on the external lists' severe misspellings (Birkbeck −8.7 pp, Holbrook −6.0 pp). They fix more synthetic typos and real-word errors, and change far fewer correct words, names and rare words (each p < 0.001). Paired tables: [score-held.json](validation/rules-2026-11-01/score-held.json).
+
+Rejected on the tune half: the n-gram tier's own recovery rule (recovered words judged as loose or severe), which changed 37% of the rare words the user meant instead of 13%; the unigram floor (more misspellings fixed, fewer real-word errors); n-gram weight 0.5 and frequency weight 0.2 (more names and rare words changed); and capital margin 5 (39 misspellings fewer fixed for 20 more names kept).
+
+With taps. Production sends a tap offset with every letter, and the tables above use none. The held split was replayed again with `make_taps.py`'s simulated taps (Gaussian, sigma 0.35 key widths, always nearest the typed key; the name, slang and rare-word rows got taps from the same simulator, seed 20261029). Percentages:
+
+| Metric | | n-gram production | NSS rules, shared tap cost | NSS rules, touch model |
+| --- | :---: | ---: | ---: | ---: |
+| ECPS real misspellings fixed | ↑ | 85.57 | 85.86 | 89.20 |
+| Synthetic typos fixed | ↑ | 84.11 | 90.99 | 92.69 |
+| ext_birkbeck fixed | ↑ | 36.19 | 23.84 | 32.33 |
+| ext_holbrook fixed | ↑ | 41.11 | 36.67 | 41.78 |
+| ext_aspell fixed | ↑ | 52.32 | 42.62 | 53.16 |
+| ext_wikipedia fixed | ↑ | 65.91 | 63.73 | 79.82 |
+| GUARD false corrections, ECPS correct | ↓ | 0.44 | 0.01 | 0.05 |
+| GUARD unknown names changed | ↓ | 69.18 | 43.49 | 51.03 |
+| GUARD rare dictionary words changed | ↓ | 38.16 | 9.81 | 13.45 |
+| GUARD real-word errors fixed | ↑ | 37.15 | 40.54 | 48.73 |
+| Keystroke savings | ↑ | 45.23 | 48.83 | 48.83 |
+
+The shared tap cost makes taps hurt: the n-gram tier fixes 89.33% of real misspellings without them and 85.57% with them, and NSS with the shared cost mostly leaves typos alone. With the touch model, NSS fixes 3.6 points more real misspellings than the n-gram tier receiving the same taps, 8.6 more synthetic typos and 11.6 more real-word errors, and trails it only on Birkbeck (−3.9 points). On the tune half's taps, a spread of 0.7 beat 1.0 (fewer rare words and names changed, more misspellings fixed) and 0.5 or 0.35 (fewer real-word and synthetic fixes: a tight spread refuses spelling mistakes typed squarely on the wrong key). The simulator's spread is 0.35, so 0.7 is fitted to it, not to measured fingers. Paired tables: [score-taps-held.json](validation/rules-2026-11-01/score-taps-held.json).
+
+Also rejected on the held split: a real-word margin of 4 with channel weight 4.5 (round 2). On the tune half it traded a few synthetic fixes for 56 more real-word fixes and fewer names and rare words changed; held, it fixed 4.5 points more real-word errors but changed four times as many correct words (0.08% → 0.34%), fixed 0.4 points fewer real misspellings and 2.5 points fewer Birkbeck misspellings ([score-round2-held.json](validation/rules-2026-11-01/score-round2-held.json)). Both stay tunables (`nssRealWordMarginShift`, `nssChannelWeight`) at their round-1 values. A wider joint search (beam 24, width 1,024) changed nothing.
+
+Latency on the sequential replay's sample (no taps), two mirrored runs per arm (`validation/rules-2026-11-01/latency.json`):
+
+| Decoder | Typed word p50 / p95 | Keystroke p50 / p95 | Next word p50 | Peak RSS (MiB) |
+| --- | ---: | ---: | ---: | ---: |
+| NSS without the rules (`428e985`) | 6.89 / 9.40 | 1.21 / 2.06 | 1.48 | 56.3 |
+| NSS with the rules (`c3fdf3d`) | 7.46 / 10.45 | 1.47 / 2.33 | 1.48 | 71.8 |
+| NSS with the rules, chat-final | 6.95 / 9.95 | 1.38 / 2.26 | 1.24 | 70.8 |
+| n-gram production | 0.48 / 6.72 | 0.12 / 0.96 | 0.02 | 49.3 |
+
+The rules add 0.26 ms per keystroke. Peak RSS rises 16 MiB because the n-gram rescoring reads the mapped n-gram tables. Those are clean file pages: the footprint (dirty memory, which iOS limits) rises 1.4 MiB, and the live heap not at all.
+
 ## Validation
 
 - Native Release: **10/10 passed**, including original n-gram goldens, graph semantics, threshold/fallback behavior, dynamic expansion and trained-model reference checks.
@@ -213,6 +283,7 @@ On MASC's 63,863 lexicon-word targets the production n-gram's perplexity is 750.
 - Swift/iOS integration: **1 actual Swift Testing test passed**, `KeyboardTests/wordNeuralSearchSpaceTierDecodesInTheSharedEngine()`. It checks the native bridge using a tiny model fixture, not trained-model accuracy. Earlier filters selected zero tests; those runs are not counted.
 - No physical-device performance, complete application workflow, Android delivery, or Gboard quality parity claim.
 - `428e985` (measured as the working tree), 1 November 2026: `native/tests/run.sh` (AddressSanitizer + UndefinedBehaviorSanitizer) **passed**, including `RawDecoderTests` (the n-gram graph matches `LanguageModel` on 786,177 scores; exact NSS scores, lookahead bounds and `best()` match the model). Log: [validation/followup-2026-11-01/native-sanitizers.log](validation/followup-2026-11-01/native-sanitizers.log).
+- NSS tier with product rules, 1 November 2026: `native/tests/run.sh` (AddressSanitizer + UndefinedBehaviorSanitizer) **passed**; the n-gram tier's 132 decode and 60 Glide goldens are unchanged, and `NeuralFstTests` checks the touch, quote, id, name-margin and blocked-typo rules. Log: [validation/rules-2026-11-01/native-sanitizers.log](validation/rules-2026-11-01/native-sanitizers.log).
 - `chat-final.nsslm`: `NeuralLanguageModelTests` matches its 220 reference scores. `NeuralFstTests` passes its per-word edge and lookahead checks, then stops at its assumption that "you" keeps an arc after "can you": the chat model gives it e^-15.02, just below the threshold. The test needs another word before the chat model could replace `keyboard/nss-english.nsslm`.
 
 ## Reproduce and inspect
@@ -242,6 +313,15 @@ python3 score_runs.py cur-ngram cur-nss-english cur-nss-generic cur-nss-chat
 python3 score_runs.py cur-raw-ngram cur-raw-generic cur-raw-chat
 cd ../../nss
 python compare_models.py /tmp/models.json generic=runs/cifg-lstm-96x670/best.pt chat=runs/cifg-lstm-96x670-chat/best.pt
+```
+
+The NSS tier's product rules: the default build applies them, and `--tuning` reads `KB_<tunable>` overrides (for example `KB_nssNgramWeight=0.5`):
+
+```sh
+python3 evaluate.py build --bin nss-final
+KB_NSS=$PWD/../../../keyboard/nss-english.nsslm python3 evaluate.py run rules-nss-english --bin nss-final
+python3 score_runs.py cur-nss-english rules-nss-english cur-ngram
+python3 evaluate.py build --bin nss-dev --tuning
 ```
 
 `score_runs.py` applies `evaluate.py`'s metrics, held split and McNemar test side by side (`evaluate.py score` also prints CoreV4's stored results, which this machine lacks). `compare_models.py` needs the `ml` environment and both `data/` and `data-v2/`.

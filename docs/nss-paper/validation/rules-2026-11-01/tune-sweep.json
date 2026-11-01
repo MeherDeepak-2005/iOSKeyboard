@@ -1,0 +1,792 @@
+{
+ "split": "tune (hard and apos in full)",
+ "model": "keyboard/nss-english.nsslm unless the configuration says otherwise",
+ "rates": "percent fixed for typo sets, percent changed for the others",
+ "runs": {
+  "dev-base": {
+   "configuration": "NSS production before the rules (428e985 defaults)",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.25,
+    "ecps fixed": 90.48,
+    "ecps_ok changed": 0.48,
+    "hard changed": 16.84,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 65.15,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 12.83,
+    "realword fixed": 47.87,
+    "syn fixed": 92.42
+   }
+  },
+  "dev-r1": {
+   "configuration": "recovery 2: the n-gram rule, recovered words loose/severe",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.25,
+    "ecps fixed": 90.51,
+    "ecps_ok changed": 0.48,
+    "hard changed": 22.11,
+    "keep_name changed": 79.55,
+    "keep_name_ctx changed": 75.0,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 37.27,
+    "realword fixed": 47.87,
+    "syn fixed": 92.33
+   }
+  },
+  "dev-r2": {
+   "configuration": "recovery 1: recovered candidates judged as close, blocked-typo rule",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.25,
+    "ecps fixed": 90.49,
+    "ecps_ok changed": 0.48,
+    "hard changed": 16.84,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 65.15,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 12.83,
+    "realword fixed": 47.87,
+    "syn fixed": 92.4
+   }
+  },
+  "dev-r3": {
+   "configuration": "recovery 3: context injections loose",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.25,
+    "ecps fixed": 90.49,
+    "ecps_ok changed": 0.48,
+    "hard changed": 16.84,
+    "keep_name changed": 68.94,
+    "keep_name_ctx changed": 66.67,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 12.9,
+    "realword fixed": 47.87,
+    "syn fixed": 92.4
+   }
+  },
+  "dev-f1": {
+   "configuration": "recovery 0, frequency prior 0.1",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.14,
+    "ecps_ok changed": 0.49,
+    "hard changed": 20.0,
+    "keep_name changed": 69.7,
+    "keep_name_ctx changed": 68.94,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 14.32,
+    "realword fixed": 48.8,
+    "syn fixed": 92.7
+   }
+  },
+  "dev-f1m0": {
+   "configuration": "recovery 1, frequency 0.1, oovMargin 0",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 90.82,
+    "ecps_ok changed": 0.49,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 65.91,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.35,
+    "realword fixed": 48.8,
+    "syn fixed": 92.47
+   }
+  },
+  "dev-f1m5": {
+   "configuration": "recovery 1, frequency 0.1, oovMargin 0.5",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 90.32,
+    "ecps_ok changed": 0.49,
+    "hard changed": 16.84,
+    "keep_name changed": 64.39,
+    "keep_name_ctx changed": 63.64,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 11.86,
+    "realword fixed": 48.8,
+    "syn fixed": 92.19
+   }
+  },
+  "dev-t1": {
+   "configuration": "recovery 1, unknown text scored by P(<unk>|context)",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.25,
+    "ecps fixed": 89.46,
+    "ecps_ok changed": 0.44,
+    "hard changed": 14.74,
+    "keep_name changed": 41.67,
+    "keep_name_ctx changed": 37.12,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 7.0,
+    "realword fixed": 47.87,
+    "syn fixed": 91.4
+   }
+  },
+  "dev-c3": {
+   "configuration": "recovery 1, capital margin 3",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.25,
+    "ecps fixed": 90.06,
+    "ecps_ok changed": 0.48,
+    "hard changed": 16.84,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 33.33,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 12.83,
+    "realword fixed": 47.87,
+    "syn fixed": 92.4
+   }
+  },
+  "dev-tf15": {
+   "configuration": "unknown-in-context, frequency 0.1, oovMargin -1.5",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.0,
+    "ecps_ok changed": 0.48,
+    "hard changed": 15.79,
+    "keep_name changed": 59.85,
+    "keep_name_ctx changed": 58.33,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 11.21,
+    "realword fixed": 48.8,
+    "syn fixed": 92.47
+   }
+  },
+  "dev-tf25": {
+   "configuration": "unknown-in-context, frequency 0.1, oovMargin -2.5",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.53,
+    "ecps_ok changed": 0.5,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 65.91,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.61,
+    "realword fixed": 48.8,
+    "syn fixed": 92.78
+   }
+  },
+  "dev-tf35": {
+   "configuration": "unknown-in-context, frequency 0.1, oovMargin -3.5",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.84,
+    "ecps_ok changed": 0.5,
+    "hard changed": 21.05,
+    "keep_name changed": 73.48,
+    "keep_name_ctx changed": 71.97,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 16.33,
+    "realword fixed": 48.8,
+    "syn fixed": 93.08
+   }
+  },
+  "dev-tf45": {
+   "configuration": "unknown-in-context, frequency 0.1, oovMargin -4.5",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.96,
+    "ecps_ok changed": 0.5,
+    "hard changed": 24.21,
+    "keep_name changed": 78.03,
+    "keep_name_ctx changed": 76.52,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 20.09,
+    "realword fixed": 48.8,
+    "syn fixed": 93.33
+   }
+  },
+  "dev-q25": {
+   "configuration": "tf25 + leading-quote rule",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.73,
+    "ecps_ok changed": 0.27,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 65.91,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.61,
+    "realword fixed": 48.8,
+    "syn fixed": 92.78
+   }
+  },
+  "dev-q25c15": {
+   "configuration": "q25 + capital margin 1.5",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.64,
+    "ecps_ok changed": 0.27,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 50.0,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.61,
+    "realword fixed": 48.8,
+    "syn fixed": 92.78
+   }
+  },
+  "dev-q25c3": {
+   "configuration": "q25 + capital margin 3",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.5,
+    "ecps_ok changed": 0.27,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 37.12,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.61,
+    "realword fixed": 48.8,
+    "syn fixed": 92.78
+   }
+  },
+  "dev-q20": {
+   "configuration": "q25 with oovMargin -2.0",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.45,
+    "ecps_ok changed": 0.27,
+    "hard changed": 16.84,
+    "keep_name changed": 64.39,
+    "keep_name_ctx changed": 62.12,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 12.12,
+    "realword fixed": 48.8,
+    "syn fixed": 92.63
+   }
+  },
+  "dev-q25f05": {
+   "configuration": "q25 with frequency 0.05",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.45,
+    "ecps_ok changed": 0.28,
+    "hard changed": 16.84,
+    "keep_name changed": 66.67,
+    "keep_name_ctx changed": 63.64,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 12.57,
+    "realword fixed": 48.07,
+    "syn fixed": 92.73
+   }
+  },
+  "dev-q25f2": {
+   "configuration": "q25 with frequency 0.2",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.85,
+    "ecps_ok changed": 0.29,
+    "hard changed": 22.11,
+    "keep_name changed": 71.97,
+    "keep_name_ctx changed": 70.45,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 15.49,
+    "realword fixed": 50.05,
+    "syn fixed": 93.01
+   }
+  },
+  "dev-q25fl": {
+   "configuration": "q25 + unigram floor (KB_NSS_FLOOR)",
+   "rates": {
+    "apos fixed": 92.5,
+    "clean changed": 0.31,
+    "ecps fixed": 91.97,
+    "ecps_ok changed": 0.24,
+    "hard changed": 15.79,
+    "keep_name changed": 68.94,
+    "keep_name_ctx changed": 68.94,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.87,
+    "realword fixed": 47.14,
+    "syn fixed": 92.77
+   }
+  },
+  "dev-q25r2": {
+   "configuration": "q25 + recovery 2",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.31,
+    "ecps fixed": 91.74,
+    "ecps_ok changed": 0.27,
+    "hard changed": 24.21,
+    "keep_name changed": 79.55,
+    "keep_name_ctx changed": 75.0,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 33.44,
+    "realword fixed": 48.8,
+    "syn fixed": 92.6
+   }
+  },
+  "dev-k1": {
+   "configuration": "q25c3 + id rule restricted to i'd/is",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.31,
+    "ecps fixed": 91.5,
+    "ecps_ok changed": 0.27,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 37.12,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.61,
+    "realword fixed": 48.7,
+    "syn fixed": 92.78
+   }
+  },
+  "dev-k1c5": {
+   "configuration": "k1 with capital margin 5",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.31,
+    "ecps fixed": 91.11,
+    "ecps_ok changed": 0.27,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 21.97,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.61,
+    "realword fixed": 48.7,
+    "syn fixed": 92.78
+   }
+  },
+  "dev-k1gen": {
+   "configuration": "k1 with generic-final.nsslm",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.37,
+    "ecps fixed": 91.29,
+    "ecps_ok changed": 0.36,
+    "hard changed": 18.95,
+    "keep_name changed": 67.42,
+    "keep_name_ctx changed": 31.82,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.42,
+    "realword fixed": 50.05,
+    "syn fixed": 93.1
+   }
+  },
+  "dev-k1chat": {
+   "configuration": "k1 with chat-final.nsslm",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.43,
+    "ecps fixed": 90.3,
+    "ecps_ok changed": 0.37,
+    "hard changed": 22.11,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 46.21,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 14.91,
+    "realword fixed": 50.88,
+    "syn fixed": 92.1
+   }
+  },
+  "dev-k2": {
+   "configuration": "q25c3 + id rule excluding only \"i\"",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.31,
+    "ecps fixed": 91.5,
+    "ecps_ok changed": 0.27,
+    "hard changed": 18.95,
+    "keep_name changed": 68.18,
+    "keep_name_ctx changed": 37.12,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.61,
+    "realword fixed": 48.8,
+    "syn fixed": 92.78
+   }
+  },
+  "dev-n25": {
+   "configuration": "k2 + n-gram weight 0.25 (capital margin before the blend)",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 92.14,
+    "ecps_ok changed": 0.22,
+    "hard changed": 17.89,
+    "keep_name changed": 67.42,
+    "keep_name_ctx changed": 48.48,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 14.13,
+    "realword fixed": 48.39,
+    "syn fixed": 93.31
+   }
+  },
+  "dev-n50": {
+   "configuration": "k2 + n-gram weight 0.5",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.12,
+    "ecps fixed": 92.08,
+    "ecps_ok changed": 0.19,
+    "hard changed": 16.84,
+    "keep_name changed": 68.94,
+    "keep_name_ctx changed": 59.09,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 15.62,
+    "realword fixed": 47.76,
+    "syn fixed": 93.19
+   }
+  },
+  "dev-n50f0": {
+   "configuration": "k2 + n-gram weight 0.5, frequency 0",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.12,
+    "ecps fixed": 92.1,
+    "ecps_ok changed": 0.17,
+    "hard changed": 16.84,
+    "keep_name changed": 68.94,
+    "keep_name_ctx changed": 57.58,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 14.45,
+    "realword fixed": 46.72,
+    "syn fixed": 93.2
+   }
+  },
+  "dev-m15": {
+   "configuration": "k2 + n-gram weight 0.15, capital margin after the blend",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 91.86,
+    "ecps_ok changed": 0.23,
+    "hard changed": 18.95,
+    "keep_name changed": 67.42,
+    "keep_name_ctx changed": 39.39,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.93,
+    "realword fixed": 48.7,
+    "syn fixed": 93.2
+   }
+  },
+  "dev-m25": {
+   "configuration": "k2 + n-gram weight 0.25, capital margin after the blend",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 92.04,
+    "ecps_ok changed": 0.22,
+    "hard changed": 17.89,
+    "keep_name changed": 67.42,
+    "keep_name_ctx changed": 40.91,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 14.13,
+    "realword fixed": 48.39,
+    "syn fixed": 93.31
+   }
+  },
+  "dev-m25s": {
+   "configuration": "m25 with oovMargin -2.0: the chosen configuration",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 91.84,
+    "ecps_ok changed": 0.22,
+    "hard changed": 15.79,
+    "keep_name changed": 65.91,
+    "keep_name_ctx changed": 37.88,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.09,
+    "realword fixed": 48.39,
+    "syn fixed": 93.16
+   }
+  },
+  "dev-m35": {
+   "configuration": "k2 + n-gram weight 0.35",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.12,
+    "ecps fixed": 92.0,
+    "ecps_ok changed": 0.22,
+    "hard changed": 16.84,
+    "keep_name changed": 68.94,
+    "keep_name_ctx changed": 46.21,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 14.84,
+    "realword fixed": 48.07,
+    "syn fixed": 93.34
+   }
+  },
+  "dev-final": {
+   "configuration": "release defaults (identical to m25s)",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 91.84,
+    "ecps_ok changed": 0.22,
+    "hard changed": 15.79,
+    "keep_name changed": 65.91,
+    "keep_name_ctx changed": 37.88,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.09,
+    "realword fixed": 48.39,
+    "syn fixed": 93.16
+   }
+  },
+  "cur-ngram": {
+   "configuration": "n-gram production tier",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.37,
+    "ecps fixed": 91.64,
+    "ecps_ok changed": 0.38,
+    "hard changed": 20.0,
+    "keep_name changed": 68.94,
+    "keep_name_ctx changed": 68.94,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 36.94,
+    "realword fixed": 41.1,
+    "syn fixed": 90.66
+   }
+  },
+  "dev-rw4": {
+   "configuration": "final with realWordMargin 4 (shift -1)",
+   "rates": {
+    "apos fixed": 96.25,
+    "clean changed": 0.25,
+    "ecps fixed": 91.94,
+    "ecps_ok changed": 0.34,
+    "hard changed": 20.0,
+    "keep_name changed": 65.91,
+    "keep_name_ctx changed": 37.88,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.09,
+    "realword fixed": 54.21,
+    "syn fixed": 93.16
+   }
+  },
+  "dev-rw3": {
+   "configuration": "final with realWordMargin 3",
+   "rates": {
+    "apos fixed": 96.25,
+    "clean changed": 0.55,
+    "ecps fixed": 91.98,
+    "ecps_ok changed": 0.6,
+    "hard changed": 22.11,
+    "keep_name changed": 65.91,
+    "keep_name_ctx changed": 37.88,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.09,
+    "realword fixed": 58.58,
+    "syn fixed": 93.16
+   }
+  },
+  "dev-cw35": {
+   "configuration": "final with channel weight 3.5",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 91.54,
+    "ecps_ok changed": 0.22,
+    "hard changed": 20.0,
+    "keep_name changed": 73.48,
+    "keep_name_ctx changed": 49.24,
+    "keep_slang changed": 92.86,
+    "keep_word changed": 16.92,
+    "realword fixed": 48.39,
+    "syn fixed": 93.09
+   }
+  },
+  "dev-cw45": {
+   "configuration": "final with channel weight 4.5",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 91.81,
+    "ecps_ok changed": 0.22,
+    "hard changed": 14.74,
+    "keep_name changed": 57.58,
+    "keep_name_ctx changed": 31.82,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 10.69,
+    "realword fixed": 48.39,
+    "syn fixed": 92.74
+   }
+  },
+  "dev-bw24": {
+   "configuration": "final with beam 24, width 1024 (identical to final)",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 91.84,
+    "ecps_ok changed": 0.22,
+    "hard changed": 15.79,
+    "keep_name changed": 65.91,
+    "keep_name_ctx changed": 37.88,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.16,
+    "realword fixed": 48.39,
+    "syn fixed": 93.16
+   }
+  },
+  "dev-rw4cw45": {
+   "configuration": "realWordMargin 4 + channel weight 4.5 (round 2; rejected on the held split)",
+   "rates": {
+    "apos fixed": 96.25,
+    "clean changed": 0.25,
+    "ecps fixed": 91.91,
+    "ecps_ok changed": 0.34,
+    "hard changed": 18.95,
+    "keep_name changed": 57.58,
+    "keep_name_ctx changed": 31.82,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 10.69,
+    "realword fixed": 54.21,
+    "syn fixed": 92.74
+   }
+  },
+  "dev-tfinal": {
+   "configuration": "TAPS: final, taps scored by the shared substitutionCost (sigma 1 from the key centre)",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.12,
+    "ecps fixed": 88.6,
+    "ecps_ok changed": 0.09,
+    "hard changed": 9.47,
+    "keep_name changed": 56.82,
+    "keep_name_ctx changed": 30.3,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 8.43,
+    "realword fixed": 39.85,
+    "syn fixed": 92.1
+   }
+  },
+  "dev-tngram": {
+   "configuration": "TAPS: n-gram production tier",
+   "rates": {
+    "apos fixed": 93.75,
+    "clean changed": 0.37,
+    "ecps fixed": 88.12,
+    "ecps_ok changed": 0.31,
+    "hard changed": 10.53,
+    "keep_name changed": 55.3,
+    "keep_name_ctx changed": 60.61,
+    "keep_slang changed": 71.43,
+    "keep_word changed": 35.58,
+    "realword fixed": 34.44,
+    "syn fixed": 82.88
+   }
+  },
+  "dev-ts100": {
+   "configuration": "TAPS: final, relative touch model, sigma 1.0",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.18,
+    "ecps fixed": 91.63,
+    "ecps_ok changed": 0.2,
+    "hard changed": 15.79,
+    "keep_name changed": 66.67,
+    "keep_name_ctx changed": 37.12,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 13.93,
+    "realword fixed": 49.01,
+    "syn fixed": 94.1
+   }
+  },
+  "dev-ts70": {
+   "configuration": "TAPS: final, relative touch model, sigma 0.7 (chosen)",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.12,
+    "ecps fixed": 92.27,
+    "ecps_ok changed": 0.19,
+    "hard changed": 14.74,
+    "keep_name changed": 65.15,
+    "keep_name_ctx changed": 34.85,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 11.99,
+    "realword fixed": 47.35,
+    "syn fixed": 94.1
+   }
+  },
+  "dev-ts50": {
+   "configuration": "TAPS: final, relative touch model, sigma 0.5",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.12,
+    "ecps fixed": 92.46,
+    "ecps_ok changed": 0.18,
+    "hard changed": 14.74,
+    "keep_name changed": 65.15,
+    "keep_name_ctx changed": 33.33,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 11.67,
+    "realword fixed": 43.81,
+    "syn fixed": 93.33
+   }
+  },
+  "dev-ts35": {
+   "configuration": "TAPS: final, relative touch model, sigma 0.35",
+   "rates": {
+    "apos fixed": 95.0,
+    "clean changed": 0.12,
+    "ecps fixed": 92.51,
+    "ecps_ok changed": 0.18,
+    "hard changed": 14.74,
+    "keep_name changed": 64.39,
+    "keep_name_ctx changed": 33.33,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 11.6,
+    "realword fixed": 40.27,
+    "syn fixed": 91.87
+   }
+  },
+  "dev-c2t": {
+   "configuration": "TAPS: round 2 + relative touch sigma 0.7",
+   "rates": {
+    "apos fixed": 96.25,
+    "clean changed": 0.25,
+    "ecps fixed": 92.07,
+    "ecps_ok changed": 0.3,
+    "hard changed": 16.84,
+    "keep_name changed": 57.58,
+    "keep_name_ctx changed": 30.3,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 9.53,
+    "realword fixed": 53.38,
+    "syn fixed": 93.73
+   }
+  },
+  "dev-c2t100": {
+   "configuration": "TAPS: round 2 + relative touch sigma 1.0",
+   "rates": {
+    "apos fixed": 96.25,
+    "clean changed": 0.25,
+    "ecps fixed": 91.53,
+    "ecps_ok changed": 0.35,
+    "hard changed": 16.84,
+    "keep_name changed": 58.33,
+    "keep_name_ctx changed": 31.82,
+    "keep_slang changed": 85.71,
+    "keep_word changed": 11.08,
+    "realword fixed": 54.73,
+    "syn fixed": 93.87
+   }
+  }
+ },
+ "taps": "TAPS runs replay corpus/cases.taps.tsv (make_taps.py, sigma 0.35) and simulated taps for the keep rows (seed 20261028)"
+}

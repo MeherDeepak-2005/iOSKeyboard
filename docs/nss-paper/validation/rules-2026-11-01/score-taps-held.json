@@ -1,0 +1,858 @@
+{
+ "ref": "taps-ngram",
+ "runs": [
+  "taps-oldtouch-nss-english",
+  "taps-final-nss-english"
+ ],
+ "split": "held",
+ "metrics": {
+  "ECPS real misspellings fixed": {
+   "n": 9622,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 85.57472458948244,
+    "taps-oldtouch-nss-english": 85.85533153190605,
+    "taps-final-nss-english": 89.20182914155062
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 441,
+     "lost": 414,
+     "p": 0.373915509293521,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 671,
+     "lost": 322,
+     "p": 6.339587622682322e-29,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS target in top 3": {
+   "n": 9622,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 93.58761172313449,
+    "taps-oldtouch-nss-english": 94.87632508833923,
+    "taps-final-nss-english": 95.78050301392642
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 311,
+     "lost": 187,
+     "p": 3.033795315786619e-08,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 348,
+     "lost": 137,
+     "p": 3.1986553828504057e-22,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS left uncorrected": {
+   "n": 9622,
+   "higher_is_better": false,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 7.4308875493660365,
+    "taps-oldtouch-nss-english": 6.838495115360632,
+    "taps-final-nss-english": 3.3464976096445644
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 288,
+     "lost": 345,
+     "p": 0.025949831889885894,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 162,
+     "lost": 555,
+     "p": 3.5176133424853806e-51,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS missing first letter fixed": {
+   "n": 30,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 33.333333333333336,
+    "taps-oldtouch-nss-english": 73.33333333333333,
+    "taps-final-nss-english": 76.66666666666667
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 13,
+     "lost": 1,
+     "p": 0.0018310546875,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 14,
+     "lost": 1,
+     "p": 0.0009765625,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS other first letter fixed": {
+   "n": 29,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 55.172413793103445,
+    "taps-oldtouch-nss-english": 44.827586206896555,
+    "taps-final-nss-english": 37.93103448275862
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 1,
+     "lost": 4,
+     "p": 0.375,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 1,
+     "lost": 6,
+     "p": 0.125,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS first two swapped fixed": {
+   "n": 33,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 100.0,
+    "taps-oldtouch-nss-english": 100.0,
+    "taps-final-nss-english": 100.0
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic typos fixed": {
+   "n": 5606,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 84.10631466286122,
+    "taps-oldtouch-nss-english": 90.99179450588655,
+    "taps-final-nss-english": 92.68640742062077
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 533,
+     "lost": 147,
+     "p": 2.9827575264828916e-52,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 576,
+     "lost": 95,
+     "p": 7.522342128129292e-85,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic target in top 3": {
+   "n": 5606,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 89.29718159115234,
+    "taps-oldtouch-nss-english": 96.59293613985017,
+    "taps-final-nss-english": 96.89618266143418
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 472,
+     "lost": 63,
+     "p": 1.7780110792201281e-78,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 474,
+     "lost": 48,
+     "p": 3.939824829779808e-89,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic left uncorrected": {
+   "n": 5606,
+   "higher_is_better": false,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 4.923296468069925,
+    "taps-oldtouch-nss-english": 2.0692115590438815,
+    "taps-final-nss-english": 0.856225472707813
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 57,
+     "lost": 217,
+     "p": 3.708904632061672e-23,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 22,
+     "lost": 250,
+     "p": 3.9022177864527475e-50,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic first letter wrong fixed": {
+   "n": 977,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 67.24667349027635,
+    "taps-oldtouch-nss-english": 87.92221084953941,
+    "taps-final-nss-english": 88.94575230296827
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 230,
+     "lost": 28,
+     "p": 1.18061022833643e-40,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 232,
+     "lost": 20,
+     "p": 6.107961513630517e-47,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn omission fixed": {
+   "n": 827,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 71.46311970979444,
+    "taps-oldtouch-nss-english": 79.92744860943168,
+    "taps-final-nss-english": 83.91777509068923
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 127,
+     "lost": 57,
+     "p": 2.6441208582084736e-07,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 140,
+     "lost": 37,
+     "p": 2.6649702898754885e-15,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn insertion fixed": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 75.43859649122807,
+    "taps-oldtouch-nss-english": 92.98245614035088,
+    "taps-final-nss-english": 96.02954755309327
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 208,
+     "lost": 18,
+     "p": 3.739692525237436e-42,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 232,
+     "lost": 9,
+     "p": 3.824452520895529e-57,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn sub_adjacent fixed": {
+   "n": 1078,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 90.25974025974025,
+    "taps-oldtouch-nss-english": 93.97031539888683,
+    "taps-final-nss-english": 93.22820037105751
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 60,
+     "lost": 20,
+     "p": 8.580559867049611e-06,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 49,
+     "lost": 17,
+     "p": 0.0001014771231679886,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn double fixed": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 96.95290858725762,
+    "taps-oldtouch-nss-english": 97.69159741458911,
+    "taps-final-nss-english": 98.15327793167128
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 13,
+     "lost": 5,
+     "p": 0.09625244140625,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 14,
+     "lost": 1,
+     "p": 0.0009765625,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn transposition fixed": {
+   "n": 1021,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 97.0617042115573,
+    "taps-oldtouch-nss-english": 97.64936336924583,
+    "taps-final-nss-english": 98.13907933398629
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 18,
+     "lost": 12,
+     "p": 0.361594608053565,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 20,
+     "lost": 9,
+     "p": 0.06142834573984146,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn two_errors fixed": {
+   "n": 514,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 57.00389105058366,
+    "taps-oldtouch-nss-english": 71.01167315175097,
+    "taps-final-nss-english": 76.26459143968872
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 107,
+     "lost": 35,
+     "p": 1.1195953306256023e-09,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 121,
+     "lost": 22,
+     "p": 9.24750845661319e-18,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn omission in top 3": {
+   "n": 827,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 79.80652962515114,
+    "taps-oldtouch-nss-english": 91.53567110036276,
+    "taps-final-nss-english": 93.34945586457074
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 118,
+     "lost": 21,
+     "p": 1.3966293565787202e-17,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 123,
+     "lost": 11,
+     "p": 4.138601434145467e-25,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_aspell fixed": {
+   "n": 237,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 52.32067510548523,
+    "taps-oldtouch-nss-english": 42.61603375527426,
+    "taps-final-nss-english": 53.164556962025316
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 6,
+     "lost": 29,
+     "p": 0.0001168418675661087,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 20,
+     "lost": 18,
+     "p": 0.8714146793645341,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_aspell in top 3": {
+   "n": 237,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 75.9493670886076,
+    "taps-oldtouch-nss-english": 67.9324894514768,
+    "taps-final-nss-english": 74.26160337552743
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 9,
+     "lost": 28,
+     "p": 0.0025632079923525453,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 11,
+     "lost": 15,
+     "p": 0.557197093963623,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_birkbeck fixed": {
+   "n": 15136,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 36.18525369978858,
+    "taps-oldtouch-nss-english": 23.843816067653275,
+    "taps-final-nss-english": 32.33350951374207
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 214,
+     "lost": 2082,
+     "p": 0.0,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 927,
+     "lost": 1510,
+     "p": 4.421819777793539e-32,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_birkbeck in top 3": {
+   "n": 15136,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 58.654862579281186,
+    "taps-oldtouch-nss-english": 55.29862579281184,
+    "taps-final-nss-english": 56.705866807610995
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 642,
+     "lost": 1150,
+     "p": 1.7501913067293397e-33,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 715,
+     "lost": 1010,
+     "p": 1.2873582288181064e-12,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_holbrook fixed": {
+   "n": 450,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 41.111111111111114,
+    "taps-oldtouch-nss-english": 36.666666666666664,
+    "taps-final-nss-english": 41.77777777777778
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 25,
+     "lost": 45,
+     "p": 0.022462895492509277,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 34,
+     "lost": 31,
+     "p": 0.8043170001933986,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_holbrook in top 3": {
+   "n": 450,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 50.888888888888886,
+    "taps-oldtouch-nss-english": 54.44444444444444,
+    "taps-final-nss-english": 56.888888888888886
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 48,
+     "lost": 32,
+     "p": 0.09291188222054621,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 53,
+     "lost": 26,
+     "p": 0.0031830106288350717,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_wikipedia fixed": {
+   "n": 1100,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 65.9090909090909,
+    "taps-oldtouch-nss-english": 63.72727272727273,
+    "taps-final-nss-english": 79.81818181818181
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 37,
+     "lost": 61,
+     "p": 0.019690184799846844,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 175,
+     "lost": 22,
+     "p": 9.001276711506474e-31,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_wikipedia in top 3": {
+   "n": 1100,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "taps-ngram": 92.0,
+    "taps-oldtouch-nss-english": 89.18181818181819,
+    "taps-final-nss-english": 91.18181818181819
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 13,
+     "lost": 44,
+     "p": 4.710437609395379e-05,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 22,
+     "lost": 31,
+     "p": 0.27167916606550335,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD false corrections, MacKenzie clean": {
+   "n": 1083,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 0.2770083102493075,
+    "taps-oldtouch-nss-english": 0.18467220683287167,
+    "taps-final-nss-english": 0.2770083102493075
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 0,
+     "lost": 1,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 1,
+     "lost": 1,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD false corrections, ECPS correct": {
+   "n": 9522,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 0.4410838059231254,
+    "taps-oldtouch-nss-english": 0.010501995379122032,
+    "taps-final-nss-english": 0.05250997689561017
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 0,
+     "lost": 41,
+     "p": 9.094947017729282e-13,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 4,
+     "lost": 41,
+     "p": 9.334883088740753e-09,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD hard valid words changed": {
+   "n": 95,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 10.526315789473685,
+    "taps-oldtouch-nss-english": 9.473684210526315,
+    "taps-final-nss-english": 14.736842105263158
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 3,
+     "lost": 4,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 8,
+     "lost": 4,
+     "p": 0.3876953125,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD unknown names changed": {
+   "n": 292,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 69.17808219178082,
+    "taps-oldtouch-nss-english": 43.49315068493151,
+    "taps-final-nss-english": 51.02739726027397
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 17,
+     "lost": 92,
+     "p": 1.2265535543318512e-13,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 19,
+     "lost": 72,
+     "p": 1.9671283608760133e-08,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD unknown slang changed": {
+   "n": 8,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 87.5,
+    "taps-oldtouch-nss-english": 100.0,
+    "taps-final-nss-english": 100.0
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 1,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 1,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD rare dictionary words changed": {
+   "n": 1457,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 38.16060398078243,
+    "taps-oldtouch-nss-english": 9.814687714481812,
+    "taps-final-nss-english": 13.452299245024022
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 19,
+     "lost": 432,
+     "p": 5.410463783700863e-103,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 53,
+     "lost": 413,
+     "p": 3.4553336637343534e-70,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD correct plurals stripped": {
+   "n": 1236,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 0.08090614886731391,
+    "taps-oldtouch-nss-english": 0.0,
+    "taps-final-nss-english": 0.0
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 0,
+     "lost": 1,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 0,
+     "lost": 1,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD real-word errors fixed": {
+   "n": 708,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 37.14689265536723,
+    "taps-oldtouch-nss-english": 40.536723163841806,
+    "taps-final-nss-english": 48.728813559322035
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 57,
+     "lost": 33,
+     "p": 0.014866752945626244,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 119,
+     "lost": 37,
+     "p": 3.062063659898859e-11,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD contractions restored": {
+   "n": 80,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 93.75,
+    "taps-oldtouch-nss-english": 93.75,
+    "taps-final-nss-english": 95.0
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 1,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD next word in top 3": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "taps-ngram": 17.54385964912281,
+    "taps-oldtouch-nss-english": 17.2668513388735,
+    "taps-final-nss-english": 17.2668513388735
+   },
+   "paired": {
+    "taps-oldtouch-nss-english": {
+     "gained": 63,
+     "lost": 66,
+     "p": 0.8603106786164315,
+     "guard_fail": false
+    },
+    "taps-final-nss-english": {
+     "gained": 63,
+     "lost": 66,
+     "p": 0.8603106786164315,
+     "guard_fail": false
+    }
+   }
+  },
+  "keystroke savings": {
+   "n": 1083,
+   "rates": {
+    "taps-ngram": 45.23110217962591,
+    "taps-oldtouch-nss-english": 48.83289534703973,
+    "taps-final-nss-english": 48.83289534703973
+   }
+  }
+ }
+}

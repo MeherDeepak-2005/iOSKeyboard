@@ -1,0 +1,26 @@
+{
+ "split": "held",
+ "note": "nw rows rerun after next-word predictions kept the model order (frequency prior on typed text only); typed-word decisions are unchanged",
+ "english": {
+  "n": 1083,
+  "next_word_top3": {
+   "before": 17.27,
+   "rules": 17.27
+  },
+  "keystroke_savings": {
+   "before": 47.97,
+   "rules": 48.83
+  }
+ },
+ "generic": {
+  "n": 1083,
+  "next_word_top3": {
+   "before": 20.31,
+   "rules": 20.31
+  },
+  "keystroke_savings": {
+   "before": 48.93,
+   "rules": 49.64
+  }
+ }
+}

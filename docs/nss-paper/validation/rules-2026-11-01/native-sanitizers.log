@@ -1,0 +1,27 @@
+PASS v2: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 130 truncated prefixes + corrupt fields
+PASS v3: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 148 truncated prefixes + corrupt fields
+PASS v4: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 160 truncated prefixes + corrupt fields
+PASS v5: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 136 truncated prefixes + corrupt fields
+PASS v6: words, exact n-grams, limits, missing/full hash lookup, shared bytes, bounds and 160 truncated prefixes + corrupt fields
+PASS mapped seed sets v3: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS mapped seed sets v4: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS mapped seed sets v5: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS mapped seed sets v6: borrowed bytes, caps, ordering, frequency, shared metadata and independent DP
+PASS v6 IDs above 65535, distinct wide context pairs, starters, trie and corrupt fields
+PASS spatial/retained DP: geometry, Double costs, first-letter policy, transpose, apostrophe, severe typo, reset, invalid/mismatched input and empty seeds
+PASS production corpus v6: 114283 words, 55520 bigram contexts, 266840 trigram contexts
+Candidate generation goldens passed
+Neural tokenization and scoring goldens passed
+Safety lexicon: 997 entries, lookups, penalties, ordering/hash validation and truncation passed
+Blocked generation: 279 dictionary words excluded from search, completions, seeds and successors; typed literal kept; blocked-aimed typos left alone
+Shared engine matches 132 iOS decode goldens and 60 iOS streaming Glide goldens
+Shared engine, snapshot ownership, deterministic ties, serialization, reset/reuse and cancellation passed
+NSS word model matches 220 reference scores (max |error| 9.53674e-07)
+NSS word model matches 220 reference scores (max |error| 9.53674e-07)
+NSS word model matches 220 reference scores (max |error| 1.43051e-06)
+NSS word model matches 220 reference scores (max |error| 6.27041e-05)
+NSS graph: 13575 untruncated initial arcs; direct/fallback, ExtendLM, lookahead, pruning, cancellation, field reset and the NSS tier's touch, quote, id, name and blocked-typo rules passed
+  context "": lexicon mass exact 0.883834, published graph 0.864074, P(<unk>) 0.170002
+  context "can you": lexicon mass exact 0.99754, published graph 0.995359, P(<unk>) 0.0036003
+  context "i live in": lexicon mass exact 0.927267, published graph 0.956065, P(<unk>) 0.10644
+Raw decoding: n-gram graph matches LanguageModel on 786177 scores; NSS exact scores match the model on 336933 (41692 vocabulary scores below e^-15); lookahead bounds, best(), argmax commit passed
