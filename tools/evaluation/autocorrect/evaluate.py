@@ -178,6 +178,7 @@ def metrics(meta):
         # make_keep.py: text the user meant that is not in the iOS vocabulary.
         'GUARD unknown names changed': (by.get('keep_name', []) + by.get('keep_name_ctx', []), changed, False, True),
         'GUARD unknown slang changed': (by.get('keep_slang', []), changed, False, True),
+        'GUARD Tenglish words changed': (by.get('keep_tenglish', []), changed, False, True),
         'GUARD rare dictionary words changed': (by.get('keep_word', []), changed, False, True),
         'GUARD correct plurals stripped': (pick(lambda m: m['set'] in ('clean', 'ecps_ok') and m['target'].endswith('s') and len(m['target']) > 3),
                                            lambda r, m: commit(r, m) == m['target'][:-1], False, True),

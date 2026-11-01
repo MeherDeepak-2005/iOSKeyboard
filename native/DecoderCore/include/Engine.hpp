@@ -95,6 +95,11 @@ KB_TUNABLE(nssChannelWeight, 4.0);
 KB_TUNABLE(nssBeam, 16);
 KB_TUNABLE(nssWidth, 512);
 KB_TUNABLE(nssTouchSigma, 0.7);
+// Raw decoding commits the best completed word for a typed non-word when it scores above the
+// typed text minus this margin (0: only when it outscores it); a typed dictionary word needs a
+// better score. Larger commits more of the corrections the strip already shows, and changes
+// more unknown words (names, rare words).
+KB_TUNABLE(nssRawCommitMargin, 0.0);
 struct EngineOptions {
     // Raw decoding, to measure the language models themselves: both tiers run the same
     // joint search (NeuralFstSearch) over their own graph (NeuralFst or NgramFst), with

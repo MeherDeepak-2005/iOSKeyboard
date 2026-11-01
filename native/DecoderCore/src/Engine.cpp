@@ -515,8 +515,9 @@ DecodeOutput EngineSession::decodeRaw(const DecodeInput& input, const EngineView
     if (cancelled()) { graph->update(input.context, true); rawSearch_->reset(); out.status = EngineStatus::cancelled; return out; }
     std::erase_if(ranked, blocked); std::erase_if(complete, blocked);
     double literal;
+    bool typedIsWord = false;
     if (auto id = engine_->packed_->wordID(typed); id && std::isfinite(engine_->neuralLexicon_->unigram[std::size_t(*id)]))
-        literal = graph->wordScore(0, std::uint32_t(*id));
+        literal = graph->wordScore(0, std::uint32_t(*id)), typedIsWord = true;
     else if (neural && engine_->options_.nssExact && engine_->options_.nssTypedUnknown)
         literal = neuralGraph_->typedUnknown();
     else {
@@ -529,7 +530,9 @@ DecodeOutput EngineSession::decodeRaw(const DecodeInput& input, const EngineView
     std::erase_if(complete, [&](const auto& row) { return row.key == typed; });
     auto best = std::max_element(complete.begin(), complete.end(), [](const auto& a, const auto& b) { return a.score == b.score ? a.key > b.key : a.score < b.score; });
     // A kept word (the user undid a correction of it) stays as typed, as in production.
-    if (best != complete.end() && best->score > typedRow.score && !input.kept)
+    // A typed non-word (the bad typos the strip shows a fix for) may be replaced below its own
+    // score by nssRawCommitMargin; a typed dictionary word only by a better-scoring word.
+    if (best != complete.end() && best->score > typedRow.score - (typedIsWord ? 0 : nssRawCommitMargin) && !input.kept)
         out.correction = {best->key, best->score - typedRow.score, 0, {}};
     ranked.push_back(typedRow);
     std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.score == b.score ? a.key < b.key : a.score > b.score; });
