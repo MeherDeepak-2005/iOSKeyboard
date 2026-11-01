@@ -194,14 +194,27 @@ CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const Ra
             static const std::unordered_set<std::string> determiners{"my","your","his","her","our","their","a","an","the","valid","fake","user","login","student","employee","email","caller"};
             if (determiners.contains(context.back())) return {};
         }
+        // The word's own contraction enters the strip from apostrophe restoration, not the close
+        // search, so the slip gate below never weighs it: compare the two rows the strip ranks.
+        // A slip the gate accepts still wins (this id -> this is, not "this i'd").
+        auto contraction = [&](CorrectionResult otherwise) -> CorrectionResult {
+            auto restored = lexicon.apostropheRestoration(typed);
+            if (!restored || lexicon.isBlocked(*restored)) return otherwise;
+            auto row = std::find_if(rows.begin(), rows.end(), [&](const auto& r) { return r.channel.word == *restored; });
+            if (row == rows.end() || row->score - literal->score <= contractionMargin) return otherwise;
+            auto margin = row->score - literal->score;
+            return {*restored, margin, contractionMargin,
+                CorrectionGate{CorrectionKind::realWord, *restored, margin, row->channel.cost, std::nullopt, false}};
+        };
         // At most one added letter: two cheap doubled-letter or completion steps (dog -> doggy) are
         // not a real-word slip, and the 1.6 cost cap no longer excludes them.
         if (length < 2 || !best || !lexicon.contains(best->channel.word) || costs.at(best->channel.word) > 1.6 ||
-            best->channel.word.size() > typed.size() + 1) return {};
+            best->channel.word.size() > typed.size() + 1) return contraction({});
         // A valid word is never replaced by its own inflection (tests -> test, base -> bases):
         // the language model prefers one form, but the user chose the other deliberately.
-        if (inflection(typed, best->channel.word) || inflection(best->channel.word, typed)) return {};
-        return finish({CorrectionKind::realWord, best->channel.word, bestScore - typedScore, costs.at(best->channel.word), gap(best->channel.word, false), false});
+        if (inflection(typed, best->channel.word) || inflection(best->channel.word, typed)) return contraction({});
+        auto slip = finish({CorrectionKind::realWord, best->channel.word, bestScore - typedScore, costs.at(best->channel.word), gap(best->channel.word, false), false});
+        return slip.word ? slip : contraction(slip);
     }
     if (typed.find('\'') != std::string_view::npos) {
         static const std::vector<std::string> suffixes{"'s", "'re", "'ve", "'ll", "'d", "'m", "n't"};

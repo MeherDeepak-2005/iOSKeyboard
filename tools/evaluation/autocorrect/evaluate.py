@@ -131,7 +131,7 @@ def slots(r, m):
         w = norm(w)
         if w != norm(m['typed']) and w not in out: out.append(w)
     return out[:3]
-def half(m): return 'tune' if int(hashlib.sha1(m['target'].encode()).hexdigest(), 16) % 2 == 0 else 'held'
+def half(m): return 'tune' if int(hashlib.sha1(m.get('key', m['target']).encode()).hexdigest(), 16) % 2 == 0 else 'held'
 def mcnemar(b, c):
     n = b + c
     if not n: return 1.0
@@ -182,6 +182,10 @@ def metrics(meta):
         'GUARD correct plurals stripped': (pick(lambda m: m['set'] in ('clean', 'ecps_ok') and m['target'].endswith('s') and len(m['target']) > 3),
                                            lambda r, m: commit(r, m) == m['target'][:-1], False, True),
         'GUARD real-word errors fixed': (by.get('realword', []), fixed, True, True),
+        # make_contractions.py: real sentences, a word typed without its apostrophe.
+        'Contractions restored in sentences': (by.get('contraction', []), fixed, True, False),
+        'Contractions in top 3 in sentences': (by.get('contraction', []), top3, True, False),
+        'GUARD plain word changed in sentences': (by.get('contraction_plain', []), changed, False, True),
         'GUARD contractions restored': (by.get('apos', []), fixed, True, True),
         'GUARD next word in top 3': (by.get('nw', []), lambda r, m: r['r0'] >= 0, True, True),
     })

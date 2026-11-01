@@ -58,6 +58,7 @@ extension KeyboardEngine {
 
 	static let spellingPatternMargin = 1.5   // native spellingPatternMargin
 	static let spellingPatternGap = 1.0      // native spellingPatternGap
+	static let contractionMargin = 0.0       // native contractionMargin
 	/// Mirrors native `spellingSkeleton`: the consonant frame of an ASCII word, empty otherwise.
 	static func spellingSkeleton(_ word: String) -> String {
 		var letters: [UInt8] = []
@@ -219,15 +220,24 @@ extension KeyboardEngine {
 					return CorrectionDecision(word: nil, margin: 0)
 				}
 			}
+			// The word's own contraction enters the strip from apostrophe restoration, not the close
+			// search, so the slip gate below never weighs it: compare the two rows the strip ranks.
+			// A slip the gate accepts still wins (this id → this is); as native.
+			func contraction(otherwise: CorrectionDecision) -> CorrectionDecision {
+				guard let restored = lexicon.apostropheRestoration(of: lw), !lexicon.isProfane(restored),
+					  let row = scored.first(where: { $0.word == restored }),
+					  row.score - typed.score > Self.contractionMargin else { return otherwise }
+				return CorrectionDecision(word: restored, margin: row.score - typed.score)
+			}
 			guard lw.count >= 2, let bestWord, lexicon.contains(bestWord),
 				  let cost = correctionCosts[bestWord], cost <= realWordMaxCost,
 				  // At most one added letter (dog → doggy is no slip); as native.
 				  bestWord.utf8.count <= lw.utf8.count + 1 else {
-				return CorrectionDecision(word: nil, margin: 0)
+				return contraction(otherwise: CorrectionDecision(word: nil, margin: 0))
 			}
 			// A valid word is never replaced by its own inflection (tests → test); as native.
 			if Self.isInflection(lw, of: bestWord) || Self.isInflection(bestWord, of: lw) {
-				return CorrectionDecision(word: nil, margin: 0)
+				return contraction(otherwise: CorrectionDecision(word: nil, margin: 0))
 			}
 			let margin = bestScore - typedScore
             let runnerUp = eligible.filter { $0.word != bestWord }.map(gateScore).max()
@@ -238,7 +248,8 @@ extension KeyboardEngine {
             let fire = policy.accepts(gate)
 			KBDiagnostics.logDecision(typed: lw, best: bestWord, margin: margin,
 									  threshold: policy.realWordMargin, corrected: fire)
-			return CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
+			let slip = CorrectionDecision(word: fire ? bestWord : nil, margin: margin)
+			return fire ? slip : contraction(otherwise: slip)
 		}
 
 		// OOV contraction guard: "when's" / "mustn't" are valid English even though the

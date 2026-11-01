@@ -12,6 +12,7 @@ Measures autocorrection, suggestions and prediction of `native/DecoderCore` on t
 | `external/*.dat` → `corpus/ext-cases.*` | Birkbeck, Holbrook, Aspell, Wikipedia lists from https://www.dcs.bbk.ac.uk/~ROGER/corpora.html, filtered by `make_external.py`. **Held-out only.** |
 | `corpus/*.taps.tsv` | The same rows with simulated touches (`make_taps.py`). |
 | `corpus/keystrokes.tsv` | 4,000 real misspellings typed one letter at a time (typing latency). |
+| `corpus/contraction-cases.*` | its/ill/were/hows… typed without the apostrophe in real Tatoeba sentences, meant as the contraction or the plain word (`make_contractions.py`). Split by sentence. |
 
 `corpus/`, `external/`, `results/` and `bin/` are not committed.
 
@@ -29,6 +30,7 @@ python3 tune.py --bin ios-tune [--grid JSON] [--start JSON]   # coordinate searc
 python3 gate_sweep.py "oov,realWord,rescue,gap,minGap,maxCost" ...
 python3 latency_tradeoff.py BIN '{"deletionCost": 1.1}' ...   # typing latency + accuracy
 python3 funnel.py results/NAME.diag.jsonl            # where the target is lost
+tools/evaluation/autocorrect/device_bench.sh DEVICE NAME   # same corpora on a connected iPhone
 ```
 
 `score` exits 1 when a guardrail gets worse (paired McNemar p < 0.05): false corrections,

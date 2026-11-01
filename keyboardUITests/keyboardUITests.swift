@@ -220,6 +220,98 @@ final class keyboardUITests: XCTestCase {
 	}
 
 	@MainActor
+	private func key(_ label: String, in app: XCUIApplication) -> XCUIElement {
+		let preferred = app.keys[label]
+		return preferred.waitForExistence(timeout: 1) ? preferred
+			: app.keys[label == label.lowercased() ? label.uppercased() : label.lowercased()]
+	}
+
+	/// A straight swipe between two letter keys: the decoder sees every key it crosses.
+	@MainActor
+	private func glide(_ from: String, to: String, in app: XCUIApplication) {
+		let centre = CGVector(dx: 0.5, dy: 0.5)
+		key(from, in: app).coordinate(withNormalizedOffset: centre)
+			.press(forDuration: 0.05, thenDragTo: key(to, in: app).coordinate(withNormalizedOffset: centre),
+				withVelocity: XCUIGestureVelocity(300), thenHoldForDuration: 0.05)
+	}
+
+	/// The field's text, with an empty field (which reports its placeholder) as "".
+	@MainActor
+	private func fieldText(_ field: XCUIElement) -> String {
+		let value = field.value as? String ?? ""
+		return value == field.placeholderValue ? "" : value
+	}
+
+	@MainActor
+	private func waitForText(_ field: XCUIElement, toDifferFrom old: String, timeout: TimeInterval = 3) -> String {
+		let deadline = Date().addingTimeInterval(timeout)
+		while Date() < deadline {
+			let now = fieldText(field)
+			if now != old { return now }
+			RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+		}
+		return fieldText(field)
+	}
+
+	/// Regression: in an empty field the host reports no context (nil) while the glide began
+	/// with "", so the lift-time check refused to commit the field's first glided word.
+	@MainActor
+	func testGlideCommitsTheFirstWordOfAnEmptyField() throws {
+		try selectLanguage(identifier: "language.english", title: "English")
+		let host = launchRuntimeHost()
+		// The extension's first launch after an install can take several seconds.
+		guard host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 10) else {
+			throw XCTSkip("Glyph is not the active software keyboard")
+		}
+		let field = host.textFields["runtime.text"]
+		XCTAssertEqual(fieldText(field), "")
+		glide("h", to: "i", in: host)
+		let first = waitForText(field, toDifferFrom: "")
+		NSLog("GLIDE-FIRST [%@]", first)
+		XCTAssertTrue(first.trimmingCharacters(in: .whitespaces).count >= 2,
+			"The first glided word of an empty field was not committed: [\(first)]")
+		glide("t", to: "o", in: host)
+		let second = waitForText(field, toDifferFrom: first)
+		NSLog("GLIDE-SECOND [%@]", second)
+		XCTAssertTrue(second.count > first.count + 1, "The second glided word was not committed: [\(second)]")
+	}
+
+	/// What the strip shows in the middle for a contraction typed without its apostrophe must
+	/// be what Space commits. Logs CONTRACTION lines with the strip and the committed word.
+	@MainActor
+	func testContractionsCommitWhatTheStripShows() throws {
+		try selectLanguage(identifier: "language.english", title: "English")
+		let host = launchRuntimeHost()
+		// The extension's first launch after an install can take several seconds.
+		guard host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 10) else {
+			throw XCTSkip("Glyph is not the active software keyboard")
+		}
+		let field = host.textFields["runtime.text"]
+		let cases = [("dont", "don't"), ("im", "i'm"), ("cant", "can't"), ("thats", "that's"),
+			("youre", "you're"), ("didnt", "didn't"), ("hows", "how's"), ("whys", "why's"),
+			("ill", "i'll"), ("its", "it's")]
+		var previous = fieldText(field), mismatches: [String] = []
+		for (typed, intended) in cases {
+			for ch in typed { tapLetter(String(ch), in: host) }
+			let primary = host.descendants(matching: .any)["suggestion.primary"]
+			// Let the strip settle on the last letter's decode before reading it.
+			RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+			let shown = primary.exists ? primary.label : ""
+			host.keys["Space"].tap()
+			let text = waitForText(field, toDifferFrom: previous)
+			let committed = String(text.dropFirst(previous.count)).trimmingCharacters(in: .whitespaces)
+				.replacingOccurrences(of: "\u{2019}", with: "'")
+			previous = text
+			NSLog("CONTRACTION %@ strip=[%@] committed=[%@] want=[%@]", typed, shown, committed, intended)
+			let showsIntended = shown.replacingOccurrences(of: "\u{2019}", with: "'").lowercased() == intended
+			if showsIntended && committed.lowercased() != intended {
+				mismatches.append("\(typed): strip \(shown), committed \(committed)")
+			}
+		}
+		XCTAssertEqual(mismatches, [], "Space committed something other than the contraction the strip showed")
+	}
+
+	@MainActor
 	private func inputModeSwitch(in app: XCUIApplication) -> XCUIElement {
 		let keys = app.keys.allElementsBoundByIndex
 		if let key = keys.first(where: {

@@ -36,6 +36,16 @@ KB_TUNABLE(minimumCorrectionLength, 2);
 // rare words 39.0 -> 39.2%, p 0.25). 3 failed the rare-words guardrail on the tune half.
 KB_TUNABLE(spellingPatternMargin, 1.5);
 KB_TUNABLE(spellingPatternGap, 1.0);
+// A typed dictionary word whose own contraction (apostrophe restoration: its -> it's, ill -> i'll,
+// hows -> how's) the ranking scores this much above it commits the contraction, unless the
+// real-word gate accepts a slip the strip ranks first (this id -> this is). 0 (1 Nov 2026): Space
+// commits the contraction exactly when the strip ranks it above the typed word; before, the strip
+// showed it first and Space kept the other form. Held half, make_contractions.py sentences:
+// contractions restored 52.0 -> 76.2% (its 10.9 -> 87.5, ill 14.0 -> 97.5, shed 7.3 -> 91.1,
+// hows/whys 0 -> 100), plain words changed 10.3 -> 13.8% (its 2.2 -> 10.3, ill 3.1 -> 15.8);
+// ECPS fixed +45, no case lost; ECPS correct words changed 0.39 -> 0.42% (p 0.25). Margin 1 scored
+// within a few rows of 0; 2 and above left its/ill as typed. 99 is off.
+KB_TUNABLE(contractionMargin, 0.0);
 struct CorrectionPolicy {
     // oovMargin -0.5 (28 Oct), with the channel weighted 4: the most misspellings fixed while
     // changing no more of the unknown names a user meant (make_keep.py, tune half) than the
