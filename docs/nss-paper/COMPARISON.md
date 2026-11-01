@@ -8,7 +8,7 @@ The new decoder implements the published dynamic NSS graph and joint search, but
 
 The implementation is closer to the paper, but quality is mixed and it fails an existing safety guardrail. Synthetic correction improves; real-misspelling correction and several external-set scores regress. Correct ECPS words are changed more often (0.378% → 0.704%, paired McNemar p = 7.84e-7). It should remain an internal experiment, not replace the default decoder. `INTERNAL_NSS_ENABLED` remains `NO`.
 
-**Update, 1 November 2026.** The sequential latency replay is now [below](#latency-and-memory): `d77aa92` takes 8.3 ms per typed word (4.9× the old decoder) and 50 ms per next-word prediction. The uncommitted working tree cuts these to 7.0 ms and 1.5 ms. The chat-register retrain finished; it models dialogue far better but does not improve the typing benchmark. See [the follow-up](#follow-up-working-tree-and-retrained-models-1-november-2026).
+**Update, 1 November 2026.** The sequential latency replay is now [below](#latency-and-memory): `d77aa92` takes 8.3 ms per typed word (4.9× the old decoder) and 50 ms per next-word prediction. Commit `428e985` cuts these to 7.0 ms and 1.5 ms. The chat-register retrain finished; it models dialogue far better but does not improve the typing benchmark. See [the follow-up](#follow-up-exact-scoring-and-retrained-models-1-november-2026).
 
 ## Method
 
@@ -63,26 +63,26 @@ All values are percentages. ↑ means higher is better; ↓ means lower is bette
 
 ## Latency and memory
 
-Sequential replay on 1 November 2026 (`tools/nss/latency_paper.py`): desktop Apple M1, `clang++ -std=c++20 -Os -DNDEBUG` (Apple clang 21.0.0, clang-2100.4.1.1), nothing else running. Sample: every 50th `ac` row of `cases.tsv` (1,127 typed words, each decoded in a fresh word session) and every 5th `nw` row (543 next-word predictions from an empty prefix, then 1,884 keystrokes; `KB_FULL_PREFIXES=1` replays every prefix whatever the suggestions). Each arm ran twice, in order and then reversed; the two runs of an arm agree within 2%. Milliseconds per request, pooled over both runs; the ratio is the median per-request time against `paper`.
+Sequential replay on 1 November 2026 (`tools/nss/latency_paper.py`): desktop Apple M1, `clang++ -std=c++20 -Os -DNDEBUG` (Apple clang 21.0.0, clang-2100.4.1.1), nothing else running; the `after` arms ran on the working tree that was then committed unchanged as `428e985`. Sample: every 50th `ac` row of `cases.tsv` (1,127 typed words, each decoded in a fresh word session) and every 5th `nw` row (543 next-word predictions from an empty prefix, then 1,884 keystrokes; `KB_FULL_PREFIXES=1` replays every prefix whatever the suggestions). Each arm ran twice, in order and then reversed; the two runs of an arm agree within 2%. Milliseconds per request, pooled over both runs; the ratio is the median per-request time against `paper`.
 
 | Arm | Decoder | Model | Typed word p50 / p95 | Next word p50 | Keystroke p50 / p95 | Ratio: typed / next / key | Peak RSS (MiB) |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | before | `5f2df22` | baseline-step8000 | 1.68 / 8.10 | 0.66 | 0.29 / 1.33 | 0.21 / 0.01 / 0.14 | 40.6 |
 | paper | `d77aa92` | nss-english | 8.27 / 11.68 | 50.10 | 1.41 / 2.60 | 1 / 1 / 1 | 76.3 |
-| after-paper | working tree, `KB_NSS_PAPER=1` | nss-english | 11.10 / 15.24 | 2.86 | 1.78 / 3.28 | 1.34 / 0.06 / 1.26 | 54.7 |
-| after | working tree | nss-english | 7.01 / 9.53 | 1.51 | 1.23 / 2.08 | 0.84 / 0.03 / 0.88 | 56.2 |
-| after-generic | working tree | generic-final | 6.81 / 9.22 | 1.44 | 1.17 / 2.04 | 0.81 / 0.03 / 0.84 | 52.1 |
-| after-chat | working tree | chat-final | 6.42 / 8.85 | 1.27 | 1.14 / 1.98 | 0.77 / 0.03 / 0.82 | 53.8 |
-| ngram | working tree, n-gram tier | — | 0.48 / 6.71 | 0.02 | 0.13 / 0.95 | 0.05 / 0.00 / 0.08 | 49.3 |
+| after-paper | `428e985`, `KB_NSS_PAPER=1` | nss-english | 11.10 / 15.24 | 2.86 | 1.78 / 3.28 | 1.34 / 0.06 / 1.26 | 54.7 |
+| after | `428e985` | nss-english | 7.01 / 9.53 | 1.51 | 1.23 / 2.08 | 0.84 / 0.03 / 0.88 | 56.2 |
+| after-generic | `428e985` | generic-final | 6.81 / 9.22 | 1.44 | 1.17 / 2.04 | 0.81 / 0.03 / 0.84 | 52.1 |
+| after-chat | `428e985` | chat-final | 6.42 / 8.85 | 1.27 | 1.14 / 1.98 | 0.77 / 0.03 / 0.82 | 53.8 |
+| ngram | `428e985`, n-gram tier | — | 0.48 / 6.71 | 0.02 | 0.13 / 0.95 | 0.05 / 0.00 / 0.08 | 49.3 |
 
-- `paper` spends 50 ms on every next-word prediction: with an empty prefix, `d77aa92` scores every lexicon word at the root. The working tree's `NeuralFst::best` ranks the expansion's own scores (its arcs, or the whole vocabulary distribution under exact scoring) plus the most frequent words reached through `<unk>`, without the lexicon scan.
-- `ArcLookahead`, the working tree's published-graph lookahead (`after-paper`), gives the same output as `paper` on all 1,670 sampled requests and cuts peak RSS by 22 MiB, but each lookahead becomes a binary search: typed words are 34% and keystrokes 26% slower. The default exact scoring (`after`, the follow-up below) keeps a dense lookahead over the vocabulary's trie nodes and is 16% (typed words) and 12% (keystrokes) faster than `paper`; it changes 17% of the sampled outputs.
+- `paper` spends 50 ms on every next-word prediction: with an empty prefix, `d77aa92` scores every lexicon word at the root. `428e985`'s `NeuralFst::best` ranks the expansion's own scores (its arcs, or the whole vocabulary distribution under exact scoring) plus the most frequent words reached through `<unk>`, without the lexicon scan.
+- `ArcLookahead`, `428e985`'s published-graph lookahead (`after-paper`), gives the same output as `paper` on all 1,670 sampled requests and cuts peak RSS by 22 MiB, but each lookahead becomes a binary search: typed words are 34% and keystrokes 26% slower. The default exact scoring (`after`, the follow-up below) keeps a dense lookahead over the vocabulary's trie nodes and is 16% (typed words) and 12% (keystrokes) faster than `paper`; it changes 17% of the sampled outputs.
 - The chat model is the fastest NSS arm because its graph is smaller: after "can you" it keeps 5,146 arcs above e^-15, generic-final 12,287.
-- The default working-tree arms are still about 4× slower than `before` at the median, and 13–15× slower than the n-gram for a typed word (at p95: 8.85 against 6.71 ms).
+- The default `428e985` arms are still about 4× slower than `before` at the median, and 13–15× slower than the n-gram for a typed word (at p95: 8.85 against 6.71 ms).
 
 Inputs, per-run outputs and hashes: [validation/latency-2026-11-01/](validation/latency-2026-11-01/). The first replay ([validation/latency/](validation/latency/), 31 October: older compiler, 501 sampled rows with 82 keystrokes, two arms and no next-word timing) is superseded.
 
-Full-corpus desktop process peak RSS (MiB) from the first comparison's quality runs, in main / external / keep order. Here `before` is `5f2df22` and `after` is `d77aa92`, not the working-tree arm above:
+Full-corpus desktop process peak RSS (MiB) from the first comparison's quality runs, in main / external / keep order. Here `before` is `5f2df22` and `after` is `d77aa92`, not the `428e985` arm above:
 
 | Decoder | Main | External | Keep |
 | --- | ---: | ---: | ---: |
@@ -100,9 +100,9 @@ These are desktop process observations, including allocator behavior and mapped 
 
 Exact inputs and outputs: [targeted-examples.tsv](targeted-examples.tsv), [targeted-examples.json](targeted-examples.json). These are diagnostic examples, not additional held-out accuracy evidence.
 
-## Follow-up: working tree and retrained models (1 November 2026)
+## Follow-up: exact scoring and retrained models (1 November 2026)
 
-This section measures **uncommitted** working-tree changes on top of `d77aa92`, with the harness, corpora and held split used above, built with clang-2100.4.1.1 (the tables above used clang-2100.1.1.101). Files: [validation/followup-2026-11-01/](validation/followup-2026-11-01/). The working tree:
+This section measures the changes committed as `428e985` on top of `d77aa92`, with the harness, corpora and held split used above, built with clang-2100.4.1.1 (the tables above used clang-2100.1.1.101). They were measured on the uncommitted working tree, whose diff is identical to the commit's (`provenance.json`). Files: [validation/followup-2026-11-01/](validation/followup-2026-11-01/). The commit:
 
 - scores vocabulary words exactly by default (`EngineOptions::nssExact`, see [tools/nss/README.md](../../tools/nss/README.md)): every vocabulary word gets its own model probability, also below the e^-15 arc threshold, and lexicon words outside the vocabulary share P(`<unk>`) by frequency. `KB_NSS_PAPER=1` restores the published graph;
 - replaces the published graph's per-expansion lookahead array with `ArcLookahead`, and next-word prediction's lexicon scan with `NeuralFst::best` (latency above);
@@ -120,9 +120,9 @@ The chat run stopped twice before completing; it was resumed from its step-8000 
 
 ### Decoder change, same model
 
-The installed model on `d77aa92` and on the working tree. `d77aa92` was replayed again with the current compiler; all 96,143 outputs are identical to the "New" column of the first table. Held split, percentages: every metric with p < 0.05, plus four for reference. Gained/lost counts the cases where the metric's condition became true or stopped being true, so for ↓ metrics "gained" is worse.
+The installed model on `d77aa92` and on `428e985`. `d77aa92` was replayed again with the current compiler; all 96,143 outputs are identical to the "New" column of the first table. Held split, percentages: every metric with p < 0.05, plus four for reference. Gained/lost counts the cases where the metric's condition became true or stopped being true, so for ↓ metrics "gained" is worse.
 
-| Metric | | n | `d77aa92` | Working tree | Change (pp) | Gained/lost | p | Guard failure |
+| Metric | | n | `d77aa92` | `428e985` | Change (pp) | Gained/lost | p | Guard failure |
 | --- | :---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
 | ECPS real misspellings fixed | ↑ | 9,622 | 86.70 | 86.89 | +0.20 | 112/93 | 0.21 | — |
 | ECPS target in top 3 | ↑ | 9,622 | 94.33 | 94.00 | -0.32 | 48/79 | 8e-3 | — |
@@ -141,7 +141,7 @@ The installed model on `d77aa92` and on the working tree. `d77aa92` was replayed
 
 Exact scoring repairs most of the first table's false-correction regression (0.70% → 0.55%; `5f2df22` had 0.38%), leaves fewer misspellings uncorrected and fixes more Wikipedia misspellings. It also changes more rare dictionary words, a guardrail failure, and ranks Birkbeck targets lower.
 
-### Models on the working-tree decoder
+### Models on the `428e985` decoder
 
 Held split, percentages. The last column is chat-final against generic-final, with the paired McNemar p.
 
@@ -212,7 +212,7 @@ On MASC's 63,863 lexicon-word targets the production n-gram's perplexity is 750.
 - Internal NSS iOS Simulator Release build: **passed**, arm64 and x86_64.
 - Swift/iOS integration: **1 actual Swift Testing test passed**, `KeyboardTests/wordNeuralSearchSpaceTierDecodesInTheSharedEngine()`. It checks the native bridge using a tiny model fixture, not trained-model accuracy. Earlier filters selected zero tests; those runs are not counted.
 - No physical-device performance, complete application workflow, Android delivery, or Gboard quality parity claim.
-- Working tree, 1 November 2026: `native/tests/run.sh` (AddressSanitizer + UndefinedBehaviorSanitizer) **passed**, including `RawDecoderTests` (the n-gram graph matches `LanguageModel` on 786,177 scores; exact NSS scores, lookahead bounds and `best()` match the model). Log: [validation/followup-2026-11-01/native-sanitizers.log](validation/followup-2026-11-01/native-sanitizers.log).
+- `428e985` (measured as the working tree), 1 November 2026: `native/tests/run.sh` (AddressSanitizer + UndefinedBehaviorSanitizer) **passed**, including `RawDecoderTests` (the n-gram graph matches `LanguageModel` on 786,177 scores; exact NSS scores, lookahead bounds and `best()` match the model). Log: [validation/followup-2026-11-01/native-sanitizers.log](validation/followup-2026-11-01/native-sanitizers.log).
 - `chat-final.nsslm`: `NeuralLanguageModelTests` matches its 220 reference scores. `NeuralFstTests` passes its per-word edge and lookahead checks, then stops at its assumption that "you" keeps an arc after "can you": the chat model gives it e^-15.02, just below the threshold. The test needs another word before the chat model could replace `keyboard/nss-english.nsslm`.
 
 ## Reproduce and inspect
@@ -222,9 +222,9 @@ python3 tools/nss/compare_paper.py --out /tmp/nss-paired
 python3 tools/nss/latency_paper.py --out /tmp/nss-latency
 ```
 
-The first command builds the checkpoint and current source and replays all three local corpora; the corpora must already exist. The second builds `5f2df22` and `d77aa92` with `d77aa92`'s harness plus fixed-prefix replay, and the working tree with its own, then replays every arm twice. Run it without competing benchmark/build processes. User-owned background work was left running for the quality measurements.
+The first command builds the checkpoint and current source and replays all three local corpora; the corpora must already exist. The second builds `5f2df22` and `d77aa92` with `d77aa92`'s harness plus fixed-prefix replay, and the current tree with its own, then replays every arm twice. Run it without competing benchmark/build processes. User-owned background work was left running for the quality measurements.
 
-The follow-up's quality runs use a benchmark built from the working tree, the HEAD decoder from `latency_paper.py`, and the same three corpora:
+The follow-up's quality runs use a benchmark built from the current tree (`428e985`), `d77aa92`'s decoder from `latency_paper.py`, and the same three corpora:
 
 ```sh
 cd tools/evaluation/autocorrect

@@ -87,5 +87,10 @@
   "notes": [
     "head-nss-english (current compiler) and nss-paper-after (clang-2100.1.1.101, 31 October) give identical outputs on all 96,143 cases.",
     "models.json was produced by tools/nss/compare_models.py and matches an earlier run of the same code exactly."
-  ]
+  ],
+  "committed_as": {
+    "decoder": "428e985",
+    "training_tooling": "f6b6ecd",
+    "check": "git diff --diff-filter=M d77aa92 428e985 -- native tools/evaluation/autocorrect/IOSBench.cpp hashes to working_tree.diff_sha256, and 428e985:native/tests/RawDecoderTests.cpp to working_tree.untracked"
+  }
 }
