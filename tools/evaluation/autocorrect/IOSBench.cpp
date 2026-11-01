@@ -7,7 +7,8 @@
 // No touch offsets are sent (CoreV4 receives characters only). No personalization.
 //
 // KB_NSS=model.nsslm decodes with the neural search space tier (tools/nss) instead of the
-// n-gram; the model file is mapped read-only like langdata.bin.
+// n-gram; the model file is mapped read-only like langdata.bin. KB_RAW=1 measures either
+// tier raw (EngineOptions::raw).
 //
 // Same TSV/JSONL contract as CoreBench.cpp.
 #include "Engine.hpp"
@@ -169,6 +170,17 @@ int main(int argc, char** argv) {
     // next-word rows, written as one "profile" record at the end (letters 1-4 and 5+).
     const bool profile = std::getenv("KB_PROFILE") && std::string(std::getenv("KB_PROFILE")) == "1";
     options.profile = profile;
+    // KB_RAW=1: raw decoding (EngineOptions::raw), the language model and channel without
+    // rules; the n-gram tier then runs the same joint search as the NSS tier.
+    options.raw = std::getenv("KB_RAW") && std::string(std::getenv("KB_RAW")) == "1";
+    // KB_NSS_PAPER=1: the published graph's fallback and arc-only scores (NeuralFst::Options).
+    if (std::getenv("KB_NSS_PAPER") && std::string(std::getenv("KB_NSS_PAPER")) == "1") options.nssExact = false;
+    // KB_NSS_FLOOR=1: exact scores with the published fallback kept as a floor (NeuralFst::Options).
+    if (std::getenv("KB_NSS_FLOOR") && std::string(std::getenv("KB_NSS_FLOOR")) == "1") options.nssUnigramFloor = true;
+    // KB_NSS_ALPHA=a: unknown-word frequencies as u^a (0: 1 + ln u); KB_NSS_TYPED=1: typed text
+    // outside the lexicon scored from the model's P(<unk>) (EngineOptions).
+    if (const char* alpha = std::getenv("KB_NSS_ALPHA")) options.nssUnknownExponent = std::atof(alpha);
+    if (std::getenv("KB_NSS_TYPED") && std::string(std::getenv("KB_NSS_TYPED")) == "1") options.nssTypedUnknown = true;
     double phase[2][4] = {};
     if (const char* text = std::getenv("KB_STATECAP")) options.stateCap = std::size_t(std::atol(text));   // retained-search seed cap
     std::shared_ptr<const NeuralWordModel> neural;
@@ -245,7 +257,9 @@ int main(int argc, char** argv) {
             if (k == 0) { r0 = rank; ms0 = elapsed; first = r.suggestions; } else lat.push_back(elapsed);
             if (profile && k) { auto& sum = phase[k > 4]; sum[0] += r.timings.session; sum[1] += r.timings.generation; sum[2] += r.timings.scoring; sum[3] += r.timings.policy; }
             if (rank >= 0 && kfound < 0) kfound = int(k);
-            if (kfound >= 0 && k >= 1) break;
+            // Fixed-prefix latency replay must not stop at a decoder-dependent
+            // suggestion rank. Default quality/keystroke-savings replay is unchanged.
+            if (kfound >= 0 && k >= 1 && !std::getenv("KB_FULL_PREFIXES")) break;
         }
         if (kfound < 0) kfound = int(target.size());
         out << "{\"id\":" << quote(id) << ",\"r0\":" << r0 << ",\"kf\":" << kfound << ",\"len\":" << target.size() << ",\"s0\":"; words(out, first);

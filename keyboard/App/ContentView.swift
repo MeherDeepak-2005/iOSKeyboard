@@ -145,7 +145,7 @@ struct ContentView: View {
 				}
 			}
 
-				#if DEBUG || INTERNAL_GRU
+				#if DEBUG || INTERNAL_GRU || INTERNAL_NSS
 				Section("Developer") {
 					NavigationLink {
 						DiagnosticsView()

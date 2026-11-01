@@ -54,6 +54,14 @@ static double substitution(std::uint8_t intended, std::uint8_t typed, std::optio
 double substitutionCost(std::uint8_t intended, std::uint8_t typed, std::optional<TouchOffset> tap, bool typedFirst) noexcept {
     return substitution(intended, typed, tap, typedFirst ? firstVowelSubstitutionCost : vowelSubstitutionCost);
 }
+double geometricSubstitutionCost(std::uint8_t intended, std::uint8_t typed, std::optional<TouchOffset> tap) noexcept {
+    auto a = grid(intended), t = grid(typed);
+    if (!a || !t) return intended == typed ? 0 : 3.0;
+    const auto px = t->x + (tap ? tap->dx : 0), py = t->y + (tap ? tap->dy : 0);
+    const auto dx = a->x - px, dy = a->y - py;
+    const auto base = (dx * dx + dy * dy) / 2;
+    return intended == typed ? std::min(3.0, base) : std::min(3.0, base + substitutionBase);
+}
 double seedFirstLetterCost(std::uint8_t label, std::uint8_t typedFirst, std::optional<TouchOffset> tap) noexcept {
     return firstLetterPenalty(8, label, typedFirst, 0, 0, false) + substitution(label, typedFirst, tap, 3.0);
 }

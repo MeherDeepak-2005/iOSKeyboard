@@ -59,6 +59,10 @@ if(KB_BUILD_TESTS)
             "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/nss/${model}.goldens.json"
             "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")
     endforeach()
+    add_executable(raw-decoder-tests tests/RawDecoderTests.cpp)
+    target_link_libraries(raw-decoder-tests PRIVATE DecoderCore)
+    add_test(NAME raw-decoder COMMAND raw-decoder-tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/nss-english.nsslm" "${CMAKE_CURRENT_SOURCE_DIR}/../keyboard/langdata.bin")
     add_executable(decoder-core-tests tests/PackedLexiconTests.cpp)
     target_link_libraries(decoder-core-tests PRIVATE DecoderCore)
     # These small portable executables use assert for their independent goldens.
@@ -68,6 +72,7 @@ if(KB_BUILD_TESTS)
         target_compile_options(candidate-generation-tests PRIVATE -UNDEBUG)
         target_compile_options(neural-search-tests PRIVATE -UNDEBUG)
         target_compile_options(decoder-core-tests PRIVATE -UNDEBUG)
+        target_compile_options(raw-decoder-tests PRIVATE -UNDEBUG)
         target_compile_options(nss-word-model-tests PRIVATE -UNDEBUG)
         target_compile_options(nss-fst-tests PRIVATE -UNDEBUG)
     endif()

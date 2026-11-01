@@ -1146,6 +1146,12 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
         // _resourceOwner retains the mapping, EngineSession retains Engine.
         auto packed = std::shared_ptr<const kb::PackedLexicon>(view.packed, [owner = _resourceOwner](const kb::PackedLexicon *) { (void)owner; });
         kb::EngineOptions options; options.correction = KBPolicy(policy); options.profile = profile;
+#if KB_INTERNAL_NSS_RAW
+        // Internal device build only (GCC_PREPROCESSOR_DEFINITIONS KB_INTERNAL_NSS_RAW=1, with
+        // INTERNAL_NSS): the language models without the correction rules (EngineOptions::raw),
+        // NeuralFst exact scores with the published fallback kept as a floor.
+        options.raw = true; options.nssExact = true; options.nssUnigramFloor = true;
+#endif
         // The neural model keeps its own mapping alive (KBNeuralWordModel's owner).
         _engine = std::make_shared<kb::Engine>(packed, options, [model nativeModel], neural ? [neural nativeModel] : nullptr);
         _session = _engine->createSession();

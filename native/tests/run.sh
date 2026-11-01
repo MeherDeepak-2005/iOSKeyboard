@@ -43,3 +43,9 @@ done
   "$repo_root/native/DecoderCore/src/"*.cpp \
   "$repo_root/native/tests/NeuralFstTests.cpp" -o "$work_dir/nss-fst-tests"
 "$work_dir/nss-fst-tests" "$repo_root/keyboard/nss-english.nsslm" "$repo_root/keyboard/langdata.bin"
+
+"${CXX:-clang++}" -std=c++20 -Wall -Wextra -Werror -g \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  "$repo_root/native/DecoderCore/src/"*.cpp \
+  "$repo_root/native/tests/RawDecoderTests.cpp" -o "$work_dir/raw-decoder-tests"
+"$work_dir/raw-decoder-tests" "$repo_root/keyboard/nss-english.nsslm" "$repo_root/keyboard/langdata.bin"

@@ -64,6 +64,22 @@ struct EngineView {
     double penalty(std::string_view word) const;
 };
 struct EngineOptions {
+    // Raw decoding, to measure the language models themselves: both tiers run the same
+    // joint search (NeuralFstSearch) over their own graph (NeuralFst or NgramFst), with
+    // the channel's spelling rules, the correction gate and the candidate heuristics
+    // switched off. See EngineSession::decodeRaw.
+    bool raw = false;
+    // NeuralFst::Options::exact: exact vocabulary scores and <unk> shared outside the
+    // vocabulary. false reproduces the published graph (Codex's paper replica).
+    bool nssExact = true;
+    // NeuralFst::Options::unigramFloor (with nssExact): vocabulary words keep the
+    // published fallback path as a floor.
+    bool nssUnigramFloor = false;
+    // NeuralFst::Options::unknownExponent (with nssExact).
+    double nssUnknownExponent = 1;
+    // Raw mode, nss tier, nssExact: typed text outside the lexicon is scored by
+    // NeuralFst::typedUnknown (the model's P(<unk>) in context), not the n-gram constant.
+    bool nssTypedUnknown = false;
     CorrectionPolicy correction;
     Smoothing smoothing = Smoothing::wittenBell;
     bool profile = false;
@@ -126,10 +142,14 @@ class EngineSession final {
     std::vector<std::optional<TouchOffset>> seedTaps_;
     std::unique_ptr<NeuralFst> neuralGraph_;
     std::unique_ptr<NeuralFstSearch> neuralSearch_;
+    std::unique_ptr<NgramFst> ngramGraph_;
+    std::unique_ptr<NeuralFstSearch> rawSearch_;
+    const SearchGraph* rawGraph_ = nullptr;
     RequestIdentity neuralIdentity_;
     std::string neuralTyped_;
     bool neuralIdentityReady_ = false;
     DecodeOutput decodeNeural(const DecodeInput&, const EngineView&, const CancellationToken*);
+    DecodeOutput decodeRaw(const DecodeInput&, const EngineView&, const CancellationToken*, bool neural);
     std::vector<RankedRow> score(std::vector<ChannelCandidate> rows, const std::optional<ChannelCandidate>& typed,
         const DecodeInput& input, const EngineView& view, const std::unordered_set<std::string>* completionOnly = nullptr) const;
 public:
@@ -140,7 +160,7 @@ public:
     std::vector<RankedRow> updateGlide(std::span<const Point> path, const GlideLayout&, const EngineView&,
         std::span<const std::string> dynamicWords, const CancellationToken* = nullptr);
     void endGlide() { glide_.reset(); glideContext_.clear(); }
-    void memoryPressure() { search_.reset(); seedTaps_.clear(); neuralSearch_.reset(); neuralGraph_.reset(); neuralIdentityReady_ = false; endGlide(); }
+    void memoryPressure() { search_.reset(); seedTaps_.clear(); neuralSearch_.reset(); rawSearch_.reset(); rawGraph_ = nullptr; neuralGraph_.reset(); ngramGraph_.reset(); neuralIdentityReady_ = false; endGlide(); }
     // Model steps the session's NSS context ring has run (0 without the NSS tier).
     std::uint64_t neuralSteps() const noexcept { return neuralGraph_ ? neuralGraph_->modelSteps() : 0; }
 };

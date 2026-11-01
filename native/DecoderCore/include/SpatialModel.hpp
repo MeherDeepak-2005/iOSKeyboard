@@ -62,6 +62,9 @@ std::optional<GridPoint> grid(std::uint8_t letter) noexcept;
 // firstVowelSubstitutionCost instead.
 double substitutionCost(std::uint8_t intended, std::uint8_t typed,
                         std::optional<TouchOffset> tap = {}, bool typedFirst = false) noexcept;
+// Key geometry alone: squared distance / 2 + substitutionBase, no spelling confusions
+// (vowel for vowel, c/k/s/z). The raw decoder's channel (EngineOptions::raw).
+double geometricSubstitutionCost(std::uint8_t intended, std::uint8_t typed, std::optional<TouchOffset> tap = {}) noexcept;
 // The first-letter substitution that decides which first letters the retained search seeds:
 // as substitutionCost at the first letter, but vowel for vowel only by key distance and no
 // spelling first-letter discount. Seeding every confusable first letter overflows the state

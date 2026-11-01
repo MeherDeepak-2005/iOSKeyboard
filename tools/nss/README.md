@@ -22,6 +22,47 @@ python3 tools/nss/expand_reference_model.py \
   tools/nss/artifacts/baseline-step8000.nsslm keyboard/nss-english.nsslm
 ```
 
+## Raw decoding: the language models without rules
+
+`EngineOptions::raw` (`KB_RAW=1` in the autocorrect harness) measures what the language
+models do on their own. Both tiers run the same joint search (`NeuralFstSearch`) and
+differ only in the language graph:
+
+- `nss`: `NeuralFst`, the paper's neural search space.
+- `ngram`: `NgramFst`, the production Witten–Bell n-gram as a backoff graph (the
+  paper's control arm). It reproduces `LanguageModel` scores to float precision
+  (`native/tests/RawDecoderTests.cpp`). Its word states expand under the same rule as
+  ExtendLM, so the search is identical.
+
+`NeuralFst` scores words exactly (`EngineOptions::nssExact`, on by default, both modes):
+every vocabulary word gets its own model probability, also below the e^-15 arc
+threshold, which then only decides which words open a state of their own; a lexicon
+word outside the vocabulary gets P(`<unk>`|ctx) × share × u(w) / U, where u = pack
+frequency + 1, U sums u over the lexicon words outside the vocabulary, and share is
+the model's `unknownLexiconShare`. The published graph (Fig. 3) gives below-threshold
+vocabulary words and every other word P(`<unk>`|ctx) times their share of the whole
+lexicon instead; `nssExact = false` (`KB_NSS_PAPER=1`) restores it.
+
+Switched off in raw mode: the channel's spelling rules (doubled letters, vowel and
+c/k/s/z confusions, cheap apostrophe skips; first-letter penalties were never in the
+joint search), the correction gate and its margins, the i-forms rule, minimum
+correction length, the split margin, candidate funding, context injection, broad
+recovery, the completion cap, residual safety demotions and personal history. Kept:
+key geometry with uniform insertion (1.6), deletion (1.1) and transposition (0.65)
+costs, the missing-space and c/v/b/n/m-for-space channel, blocked-word exclusion, the
+user's keep list (a correction the user undid is not made again), and the channel weight (4). The best complete word is committed when its score beats the
+typed text's: a lexicon word by its graph score, any other string by the n-gram's
+context-free unknown-word mass for both tiers. The production paths are unchanged.
+
+```sh
+cd tools/evaluation/autocorrect
+KB_RAW=1 python3 evaluate.py run raw-ngram
+KB_RAW=1 KB_NSS=../../nss/artifacts/generic-final.nsslm python3 evaluate.py run raw-nss
+KB_RAW=1 KB_NSS_PAPER=1 KB_NSS=../../nss/artifacts/generic-final.nsslm python3 evaluate.py run raw-nss-paper
+python3 evaluate.py score raw-nss --vs raw-ngram
+python3 context_report.py raw-ngram raw-nss
+```
+
 ## Historical checkpoint implementation
 
 # Neural search space (NSS) word language model

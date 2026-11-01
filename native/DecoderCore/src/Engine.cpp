@@ -25,7 +25,7 @@ Engine::Engine(std::shared_ptr<const PackedLexicon> packed, EngineOptions option
         std::shared_ptr<const NeuralWordModel> neural)
     : packed_(std::move(packed)), options_(options), language_(language ? std::move(language) : std::make_shared<const LanguageModel>(packed_.get(), options.smoothing)),
       neural_(std::move(neural)) {
-    if (neural_) {
+    if (neural_ || options_.raw) {
         if (!packed_) throw std::invalid_argument("the neural search space needs a packed lexicon");
         neuralLexicon_ = std::make_shared<NeuralLexicon>(*packed_);
     }
@@ -95,6 +95,7 @@ DecodeOutput EngineSession::decode(const DecodeInput& input, const EngineView& v
             if(at<=input.characterOffsets[i-1]||at>typed.size()||(at<typed.size()&&(static_cast<unsigned char>(typed[at])&0xc0)==0x80))throw std::invalid_argument("invalid character boundaries");
         }
     }
+    if (engine_->options_.raw) return decodeRaw(input, view, token, neural);
     if (neural) return decodeNeural(input, view, token);
     if (typed.empty()) {
         auto next = nextWords(input.context, view, 8); std::vector<std::string> selected;
@@ -198,7 +199,7 @@ std::vector<RankedRow> EngineSession::updateGlide(std::span<const Point> path, c
     if (token && token->cancelled()) return {};
     if (!glide_) beginGlide({});
     if (engine_->neural_) {
-        if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_);
+        if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_, NeuralFst::Options{engine_->options_.nssExact, engine_->options_.nssUnigramFloor, engine_->options_.nssUnknownExponent});
         neuralGraph_->update(glideContext_);
         std::vector<Point> points;
         for (auto point : path) points.push_back(toGrid(point, layout));
@@ -277,7 +278,7 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
     const bool newField = !neuralIdentityReady_ || neuralIdentity_.fieldRevision != input.identity.fieldRevision ||
         neuralIdentity_.vocabularyEpoch != input.identity.vocabularyEpoch || neuralIdentity_.personalizationEpoch != input.identity.personalizationEpoch;
     const bool newWord = newField || neuralIdentity_.wordSessionID != input.identity.wordSessionID;
-    if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_);
+    if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_, NeuralFst::Options{engine_->options_.nssExact, engine_->options_.nssUnigramFloor, engine_->options_.nssUnknownExponent});
     if (newField) neuralGraph_->resetContext();
     const bool edited = !input.normalized.starts_with(neuralTyped_);
     neuralGraph_->update(input.context, newWord || edited);
@@ -288,12 +289,12 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
     const auto& typed = input.normalized;
     std::vector<RankedRow> ranked, correctionRows;
     if (typed.empty()) {
-        // Next-word prediction traverses BOTH neural and unigram paths.
-        for (std::uint32_t id = 0; id < engine_->packed_->wordCount(); ++id) {
+        // Next-word prediction over BOTH neural and unigram paths: the best arcs and the most
+        // frequent words reached through <unk> (NeuralFst::best), not a scan of the lexicon.
+        for (const auto& [id, language] : neuralGraph_->best(0, 64)) {
             const auto word = std::string(engine_->packed_->word(id));
             if (view.lexicon.isBlocked(word)) continue;
-            const auto language = neuralGraph_->wordScore(0, id);
-            if (std::isfinite(language)) ranked.push_back({{word, 0, 0}, word, view.penalty(word), language, language, {}});
+            ranked.push_back({{word, 0, 0}, word, view.penalty(word), language, language, {}});
         }
     } else { ranked = neuralSearch_->decode(typed, input.taps, cancelled); correctionRows = neuralSearch_->completed(); }
     if (cancelled()) { neuralGraph_->update(input.context, true); neuralSearch_->reset(); out.status = EngineStatus::cancelled; return out; }
@@ -348,6 +349,89 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
     if (out.correction.word) {
         std::erase(out.suggestions, *out.correction.word); out.suggestions.insert(out.suggestions.begin(), *out.correction.word);
     } else if (std::find(out.suggestions.begin(), out.suggestions.end(), typed) == out.suggestions.end()) {
+        if (out.suggestions.size() >= 3) out.suggestions.back() = input.word; else out.suggestions.push_back(input.word);
+    }
+    if (out.suggestions.size() > 3) out.suggestions.resize(3);
+    if (engine_->options_.profile) out.timings.generation = elapsed(started);
+    return out;
+}
+} // namespace kb
+
+namespace kb {
+// Raw decoding (EngineOptions::raw): what the language model and the channel do alone.
+// Both tiers run the same joint search (C o L o G) and differ only in G, the neural
+// search space or the production n-gram as its backoff graph. The channel has no spelling
+// rules; there is no correction gate, i-forms rule, minimum length, candidate funding,
+// injection, recovery or completion cap. The best complete word is committed when its
+// score (log P - channelWeight * cost) beats the typed text's: a lexicon word scores by
+// G, any other string by the n-gram's context-free unknown-word mass (literal decoding,
+// the same for both). Blocked words stay excluded; residual safety demotions and personal
+// history are not applied.
+DecodeOutput EngineSession::decodeRaw(const DecodeInput& input, const EngineView& view, const CancellationToken* token, bool neural) {
+    DecodeOutput out; out.identity = input.identity;
+    const auto started = Clock::now();
+    auto cancelled = [&] { return token && token->cancelled(); };
+    SearchGraph* graph;
+    if (neural) {
+        if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_, NeuralFst::Options{engine_->options_.nssExact, engine_->options_.nssUnigramFloor, engine_->options_.nssUnknownExponent});
+        graph = neuralGraph_.get();
+    } else {
+        if (!ngramGraph_) ngramGraph_ = std::make_unique<NgramFst>(*engine_->packed_, engine_->neuralLexicon_);
+        graph = ngramGraph_.get();
+    }
+    const bool newField = !neuralIdentityReady_ || neuralIdentity_.fieldRevision != input.identity.fieldRevision ||
+        neuralIdentity_.vocabularyEpoch != input.identity.vocabularyEpoch || neuralIdentity_.personalizationEpoch != input.identity.personalizationEpoch;
+    const bool newWord = newField || neuralIdentity_.wordSessionID != input.identity.wordSessionID;
+    if (newField) graph->resetContext();
+    graph->update(input.context, newWord || !input.normalized.starts_with(neuralTyped_));
+    if (!rawSearch_ || rawGraph_ != graph) {
+        rawSearch_ = std::make_unique<NeuralFstSearch>(*graph, NeuralFstSearch::Options{16, 512, true}); rawGraph_ = graph;
+    }
+    if (newWord || neuralIdentity_.layoutRevision != input.identity.layoutRevision) rawSearch_->reset();
+    neuralIdentity_ = input.identity; neuralIdentityReady_ = true; neuralTyped_ = input.normalized;
+    if (cancelled()) { out.status = EngineStatus::cancelled; return out; }
+    const auto& typed = input.normalized;
+    auto blocked = [&](const RankedRow& row) { return view.lexicon.isBlocked(row.key); };
+    if (typed.empty()) {
+        for (const auto& [id, language] : graph->best(0, 16)) {
+            std::string word(engine_->packed_->word(id));
+            if (view.lexicon.isBlocked(word)) continue;
+            out.suggestions.push_back(std::move(word));
+            if (out.suggestions.size() == 3) break;
+        }
+        return out;
+    }
+    auto ranked = rawSearch_->decode(typed, input.taps, cancelled);
+    auto complete = rawSearch_->completed();
+    if (cancelled()) { graph->update(input.context, true); rawSearch_->reset(); out.status = EngineStatus::cancelled; return out; }
+    std::erase_if(ranked, blocked); std::erase_if(complete, blocked);
+    double literal;
+    if (auto id = engine_->packed_->wordID(typed); id && std::isfinite(engine_->neuralLexicon_->unigram[std::size_t(*id)]))
+        literal = graph->wordScore(0, std::uint32_t(*id));
+    else if (neural && engine_->options_.nssExact && engine_->options_.nssTypedUnknown)
+        literal = neuralGraph_->typedUnknown();
+    else {
+        static const PersonalCounts none;
+        std::vector<std::string> text{typed};
+        literal = engine_->language_->scores(text, {}, none, view.lexicon)[0];
+    }
+    const RankedRow typedRow{{typed, 0, 0}, typed, 0, literal, literal, {}};
+    std::erase_if(ranked, [&](const auto& row) { return row.key == typed; });
+    std::erase_if(complete, [&](const auto& row) { return row.key == typed; });
+    auto best = std::max_element(complete.begin(), complete.end(), [](const auto& a, const auto& b) { return a.score == b.score ? a.key > b.key : a.score < b.score; });
+    // A kept word (the user undid a correction of it) stays as typed, as in production.
+    if (best != complete.end() && best->score > typedRow.score && !input.kept)
+        out.correction = {best->key, best->score - typedRow.score, 0, {}};
+    ranked.push_back(typedRow);
+    std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.score == b.score ? a.key < b.key : a.score > b.score; });
+    for (const auto& row : ranked) {
+        if (out.suggestions.size() < 3 && row.key != typed) out.suggestions.push_back(row.key);
+        if (out.candidates.size() < 24) out.candidates.push_back({row, row.key == typed ? CandidateSource::typed
+            : row.key.find(' ') != std::string::npos ? CandidateSource::splitCorrection : CandidateSource::fuzzyLexicon, row.score - typedRow.score});
+    }
+    if (out.correction.word) {
+        std::erase(out.suggestions, *out.correction.word); out.suggestions.insert(out.suggestions.begin(), *out.correction.word);
+    } else {
         if (out.suggestions.size() >= 3) out.suggestions.back() = input.word; else out.suggestions.push_back(input.word);
     }
     if (out.suggestions.size() > 3) out.suggestions.resize(3);
