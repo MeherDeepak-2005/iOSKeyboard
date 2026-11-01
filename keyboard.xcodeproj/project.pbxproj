@@ -13,12 +13,13 @@
 		537ACB7AD1DD2A2ACE8840BC /* native/DecoderCore/src/Multiword.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 80EEF91EA358A2B49146391D /* native/DecoderCore/src/Multiword.cpp */; };
 		564C0156B8511197F1D5CAC3 /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
 		564C0156B8511197F1D5CAD1 /* native/DecoderCore/src/NeuralLanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE61 /* native/DecoderCore/src/NeuralLanguageModel.cpp */; };
-		A90000000000000000000001 /* native/DecoderCore/src/NeuralFst.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000003 /* native/DecoderCore/src/NeuralFst.cpp */; };
 		693D552B03AAA75F14352C91 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
 		83C6F30D2FE821180014EA39 /* demo_keyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 83C6F3062FE821180014EA39 /* demo_keyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		8A44AE7FDAFC7A71135ECF1A /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
 		8A77364AA091280987C485A1 /* native/DecoderCore/src/Glide.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11D041A428362B3FB144369F /* native/DecoderCore/src/Glide.cpp */; };
 		A188A11F039D8AA323A727B8 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
+		A90000000000000000000001 /* native/DecoderCore/src/NeuralFst.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000003 /* native/DecoderCore/src/NeuralFst.cpp */; };
+		A90000000000000000000002 /* native/DecoderCore/src/NeuralFst.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000003 /* native/DecoderCore/src/NeuralFst.cpp */; };
 		B12000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */; };
 		B12000000000000000000002 /* native/DecoderCore/src/PackedLexicon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */; };
 		B12000000000000000000003 /* native/iOS/KBDecoderBridge.mm in Sources */ = {isa = PBXBuildFile; fileRef = B11000000000000000000002 /* native/iOS/KBDecoderBridge.mm */; };
@@ -40,7 +41,6 @@
 		D319972CC0421BE8B12A84FE /* native/DecoderCore/src/Adaptation.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */; };
 		D324FF41223D3892D5DB1F3D /* native/DecoderCore/src/NeuralSearch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */; };
 		D324FF41223D3892D5DB1F4D /* native/DecoderCore/src/NeuralLanguageModel.cpp in Sources */ = {isa = PBXBuildFile; fileRef = E7EC13FF09A92CB8EBA7BE61 /* native/DecoderCore/src/NeuralLanguageModel.cpp */; };
-		A90000000000000000000002 /* native/DecoderCore/src/NeuralFst.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A90000000000000000000003 /* native/DecoderCore/src/NeuralFst.cpp */; };
 		ED1F51886B6A6B2857E4FA31 /* native/DecoderCore/src/Ranking.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 7AAA5C503999775743E6F48F /* native/DecoderCore/src/Ranking.cpp */; };
 /* End PBXBuildFile section */
 
@@ -93,6 +93,7 @@
 		A10000012FE821180014EA39 /* Extension.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Extension.xcconfig; sourceTree = "<group>"; };
 		A10000022FE821180014EA39 /* Secrets.xcconfig.example */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig.example; sourceTree = "<group>"; };
 		A56BDB52672A8748E7E9AC09 /* native/DecoderCore/src/Adaptation.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Adaptation.cpp; sourceTree = SOURCE_ROOT; };
+		A90000000000000000000003 /* native/DecoderCore/src/NeuralFst.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralFst.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000001 /* native/DecoderCore/src/PackedLexicon.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/PackedLexicon.cpp; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000002 /* native/iOS/KBDecoderBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = native/iOS/KBDecoderBridge.mm; sourceTree = SOURCE_ROOT; };
 		B11000000000000000000003 /* native/DecoderCore/src/SpatialModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/SpatialModel.cpp; sourceTree = SOURCE_ROOT; };
@@ -105,7 +106,6 @@
 		D21000000000000000000004 /* native/DecoderCore/src/Safety.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/Safety.cpp; sourceTree = SOURCE_ROOT; };
 		E7EC13FF09A92CB8EBA7BE57 /* native/DecoderCore/src/NeuralSearch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralSearch.cpp; sourceTree = SOURCE_ROOT; };
 		E7EC13FF09A92CB8EBA7BE61 /* native/DecoderCore/src/NeuralLanguageModel.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralLanguageModel.cpp; sourceTree = SOURCE_ROOT; };
-		A90000000000000000000003 /* native/DecoderCore/src/NeuralFst.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = native/DecoderCore/src/NeuralFst.cpp; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -157,6 +157,7 @@
 				Shared/KBSafetyLexicon.swift,
 				Shared/KBSettings.swift,
 				Shared/KBStats.swift,
+				Shared/KBTypingRecorder.swift,
 				Shared/LanguagePackHealth.swift,
 				"Shared/UIColor+Hex.swift",
 				telugu_langdata.bin,
@@ -172,6 +173,7 @@
 				Views/Emoji/EmojiSearchHeader.swift,
 				Views/Emoji/EmojiStore.swift,
 				Views/Keyboard/KeyAlternativesView.swift,
+				Views/Keyboard/KeyboardInputView.swift,
 				Views/Keyboard/KeyboardMetrics.swift,
 				Views/Keyboard/KeyboardMetricsPreview.swift,
 				Views/Keyboard/KeyboardView.swift,
@@ -192,9 +194,9 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				langdata.bin,
-				"nss-english.nsslm",
-				"nss-english.manifest.json",
 				"nss-english.goldens.json",
+				"nss-english.manifest.json",
+				"nss-english.nsslm",
 				safety.kbguard,
 			);
 			target = 83C6F2B82FE7B47E0014EA39 /* keyboard */;
@@ -739,7 +741,7 @@
 				CODE_SIGN_ENTITLEMENTS = keyboard/keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9AMJFQB2M3;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Glyph;
@@ -754,7 +756,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboard;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -776,7 +778,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = 9AMJFQB2M3;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				ENABLE_CODE_COVERAGE = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -792,7 +794,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboard;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				STRIP_INSTALLED_PRODUCT = YES;
@@ -814,9 +816,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/native/DecoderCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardTests;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -835,9 +839,11 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/native/DecoderCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardTests;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -857,7 +863,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardUITests;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -877,7 +884,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.swiftuimasterclass.keyboardUITests;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -896,7 +904,7 @@
 				CODE_SIGN_ENTITLEMENTS = demo_keyboard/demo_keyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 9AMJFQB2M3;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
@@ -909,7 +917,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.swiftuimasterclass.keyboard.demo-keyboard";
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -932,7 +940,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				DEPLOYMENT_POSTPROCESSING = YES;
-				DEVELOPMENT_TEAM = 9AMJFQB2M3;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				ENABLE_CODE_COVERAGE = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = demo_keyboard/Info.plist;
@@ -945,7 +953,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.swiftuimasterclass.keyboard.demo-keyboard";
+				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.keyboard;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

@@ -13,10 +13,20 @@ extension KeyboardViewController {
         updateAutoShift()
     }
 
+    private static let documentIdentifierSelector = NSSelectorFromString("documentIdentifier")
+
     func readHostDocument() -> HostDocumentSnapshot? {
         guard hostConnectionReady, !isSecureField else { return nil }
         let proxy = textDocumentProxy
-        return HostDocumentSnapshot(documentID: proxy.documentIdentifier,
+        // Swift imports documentIdentifier as non-optional, but a disconnecting host returns
+        // nil and the bridge traps (seen on device 31 Oct and 1 Nov 2026). Read it through the
+        // Objective-C runtime: no identifier means the document is unavailable.
+        guard let documentID = (proxy as AnyObject).perform(Self.documentIdentifierSelector)?
+                .takeUnretainedValue() as? UUID else {
+            KBDiagnostics.noteIntegrityEvent("host-document-id-missing")
+            return nil
+        }
+        return HostDocumentSnapshot(documentID: documentID,
             before: proxy.documentContextBeforeInput, after: proxy.documentContextAfterInput,
             selection: proxy.selectedText, hasText: proxy.hasText)
     }
@@ -28,6 +38,7 @@ extension KeyboardViewController {
         let change = documentReconciler.observe(state ?? readHostDocument())
         switch change {
         case .changed, .cleared:
+            KBDiagnostics.noteIntegrityEvent("host-document-reset")
             resetDocumentPresentation()
             keyboard?.dismissOverlaysIfActive()
             scheduleSuggestions()
@@ -87,6 +98,7 @@ extension KeyboardViewController {
         }
         documentReconciler.endKeyboardEdit(finalState)
         if unexpectedInsertion || (finalState?.isEmpty == true && lastCorrection != nil) {
+            KBDiagnostics.noteIntegrityEvent("host-edit-diverged")
             resetDocumentPresentation()
             scheduleSuggestions()
         }

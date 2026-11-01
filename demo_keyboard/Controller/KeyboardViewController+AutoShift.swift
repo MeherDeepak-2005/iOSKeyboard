@@ -23,7 +23,7 @@ extension KeyboardViewController {
         beginKeyboardEdit()
         defer { endKeyboardEdit() }
 		noteProxyEdit()
-		noteTap()
+		if keyboard?.isRepeatingKey != true { noteTap() }
 		// A single Backspace right after a correction undoes it back to the typed word.
 		if let c = lastCorrection {
 			// Validate the correction is still present in the document before undoing.
@@ -42,6 +42,7 @@ extension KeyboardViewController {
 				lastCorrection = nil
 				let erased = ctx.last
 				textDocumentProxy.deleteBackward()
+				traceErase(erased)
 				if let erased, isWordChar(erased), !wordTaps.isEmpty { wordTaps.removeLast() }
 				else { wordTaps.removeAll(keepingCapacity: true) }
 				trackErase(of: erased)
@@ -60,6 +61,8 @@ extension KeyboardViewController {
 			lastCorrection = nil
 			resetEraseTracking()
 			wordTaps.removeAll(keepingCapacity: true)   // word rewritten — offsets no longer align
+			typingTrace = TypingTrace()
+			if permitsTypingData { KBDiagnostics.noteBackspace(erasedLetter: nil) }
 			guard replaceHostSuffix(expected, with: c.original) else {
 				updateAutoShift()
 				scheduleSuggestions()
@@ -68,6 +71,7 @@ extension KeyboardViewController {
 			// WMR: backspacing away a committed correction/pick/glide is the clearest
 			// "user edited a word after committing it" signal. A reverted engine autocorrect
 			// additionally counts toward the over-correction rate.
+			recordTyping("undo", text: c.corrected, replacement: c.original, evidence: c.fromAutocorrect ? "explicit-autocorrect-undo" : "explicit-retraction", relatedWord: c.recordedWordSessionID)
 			KBDiagnostics.noteWordModified(revertedCorrection: c.fromAutocorrect)
 			// Walk back the exact learned replacement for every source (autocorrect,
 			// completion, or Glide). Autocorrect additionally needs a session keep so
@@ -84,6 +88,7 @@ extension KeyboardViewController {
 		}
 		let erased = textDocumentProxy.documentContextBeforeInput?.last
 		textDocumentProxy.deleteBackward()
+		traceErase(erased)
 		if let erased, isWordChar(erased), !wordTaps.isEmpty { wordTaps.removeLast() }
 		else { wordTaps.removeAll(keepingCapacity: true) }
 		trackErase(of: erased)
@@ -136,6 +141,7 @@ extension KeyboardViewController {
 		case .complete(let partial):
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
 			guard replaceHostSuffix(partial, with: s + " ") else { return }
+			recordTyping("suggestion-pick", text: pickMode.replacing, replacement: s, evidence: "explicit-selection")
 			learnCommittedWord(context: ctx, word: s)
 			if !isSecureField { KBStats.noteCommitted(glided: false) }
 			// Swapping the typed word for a different suggestion is strong evidence the
@@ -146,19 +152,23 @@ extension KeyboardViewController {
 			}
 			// A completion pick finalizes a word the user chose (not an engine autocorrect).
 			recordCommitMetrics(s, autocorrected: false)
-			lastCorrection = Correction(original: partial, corrected: s, trailing: " ", fromAutocorrect: false)
+			lastCorrection = Correction(original: partial, corrected: s, trailing: " ", fromAutocorrect: false, recordedWordSessionID: wordSessionID)
+			advanceWordSession()
 		case .predict:
 			let ctx = contextWords(textDocumentProxy.documentContextBeforeInput ?? "", max: 8)
 			insertIntoHost(s + " ")
+			recordTyping("prediction-pick", replacement: s, evidence: "explicit-selection")
 			learnCommittedWord(context: ctx, word: s)
 			if !isSecureField { KBStats.noteCommitted(glided: false) }
 			// Tapping a next-word prediction: a finalized word and, if it was armed, a direct NWP hit.
 			recordCommitMetrics(s, autocorrected: false)
+			advanceWordSession()
 			lastCorrection = nil        // nothing the user "typed" to revert to
 		case .revert(let original):
 			let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
 			if s == original, let corrected = lastCompleteWord(ctx) {
 				guard replaceHostSuffix(corrected + " ", with: original + " ") else { return }
+				recordTyping("undo", text: corrected, replacement: original, evidence: "explicit-autocorrect-undo", relatedWord: lastCorrection?.recordedWordSessionID)
 				rejectCorrection(original)
 				recordReplacement(original: corrected, replacement: original)
 				// Tapping the undo chip edits an already-committed (auto)corrected word.
@@ -168,13 +178,11 @@ extension KeyboardViewController {
 			}
 			lastCorrection = nil
 		case .glided(let committed):
+			let correctedWordID = lastCorrection?.recordedWordSessionID
 			// Swap the glided word for one of its shape alternatives: replace word + its
 			// trailing space, learn the replacement, heal the wrong learn (Gboard-style).
 			// #37: the picked alternative is the TRUE word — feed its shape cost as the
 			// correct sample so the decoder learns to rank the user's real intent higher.
-			if pendingGlideVerdict { pendingGlideVerdict = false; engine.glideCorrected(to: s) }
-			KBStats.confirm(pendingGlideStatsID)
-			pendingGlideStatsID = nil
 			let oldAlternatives: [String]
 			if case .glide(_, let alternatives) = suggestionPresentation {
 				oldAlternatives = alternatives
@@ -185,11 +193,15 @@ extension KeyboardViewController {
 			let replacement = SuggestionCasePolicy.display(s,
 				sentenceStart: shouldAutoShift(textDocumentProxy.documentContextBeforeInput))
 			guard replaceHostSuffix(committed + " ", with: replacement + " ") else { return }
+			if pendingGlideVerdict { pendingGlideVerdict = false; engine.glideCorrected(to: s) }
+			KBStats.confirm(pendingGlideStatsID)
+			pendingGlideStatsID = nil
+			recordTyping("glide-selection", text: committed, replacement: s, evidence: "explicit-selection", relatedWord: correctedWordID)
 			learnCommittedWord(context: ctx, word: s)
 			if committed.lowercased() != s.lowercased() {
 				recordReplacement(original: committed, replacement: s)
 			}
-			lastCorrection = Correction(original: "", corrected: replacement, trailing: " ", fromAutocorrect: false)
+			lastCorrection = Correction(original: "", corrected: replacement, trailing: " ", fromAutocorrect: false, recordedWordSessionID: correctedWordID)
 			// Swapping a committed glide word for an alternative edits an already-committed word.
 			if committed.lowercased() != s.lowercased() {
 				KBDiagnostics.noteWordModified(revertedCorrection: false)

@@ -7,6 +7,7 @@ final class KeyboardViewController: UIInputViewController {
 
 	var keyboard: KeyboardView!
 	var heightConstraint: NSLayoutConstraint?
+	private var heightMismatchActive = false
 	let engine = KeyboardEngine.shared   // process-wide: see KeyboardEngine.shared
 	private var personalDataResetObserver: KBPersonalDataResetObserver?
 	private var configurationObserver: KBConfigurationObserver?
@@ -86,7 +87,8 @@ final class KeyboardViewController: UIInputViewController {
 		let original: String       // what the user actually typed
 		let corrected: String      // what we replaced it with
 		var trailing: String       // boundary/space/newline inserted after it (may be "")
-		let fromAutocorrect: Bool  // true = engine autocorrect (re-correction must be suppressed on undo)
+		let fromAutocorrect: Bool  // engine autocorrect: suppress re-correction on undo
+		var recordedWordSessionID: UInt64? = nil
 	}
 	var lastCorrection: Correction?
 
@@ -109,6 +111,18 @@ final class KeyboardViewController: UIInputViewController {
 	/// the word length, so any desync is silently safe.
 	var wordTaps: [KeyTap?] = []
 
+	/// Typing-speed and per-key evidence for the word being typed: the typing recorder and
+	/// the per-key diagnostics read it, the decoder never does. Reset with the word session.
+	struct TypingTrace {
+		var keystrokes: [KBTypingRecorder.Keystroke] = []
+		var startedAt: Double?
+		var backspaces = 0
+		/// Letters erased from this word, in reading order; the next letters typed replace them.
+		var erasedLetters: [Character] = []
+	}
+	var typingTrace = TypingTrace()
+	var lastKeyUptime = 0.0
+
 	/// A glided word is awaiting an explicit verdict. Typing on is intentionally
 	/// unlabelled: only selecting an alternative is safe supervision for adaptation.
 	var pendingGlideVerdict = false
@@ -127,6 +141,34 @@ final class KeyboardViewController: UIInputViewController {
 	var showsGlobe = false
 
 	let boundary = CharacterSet(charactersIn: " .,!?;:")
+
+	override func loadView() {
+		let root = KeyboardInputView(frame: .zero, inputViewStyle: .keyboard)
+		root.allowsSelfSizing = true
+		view = root
+	}
+
+	func updateKeyboardHeight() {
+		guard let keyboard else { return }
+		let desired = keyboard.keyboardHeight
+		guard desired.isFinite, desired > 0 else { return }
+		rootInputView?.desiredHeight = desired
+		heightConstraint?.constant = desired
+		let size = CGSize(width: view.bounds.width, height: desired)
+		if preferredContentSize != size { preferredContentSize = size }
+	}
+
+	private var rootInputView: KeyboardInputView? { view as? KeyboardInputView }
+
+	override func viewDidLayoutSubviews() {
+		super.viewDidLayoutSubviews()
+		updateKeyboardHeight()
+		if let keyboard, view.window != nil {
+			let mismatch = abs(view.bounds.height - keyboard.keyboardHeight) > 2
+			if mismatch && !heightMismatchActive { KBDiagnostics.noteIntegrityEvent("keyboard-height-mismatch") }
+			heightMismatchActive = mismatch
+		}
+	}
 
 	override func viewDidLoad() {
 		super.viewDidLoad()
@@ -233,6 +275,12 @@ final class KeyboardViewController: UIInputViewController {
 		kb.accessibilityElementsHidden = !hostConnectionReady
 		kb.hapticsEnabled   = KBSettings.haptics
 		kb.glideEnabled     = activeLanguageMode == .english
+		let touchViewID = UUID().uuidString
+		kb.onTouchSample = { [weak self, weak kb] phase, id, key, time, tap in
+			guard let self, let kb, self.keyboard === kb,
+				!kb.isEmojiSearching, !kb.isMediaSearching else { return }
+			self.recordTyping(phase, text: key, tap: tap, touchID: "\(touchViewID):\(id)", at: time)
+		}
 		kb.onInsert         = { [weak self] ch, tap in self?.handleInsert(ch, tap: tap) }
 		kb.onKeyOutput      = { [weak self] output, tap in self?.handleKeyOutput(output, tap: tap) }
 		kb.onReplaceLastInput = { [weak self] base, replacement in
@@ -272,10 +320,10 @@ final class KeyboardViewController: UIInputViewController {
 		// tall keyboard with dead space beneath the keys.
 		kb.onHeightChange   = { [weak self, weak kb] in
 			guard let self, let kb, self.keyboard === kb else { return }
-			self.heightConstraint?.constant = kb.keyboardHeight
+			self.updateKeyboardHeight()
 		}
-		kb.onGeometryChange = { [weak self] in
-			guard let self else { return }
+		kb.onGeometryChange = { [weak self, weak kb] in
+			guard let self, let kb, self.keyboard === kb else { return }
 			self.layoutRevision &+= 1
 			self.invalidateSuggestionRequests(cancelEngineWork: true)
 			if self.hostConnectionReady { self.scheduleSuggestions() }
@@ -302,6 +350,7 @@ final class KeyboardViewController: UIInputViewController {
 		}
 		if hostConnectionReady { updateActionKey() }
 		applySuggestionPresentation(to: kb)
+		updateKeyboardHeight()
 	}
 
 	// MARK: State for Autocorrect
@@ -422,7 +471,8 @@ final class KeyboardViewController: UIInputViewController {
 		KBStats.confirm(pendingGlideStatsID)
 		pendingGlideStatsID = nil
 		KBStats.flush()
-		KBDiagnostics.recorder.flush()
+		KBDiagnostics.finishTypingSession()
+		KBTypingRecorder.flush()
 	}
 
 	override func didReceiveMemoryWarning() {

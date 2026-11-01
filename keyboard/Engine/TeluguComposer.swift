@@ -51,7 +51,7 @@ nonisolated struct HostSuffixReplacementPlan: Equatable, Sendable {
 		 deleteBackward: () -> String?,
 		 insert: (String) -> Void) -> Bool {
 		var context = initialContext
-		for _ in 0...maximumDeleteCount {
+		for deleted in 0...maximumDeleteCount {
 			switch state(for: context) {
 			case .readyToInsert:
 				if !replacement.isEmpty { insert(replacement) }
@@ -59,8 +59,9 @@ nonisolated struct HostSuffixReplacementPlan: Equatable, Sendable {
 			case .invalid:
 				return false
 			case .deleteBackward:
+				guard deleted < maximumDeleteCount else { return false }
 				let updated = deleteBackward() ?? ""   // nil = now-empty field, not a failure
-				guard updated != context else { return false }
+				guard updated.utf16.count < context.utf16.count else { return false }
 				context = updated
 			}
 		}

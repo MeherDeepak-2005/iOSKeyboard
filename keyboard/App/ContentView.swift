@@ -57,10 +57,13 @@ struct ContentView: View {
 	@State private var showResetConfirm = false
 	@State private var showDeleteAllConfirm = false
 	@State private var hasUsedKeyboard = KBSettings.hasUsedKeyboard
+	/// Leaving onboarding must not wait for the keyboard's first host connection: a user who
+	/// enabled Glyph in Settings but has not typed with it yet was stuck on the steps screen.
+	@AppStorage("kb.onboarding.continued") private var continuedPastOnboarding = false
 
 	var body: some View {
 		NavigationStack {
-			if hasUsedKeyboard {
+			if hasUsedKeyboard || continuedPastOnboarding {
 				List {
 					Section {
 						CommercialHomeCarousel(commercial: commercial)
@@ -161,7 +164,7 @@ struct ContentView: View {
 				.navigationTitle("Glyph")
 				.navigationBarTitleDisplayMode(.large)
 			} else {
-				FirstRunView()
+				FirstRunView { continuedPastOnboarding = true }
 			}
 		}
 		.environmentObject(store)
@@ -449,6 +452,9 @@ struct DiagnosticsView: View {
 	@State private var snap = KBDiagnostics.read()
 	@State private var verbose = KBDiagnostics.verbose
 	@State private var glideCapture = KBSettings.glideCapture
+	@State private var typingCapture = KBTypingRecorder.enabled
+	@State private var typingExport: URL?
+	@State private var captureStatus = ""
 	private let log = Logger(subsystem: KBSettings.appGroup, category: "diag-app")
 
 	var body: some View {
@@ -484,6 +490,61 @@ struct DiagnosticsView: View {
 				Text("Accuracy")
 			} footer: {
 				Text("WMR = committed words the user went back and edited ÷ words committed (lower is better). NWP hit = intended word already in the top-3 before the first letter. Reverted = autocorrections the user undid. Word Error Rate (WER) needs ground-truth intent and is measured offline in tools/lm — not on device.")
+			}
+
+			Section {
+				Toggle("Record typing on this device", isOn: $typingCapture)
+					.onChange(of: typingCapture) { _, enabled in
+						KBTypingRecorder.setEnabled(enabled)
+						typingCapture = KBTypingRecorder.enabled
+						typingExport = nil
+					}
+				Button("Prepare typing data export") {
+					captureStatus = "Preparing…"
+					KBTypingRecorder.export { url in
+						typingExport = url
+						captureStatus = url == nil ? "No records available, or storage unavailable." : "Export ready. Contains typed text."
+					}
+				}
+				if let typingExport {
+					ShareLink("Share typing data", item: typingExport)
+				}
+				Button("Stop recording and delete typing data", role: .destructive) {
+					let deleted = KBTypingRecorder.clear()
+					typingCapture = KBTypingRecorder.enabled
+					typingExport = nil
+					captureStatus = deleted ? "Typing records deleted." : "Deletion failed. Please retry."
+				}
+				if !captureStatus.isEmpty { Text(captureStatus).font(.footnote).foregroundStyle(.secondary) }
+			} header: {
+				Text("Typing research")
+			} footer: {
+				Text("Off by default. Records typed text, key timing, touch offsets, suggestions and correction actions locally in general text fields. Ordinary text can still contain personal information. No upload. Up to 10 MB of records; files older than 7 days are removed on the next write or export. An export adds one snapshot of up to 10 MB. Delete removes both. Automatic corrections are unverified observations, not training labels. Share only when you intend to disclose the text.")
+			}
+
+			Section("Input integrity") {
+				ForEach((snap.integrityEvents ?? [:]).keys.sorted(), id: \.self) { code in
+					row(code, String(snap.integrityEvents?[code] ?? 0))
+				}
+				row("Neural-funded decodes", String(snap.neuralFundedDecodes ?? 0))
+				row("N-gram-funded decodes", String(snap.ngramFundedDecodes ?? 0))
+				row("Storage failures", String(snap.storageFailureCount ?? 0))
+			}
+
+			Section {
+				row("Inter-key interval p50", interKey(0.5))
+				row("Inter-key interval p95", interKey(0.95))
+				row("Backspace rate", ratio(snap.backspaceTaps, snap.physicalTaps))
+				ForEach(errorProneKeys(), id: \.key) { item in
+					row("Key \(item.key.uppercased()) erased", item.value)
+				}
+				ForEach(topConfusions(), id: \.key) { item in
+					row("Typed \(item.key.replacingOccurrences(of: ">", with: " → retyped "))", "\(item.value)")
+				}
+			} header: {
+				Text("Per-key errors & speed")
+			} footer: {
+				Text("Erased = letters removed by Backspace inside the word they were typed in ÷ taps on that key (keys with at least 20 taps). Typed → retyped = a letter erased and replaced by a different one. Counts only, from general text fields; no text is kept.")
 			}
 
 			Section("Latency histograms") {
@@ -568,6 +629,27 @@ struct DiagnosticsView: View {
 	private func kpc() -> String {
 		guard let chars = snap.committedChars, chars > 0 else { return "\u{2014}" }
 		return String(format: "%.2f", Double(snap.physicalTaps ?? 0) / Double(chars))
+	}
+	private func interKey(_ fraction: Double) -> String {
+		KBDiagnostics.percentile(snap.interKeyIntervalBins, fraction: fraction,
+			thresholds: KBDiagnostics.interKeyThresholds) ?? "—"
+	}
+	/// The five keys erased most often relative to their taps.
+	private func errorProneKeys() -> [(key: String, value: String)] {
+		let taps: [String: Int] = snap.keyTaps ?? [:], erased: [String: Int] = snap.keyErasures ?? [:]
+		var rows: [(key: String, rate: Double, taps: Int)] = []
+		for (key, count) in taps where count >= 20 {
+			let rate = Double(erased[key] ?? 0) / Double(count)
+			if rate > 0 { rows.append((key: key, rate: rate, taps: count)) }
+		}
+		rows.sort { $0.rate == $1.rate ? $0.key < $1.key : $0.rate > $1.rate }
+		return rows.prefix(5).map { row in
+			(key: row.key, value: String(format: "%.1f%% of %d", row.rate * 100, row.taps))
+		}
+	}
+	private func topConfusions() -> [(key: String, value: Int)] {
+		(snap.keyConfusions ?? [:]).sorted { $0.value == $1.value ? $0.key < $1.key : $0.value > $1.value }
+			.prefix(5).map { (key: $0.key, value: $0.value) }
 	}
 	private func latency(_ bins: [Int]?, _ fraction: Double) -> String {
 		KBDiagnostics.percentile(bins, fraction: fraction) ?? "—"
@@ -664,6 +746,7 @@ private struct LanguagePickerRow: View {
 
 private struct FirstRunView: View {
 	@Environment(\.colorScheme) private var scheme
+	let onContinue: () -> Void
 
 	var body: some View {
 		GeometryReader { geometry in
@@ -699,7 +782,17 @@ private struct FirstRunView: View {
 						in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 					.padding(.horizontal, 24)
 
-					Spacer(minLength: 72)
+					Button(action: onContinue) {
+						Text("I've turned on Glyph")
+							.font(.headline)
+							.frame(maxWidth: .infinity, minHeight: 50)
+					}
+					.buttonStyle(.borderedProminent)
+					.padding(.horizontal, 24)
+					.padding(.top, 24)
+					.accessibilityIdentifier("onboarding.continue")
+
+					Spacer(minLength: 48)
 					Label("Your typing stays on your iPhone.", systemImage: "shield")
 						.font(.footnote)
 						.foregroundStyle(.tertiary)

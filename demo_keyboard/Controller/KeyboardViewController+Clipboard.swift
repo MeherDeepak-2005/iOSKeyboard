@@ -57,6 +57,8 @@ extension KeyboardViewController {
 	}
 
 	func invalidateDocumentSession() {
+		recordTyping("session-end")
+		KBDiagnostics.finishTypingSession()
 		fieldRevision &+= 1
 		documentRevision &+= 1
 		advanceWordSession()
@@ -83,6 +85,8 @@ extension KeyboardViewController {
 			// Hot path: the host edit is the first meaningful operation. Everything
 			// else is post-insert bookkeeping and asynchronous decode scheduling.
 			insertIntoHost(ch)
+			let keyTime = ProcessInfo.processInfo.systemUptime
+			traceKey(ch, tap: tap, at: keyTime)
 			noteProxyEdit()
 			wordTaps.append(tap)
 			currentWordBuffer.append(c)
@@ -96,7 +100,7 @@ extension KeyboardViewController {
 			let revision = documentRevision
 			DispatchQueue.main.async { [weak self] in
 				guard let self else { return }
-				self.noteTap()          // counted off the host path — never before the insert
+				self.noteTap(atUptime: keyTime) // counted off the host path — never before the insert
 				if let acceptedCorrection, acceptedCorrection.fromAutocorrect,
 				   self.activeLanguageMode == .english {
 					self.engine.correctionStood(acceptedCorrection.original)
@@ -110,6 +114,7 @@ extension KeyboardViewController {
 			return
 		}
 
+		traceKey(ch, tap: tap)
 		noteTap()          // space / punctuation / other single-character key
 		resolveCorrectionAsAccepted()
 		resolveGlideUnverified()
@@ -146,7 +151,7 @@ extension KeyboardViewController {
 			let decodeContext = currentDecodeSnapshot?.request.context ?? currentContextBuffer
 			resolveManualFix(typedWord)
 			var correction = applyAutocorrectIfNeeded()
-			if correction == nil, activeLanguageMode == .english {
+			if correction == nil, activeLanguageMode == .english, permitsTypingData {
 				engine.learnTouchProfile(word: typedWord, taps: wordTaps)
 			}
 			let committedWord = correction?.corrected ?? typedWord
@@ -245,8 +250,12 @@ extension KeyboardViewController {
 			scheduleSuggestions()
 			return
 		}
-		textDocumentProxy.deleteBackward()
-		insertIntoHost(replacement)
+		// Another key may have landed while this one was held: replace only the held key's
+		// own output, never whatever character now ends the text.
+		guard replaceHostSuffix(base, with: replacement) else {
+			KBDiagnostics.noteIntegrityEvent("alternative-base-moved")
+			return
+		}
 		noteProxyEdit()
 		if !currentWordBuffer.isEmpty,
 		   replacement.allSatisfy({ isWordChar($0) }) {
@@ -306,6 +315,7 @@ extension KeyboardViewController {
 	func handleReturn() {
         beginKeyboardEdit()
         defer { endKeyboardEdit() }
+		traceKey("\n", tap: nil)
 		noteTap()
 		resolveCorrectionAsAccepted()
 		resolveGlideUnverified()
@@ -313,7 +323,7 @@ extension KeyboardViewController {
 		let decodeContext = currentDecodeSnapshot?.request.context ?? currentContextBuffer
 		resolveManualFix(typedWord)
 		var correction = applyAutocorrectIfNeeded()
-		if correction == nil, activeLanguageMode == .english {
+		if correction == nil, activeLanguageMode == .english, permitsTypingData {
 			engine.learnTouchProfile(word: typedWord, taps: wordTaps)
 		}
 		let committedWord = correction?.corrected ?? typedWord

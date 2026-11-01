@@ -187,7 +187,7 @@ struct KBCustomThemePair: Codable, Equatable {
 }
 
 enum KBSettings {
-	nonisolated static let appGroup = "group.demo-keyboard.com"
+	nonisolated static let appGroup = "group.com.meherdeepak.glyph"
 	/// Open the App Group preference suite once per process. Reconstructing it at every
 	/// read causes unnecessary CFPreferences container attachment work in the extension
 	/// and can repeat Apple's `kCFPreferencesAnyUser` diagnostic.

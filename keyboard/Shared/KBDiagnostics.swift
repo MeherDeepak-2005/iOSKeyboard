@@ -13,6 +13,7 @@ enum KBDiagnostics {
 		var peakFootprintMB = 0.0   // highest phys_footprint seen (what jetsam watches)
 		var minAvailableMB = 0.0    // lowest headroom seen (0 = never sampled)
 		var limitMB = 0.0           // inferred kill ceiling = footprint + headroom, at the tightest moment
+		var integrityEvents: [String: Int]?
 		var storageFailureCount: Int?
 		var lastStorageOperation: String?
 		// Fixed buckets contain counts only. No text, context, file paths, or identifiers.
@@ -50,6 +51,13 @@ enum KBDiagnostics {
 		var physicalTaps: Int?            // key taps incl. backspaces (a pick / glide is one tap) → KPC numerator
 		// System pillar:
 		var peakCPUPercent: Double?       // highest process CPU% seen during a dynamic search
+		// Per-key error pillar (letters a–z only, general text fields only). Counts, never
+		// sequences: they show which keys a user misses, not what was typed.
+		var keyTaps: [String: Int]?       // letter → taps
+		var keyErasures: [String: Int]?   // letter → erased by Backspace inside the word it was typed in
+		var keyConfusions: [String: Int]? // "typed>retyped" → a letter erased and replaced by another
+		var backspaceTaps: Int?           // every Backspace, including undo of a correction
+		var interKeyIntervalBins: [Int]?  // gap to the previous key, interKeyThresholds buckets
 	}
 
 	static let key = "kb.diag"
@@ -60,6 +68,8 @@ enum KBDiagnostics {
 	private static let performanceLog = OSLog(subsystem: KBSettings.appGroup,
 		category: .pointsOfInterest)
 	private static let latencyThresholds: [Double] = [1, 2, 4, 8, 16, 32, 50, 75, 120, 250]
+	/// Inter-key gaps in ms. Gaps above the idle cap are pauses, not typing speed.
+	static let interKeyThresholds: [Double] = [60, 90, 120, 160, 200, 260, 350, 500, 800, 1500]
 
 	enum LatencyOperation: Sendable {
 		case hostInsert, tapDecode, glidePreview, glideFinal, glideCommit, initialization
@@ -120,6 +130,31 @@ enum KBDiagnostics {
 	// MARK: Typing-quality metric events (extension side, off the host-insert path)
 	// Every entry hops onto metricsQueue so nothing here can delay a visible keystroke.
 
+	/// A fixed integrity code (host edit diverged, stale decode, …). Never user text.
+	static func noteIntegrityEvent(_ code: String) {
+		metricsQueue.async { Recorder.shared.noteIntegrityEvent(code) }
+	}
+
+	static func finishTypingSession() {
+		metricsQueue.async { Recorder.shared.finishTypingSession() }
+	}
+
+	/// A key in a general text field. `letter` is a lowercased a–z key or nil for any other
+	/// key; `intervalMs` is the gap to the previous key (nil for the first key of a session).
+	static func noteKeystroke(letter: String?, intervalMs: Double?) {
+		metricsQueue.async { Recorder.shared.noteKeystroke(letter: letter, intervalMs: intervalMs) }
+	}
+
+	/// A Backspace. `erasedLetter` is the a–z letter it removed from the word being typed.
+	static func noteBackspace(erasedLetter: String?) {
+		metricsQueue.async { Recorder.shared.noteBackspace(erasedLetter: erasedLetter) }
+	}
+
+	/// A letter erased inside its word and the different letter typed in its place.
+	static func noteKeyConfusion(typed: String, retyped: String) {
+		metricsQueue.async { Recorder.shared.noteKeyConfusion(typed: typed, retyped: retyped) }
+	}
+
 	/// One physical screen tap (letter, space, punctuation, backspace, suggestion pick, or
 	/// a whole glide gesture). `atUptime` is `ProcessInfo.systemUptime` at the tap; the
 	/// recorder derives active typing time from the gaps between consecutive taps.
@@ -146,6 +181,9 @@ enum KBDiagnostics {
 	}
 
 	static func percentile(_ bins: [Int]?, fraction: Double) -> String? {
+		percentile(bins, fraction: fraction, thresholds: latencyThresholds)
+	}
+	static func percentile(_ bins: [Int]?, fraction: Double, thresholds latencyThresholds: [Double]) -> String? {
 		guard let bins, bins.count == latencyThresholds.count + 1 else { return nil }
 		let total = bins.reduce(0, +)
 		guard total > 0 else { return nil }
@@ -170,6 +208,7 @@ enum KBDiagnostics {
 		return s
 	}
 	static func reset() {
+		store.set(UUID().uuidString, forKey: "kb.diag.reset-generation")
 		store.removeObject(forKey: key)
 		Recorder.shared.clear()
 	}
@@ -180,7 +219,7 @@ enum KBDiagnostics {
 	// log (category "ranking"): every candidate's channel cost, n-gram score,
 	// frequency contribution, and final rank, plus the autocorrect margin decision.
 	// Watch it live while typing:
-	//   log stream --predicate 'subsystem == "group.com.swiftuimasterclass.keyboard"' --level info
+	//   log stream --predicate 'subsystem == "group.com.meherdeepak.glyph"' --level info
 
 	static let defaultVerbose = false
 	#if DEBUG
@@ -373,6 +412,7 @@ enum KBDiagnostics {
 		guard task_threads(mach_task_self_, &threads, &count) == KERN_SUCCESS,
 			let threads else { return 0 }
 		defer {
+			for index in 0..<Int(count) { mach_port_deallocate(mach_task_self_, threads[index]) }
 			vm_deallocate(mach_task_self_, vm_address_t(UInt(bitPattern: threads)),
 				vm_size_t(Int(count) * MemoryLayout<thread_t>.stride))
 		}
@@ -406,14 +446,35 @@ enum KBDiagnostics {
 		private let lock = NSLock()
 		private var snap: Snapshot
 		private var tick = 0
+		private var lastCPUSampleUptime = -Double.infinity
+		private var resetGeneration = KBDiagnostics.store.string(forKey: "kb.diag.reset-generation")
 
 		private init() { snap = KBDiagnostics.read() }
 
-		func clear() { lock.lock(); snap = Snapshot(); tick = 0; lock.unlock() }
-		func flush() { lock.lock(); persistLocked(); lock.unlock() }
+		private func synchronizeResetLocked() {
+			let current = KBDiagnostics.store.string(forKey: "kb.diag.reset-generation")
+			guard current != resetGeneration else { return }
+			resetGeneration = current
+			snap = Snapshot(); tick = 0; lastTapUptime = 0
+			lastCPUSampleUptime = -Double.infinity
+		}
+
+		func clear() { lock.lock(); synchronizeResetLocked(); snap = Snapshot(); tick = 0; lastTapUptime = 0; lastCPUSampleUptime = -Double.infinity; lock.unlock() }
+		func noteIntegrityEvent(_ code: String) {
+			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
+			var events = snap.integrityEvents ?? [:]
+			events[code, default: 0] += 1
+			snap.integrityEvents = events
+		}
+		func finishTypingSession() {
+			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
+			lastTapUptime = 0
+			persistLocked()
+		}
+		func flush() { lock.lock(); synchronizeResetLocked(); persistLocked(); lock.unlock() }
 
 		func memoryPressure(critical: Bool) {
-			lock.lock()
+			lock.lock(); synchronizeResetLocked()
 			if critical { snap.criticalCount += 1 } else { snap.warningCount += 1 }
 			sampleLocked()
 			persistLocked()
@@ -422,7 +483,8 @@ enum KBDiagnostics {
 		}
 
 		func recordLatency(_ operation: LatencyOperation, milliseconds: Double) {
-			lock.lock()
+			guard milliseconds.isFinite, milliseconds >= 0 else { return }
+			lock.lock(); synchronizeResetLocked()
 			switch operation {
 			case .hostInsert:
 				snap.hostInsertLatencyBins = bucket(snap.hostInsertLatencyBins, milliseconds)
@@ -443,7 +505,7 @@ enum KBDiagnostics {
 		}
 
 		func recordSearchPrior(milliseconds: Double, state: String) {
-			lock.lock(); defer { lock.unlock() }
+			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
 			switch state {
 			case "completed": snap.searchPriorCompleted = (snap.searchPriorCompleted ?? 0) + 1
 			case "cancelled": snap.searchPriorCancelled = (snap.searchPriorCancelled ?? 0) + 1
@@ -468,7 +530,7 @@ enum KBDiagnostics {
 		private static let idleCapSeconds = 5.0
 
 		func noteTap(atUptime uptime: Double) {
-			lock.lock()
+			lock.lock(); synchronizeResetLocked()
 			snap.physicalTaps = (snap.physicalTaps ?? 0) + 1
 			if lastTapUptime > 0 {
 				let delta = uptime - lastTapUptime
@@ -476,7 +538,8 @@ enum KBDiagnostics {
 					snap.activeTypingMs = (snap.activeTypingMs ?? 0) + delta * 1_000
 				}
 			}
-			lastTapUptime = uptime
+			// Letter taps arrive via main.async, other keys synchronously: never move back.
+			lastTapUptime = max(lastTapUptime, uptime)
 			tick += 1
 			if tick % 32 == 0 { persistLocked() }
 			lock.unlock()
@@ -484,7 +547,7 @@ enum KBDiagnostics {
 
 		func noteWordCommitted(chars: Int, autocorrected: Bool,
 			predictionShown: Bool, predictionHit: Bool) {
-			lock.lock()
+			lock.lock(); synchronizeResetLocked()
 			snap.wordsCommitted = (snap.wordsCommitted ?? 0) + 1
 			snap.committedChars = (snap.committedChars ?? 0) + max(0, chars)
 			if autocorrected { snap.wordsAutocorrected = (snap.wordsAutocorrected ?? 0) + 1 }
@@ -497,7 +560,7 @@ enum KBDiagnostics {
 		}
 
 		func noteWordModified(revertedCorrection: Bool) {
-			lock.lock()
+			lock.lock(); synchronizeResetLocked()
 			snap.wordsModified = (snap.wordsModified ?? 0) + 1
 			if revertedCorrection {
 				snap.correctionsReverted = (snap.correctionsReverted ?? 0) + 1
@@ -506,13 +569,39 @@ enum KBDiagnostics {
 			lock.unlock()
 		}
 
-		private func bucket(_ existing: [Int]?, _ milliseconds: Double) -> [Int] {
-			var bins = existing ?? []
-			if bins.count != KBDiagnostics.latencyThresholds.count + 1 {
-				bins = [Int](repeating: 0, count: KBDiagnostics.latencyThresholds.count + 1)
+		func noteKeystroke(letter: String?, intervalMs: Double?) {
+			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
+			if let letter { snap.keyTaps = increment(snap.keyTaps, letter) }
+			if let intervalMs, intervalMs.isFinite, intervalMs > 0, intervalMs <= Self.idleCapSeconds * 1_000 {
+				snap.interKeyIntervalBins = bucket(snap.interKeyIntervalBins, intervalMs, KBDiagnostics.interKeyThresholds)
 			}
-			let index = KBDiagnostics.latencyThresholds.firstIndex { milliseconds <= $0 }
-				?? KBDiagnostics.latencyThresholds.count
+		}
+
+		func noteBackspace(erasedLetter: String?) {
+			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
+			snap.backspaceTaps = (snap.backspaceTaps ?? 0) + 1
+			if let erasedLetter { snap.keyErasures = increment(snap.keyErasures, erasedLetter) }
+		}
+
+		func noteKeyConfusion(typed: String, retyped: String) {
+			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
+			snap.keyConfusions = increment(snap.keyConfusions, typed + ">" + retyped)
+		}
+
+		private func increment(_ counts: [String: Int]?, _ key: String) -> [String: Int] {
+			var counts = counts ?? [:]
+			counts[key, default: 0] &+= 1
+			return counts
+		}
+
+		private func bucket(_ existing: [Int]?, _ milliseconds: Double,
+			_ thresholds: [Double] = KBDiagnostics.latencyThresholds) -> [Int] {
+			var bins = existing ?? []
+			if bins.count != thresholds.count + 1 {
+				bins = [Int](repeating: 0, count: thresholds.count + 1)
+			}
+			let index = thresholds.firstIndex { milliseconds <= $0 }
+				?? thresholds.count
 			bins[index] &+= 1
 			return bins
 		}
@@ -520,7 +609,7 @@ enum KBDiagnostics {
 		/// Non-content persistence health. `operation` is a fixed code selected by the
 		/// caller (for example `personal-model-read`), never a path or user string.
 		func storageFailure(operation: String) {
-			lock.lock()
+			lock.lock(); synchronizeResetLocked()
 			snap.storageFailureCount = (snap.storageFailureCount ?? 0) + 1
 			snap.lastStorageOperation = operation
 			persistLocked()
@@ -530,7 +619,7 @@ enum KBDiagnostics {
 
 		/// Cheap footprint/headroom sample. Call from the background suggestion pass.
 		func sample() {
-			lock.lock()
+			lock.lock(); synchronizeResetLocked()
 			sampleLocked()
 			tick += 1
 			if tick % 16 == 0 { persistLocked() }
@@ -547,8 +636,12 @@ enum KBDiagnostics {
 			}
 			// sample() fires at the head of a background decode, so this reads CPU while a
 			// dynamic search is actually running.
-			let cpu = KBDiagnostics.cpuUsagePercent()
-			if cpu > (snap.peakCPUPercent ?? 0) { snap.peakCPUPercent = cpu }
+			let now = ProcessInfo.processInfo.systemUptime
+			if now - lastCPUSampleUptime >= 1 {
+				lastCPUSampleUptime = now
+				let cpu = KBDiagnostics.cpuUsagePercent()
+				if cpu > (snap.peakCPUPercent ?? 0) { snap.peakCPUPercent = cpu }
+			}
 		}
 		private func persistLocked() {
 			var out = snap

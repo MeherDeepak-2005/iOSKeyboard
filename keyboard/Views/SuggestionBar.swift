@@ -81,6 +81,7 @@ final class SuggestionBar: UIView {
 			b.titleLabel?.adjustsFontSizeToFitWidth = true
 			b.titleLabel?.minimumScaleFactor = 0.8
 			b.setTitleColor(theme.keyText, for: .normal)
+			b.contentVerticalAlignment = .top
 			b.tag = i
 			b.accessibilityIdentifier = ["suggestion.left", "suggestion.primary", "suggestion.right"][i]
 			b.accessibilityHint = i == 1 ? "Top suggestion" : "Alternative suggestion"
@@ -111,7 +112,7 @@ final class SuggestionBar: UIView {
         }
 		let w = max(0, (bounds.width - clipW) / 3)
 		for (index, button) in buttons.enumerated() {
-			button.frame = CGRect(x: clipW + CGFloat(index) * w, y: visualOffsetY,
+			button.frame = CGRect(x: clipW + CGFloat(index) * w, y: 0,
 							  width: w, height: bounds.height)
 		}
 		let inset: CGFloat = 7

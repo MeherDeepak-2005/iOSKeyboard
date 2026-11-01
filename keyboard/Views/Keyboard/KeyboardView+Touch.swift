@@ -178,7 +178,9 @@ extension KeyboardView {
 		repeatTouch = touch
 		let t = Timer(timeInterval: 0.09, repeats: true) { [weak self, weak key] _ in
 			guard let self, let key, self.repeatKey === key else { self?.endRepeat(); return }
+			self.isRepeatingKey = true
 			key.trigger()
+			self.isRepeatingKey = false
 		}
 		t.fireDate = Date().addingTimeInterval(0.4)     // hold ~0.4s before it starts repeating
 		RunLoop.main.add(t, forMode: .common)
@@ -245,6 +247,19 @@ extension KeyboardView {
 
 			let p = touch.location(in: self)
 			guard let key = key(at: p) else { continue }
+			// Sampled before the key acts, so the touch-down precedes its own key event and
+			// carries the word session it was typed in. Touches UIKit finished without an
+			// ended/cancelled callback must not hold the cap.
+			if recordedTouches.count >= 20 {
+				recordedTouches = recordedTouches.filter { $0.key.phase != .ended && $0.key.phase != .cancelled }
+			}
+			if onTouchSample != nil, recordedTouches.count < 20 {
+				let recordedKey = key.popupText ?? key.committedText
+				let recordedTap = keyTap(for: key, at: p)
+				nextRecordedTouch &+= 1
+				recordedTouches[touch] = (nextRecordedTouch, recordedKey, recordedTap)
+				onTouchSample?("touch-down", nextRecordedTouch, recordedKey, touch.timestamp, recordedTap)
+			}
 			if key.isInputModeSwitch {
 				if let event { onInputModeEvent?(key, event) } else { key.trigger() }
 				performHaptic(for: key)
@@ -285,6 +300,11 @@ extension KeyboardView {
 				}
 			}
 		}
+	}
+
+	private func finishRecordedTouch(_ touch: UITouch, cancelled: Bool) {
+		guard let (id, key, tap) = recordedTouches.removeValue(forKey: touch) else { return }
+		onTouchSample?(cancelled ? "touch-cancel" : "touch-up", id, key, touch.timestamp, tap)
 	}
 
 	private func performHaptic(for key: KeyButton) {
@@ -349,6 +369,7 @@ extension KeyboardView {
 	}
 	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
+			finishRecordedTouch(touch, cancelled: false)
 			if cursorTouch === touch { endCursorHold() }
 			if finishAlternatives(for: touch, commit: true) {
 				if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }
@@ -380,6 +401,7 @@ extension KeyboardView {
 	}
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
+			finishRecordedTouch(touch, cancelled: true)
 			if cursorTouch === touch { endCursorHold() }
 			_ = finishAlternatives(for: touch, commit: false)
 			if let key = touchKeys[touch], key.isInputModeSwitch, let event {

@@ -125,8 +125,11 @@ extension KeyboardViewController {
 		currentContextBuffer = context
 		let request = makeDecodeRequest(currentWord: current, context: context, generation: gen)
 		engine.decode(request) { [weak self] snapshot in
-			guard let self, gen == self.generation,
-				  snapshot.isValid(for: request) else { return }
+			guard let self else { return }
+			guard gen == self.generation, snapshot.isValid(for: request) else {
+				KBDiagnostics.noteIntegrityEvent("stale-decode-dropped")
+				return
+			}
             guard self.hostConnectionReady, let currentDocument = self.readHostDocument(),
                 currentDocument.isAvailable, document.matches(currentDocument) else {
                 self.reconcileHostDocument()
@@ -137,6 +140,8 @@ extension KeyboardViewController {
 				sentenceStart: self.shouldAutoShift(ctx))
 			self.decodeSnapshot = snapshot
 			self.presentedDecodeSnapshot = presented
+			self.recordTyping("suggestions", text: current, replacement: presented.correction,
+				evidence: "shown-only", candidates: presented.suggestions.map(\.text), snapshot: snapshot)
 			self.keyboard.setKeyPriors(snapshot.nextCharacterPriors)
 			if current.isEmpty {
 				if let revert {

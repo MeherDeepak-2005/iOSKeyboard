@@ -292,6 +292,34 @@ final class keyboardUITests: XCTestCase {
 	}
 
     @MainActor
+    func testKeyboardHeightRemainsBoundedAcrossHostEditsAndRotation() throws {
+        try selectLanguage(identifier: "language.english", title: "English")
+        let host = launchRuntimeHost()
+        let deck = host.descendants(matching: .any)["glyph.keyboard"]
+        XCTAssertTrue(deck.waitForExistence(timeout: 5), "Enable Glyph as the active software keyboard before running this device test")
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for orientation: UIDeviceOrientation in [.portrait, .landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            for _ in 0..<3 {
+                host.textFields["runtime.text"].tap()
+                let settled = NSPredicate { _, _ in
+                    let window = host.windows.firstMatch.frame
+                    return deck.exists && deck.frame.height > 100 && deck.frame.height < window.height * 0.70
+                }
+                expectation(for: settled, evaluatedWith: host)
+                waitForExpectations(timeout: 5)
+                tapLetter("a", in: host)
+                host.buttons["runtime.clear"].tap()
+                XCTAssertTrue(host.buttons["suggestion.tools"].isHittable)
+            }
+            let screenshot = XCTAttachment(screenshot: host.screenshot())
+            screenshot.name = "Keyboard height after rotation \(orientation.rawValue)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+        }
+    }
+
+    @MainActor
     func testUniversalSuggestionsRemainVisibleInURLFieldWithAutocorrectionDisabled() throws {
         let host = XCUIApplication()
         host.launchArguments = ["-keyboard-runtime-host", "-keyboard-runtime-url"]

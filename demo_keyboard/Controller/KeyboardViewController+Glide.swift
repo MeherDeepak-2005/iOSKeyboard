@@ -90,9 +90,10 @@ extension KeyboardViewController {
 		// A glide finalizes a whole word from the one touch-down tap already counted in
 		// handleInsert — so it is not re-counted as a tap here, which is exactly what drops
 		// keystrokes-per-character below 1.0.
-		recordCommitMetrics(word, autocorrected: false)
+		recordCommitMetrics(word, autocorrected: false, source: "glide-unverified")
 		learnCommittedWord(context: context ?? contextWords(ctx, max: 8), word: word)
-		lastCorrection = Correction(original: "", corrected: display, trailing: " ", fromAutocorrect: false)
+		lastCorrection = Correction(original: "", corrected: display, trailing: " ", fromAutocorrect: false, recordedWordSessionID: wordSessionID)
+		advanceWordSession()
 		mode = .glided(display)
 		pendingGlideVerdict = true
 		KBStats.cancel(pendingGlideStatsID)
@@ -129,6 +130,8 @@ extension KeyboardViewController {
 		noteProxyEdit()
 		if !wordTaps.isEmpty { wordTaps.removeLast() }
 		if !currentWordBuffer.isEmpty { currentWordBuffer.removeLast() }
+		if !typingTrace.keystrokes.isEmpty { typingTrace.keystrokes.removeLast() }
+		recordTyping("glide-began", evidence: "retract-provisional-letter")
 		glidePreviewEnabled = true
 		let before = textDocumentProxy.documentContextBeforeInput ?? ""
 		activeGlideDocumentContext = before

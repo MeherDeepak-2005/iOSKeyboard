@@ -102,11 +102,8 @@ final class KeyButton: UIView {
 			let lbl = UILabel()
 			lbl.text = spec.label
 			lbl.textColor = fg
-			let multi = (spec.label?.count ?? 0) > 1
-			let bold = UIAccessibility.isBoldTextEnabled
-			// Key legends use Apple's system face for consistent metrics and alignment.
-			lbl.font = multi ? .systemFont(ofSize: 16 * glyphScale, weight: bold ? .semibold : .medium)
-							 : .systemFont(ofSize: 23 * glyphScale, weight: bold ? .medium : .regular)
+			lbl.font = legendFont(spec.label ?? "")
+			lbl.textAlignment = .center
 			content = lbl
 			label = lbl
 		}
@@ -192,6 +189,13 @@ final class KeyButton: UIView {
 		dim.backgroundColor = on ? recessColor : .clear
 	}
 
+	private func legendFont(_ text: String) -> UIFont {
+		let bold = UIAccessibility.isBoldTextEnabled
+		if text.count > 1 { return .systemFont(ofSize: 16 * glyphScale, weight: bold ? .semibold : .medium) }
+		let lowercase = letterBase != nil && text == text.lowercased() && text != text.uppercased()
+		return .systemFont(ofSize: (lowercase ? 25.3 : 23) * glyphScale, weight: bold ? .medium : .regular)
+	}
+
 	static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
 
     func setActionAppearance(active: Bool, theme: KeyboardTheme) {
@@ -212,10 +216,8 @@ final class KeyButton: UIView {
 			installContent(newLabel)
 			label = newLabel
 		}
-		let bold = UIAccessibility.isBoldTextEnabled
-		label?.font = text.count > 1
-			? .systemFont(ofSize: 16 * glyphScale, weight: bold ? .semibold : .medium)
-			: .systemFont(ofSize: 23 * glyphScale, weight: bold ? .medium : .regular)
+		label?.font = legendFont(text)
+		label?.textAlignment = .center
 		label?.text = text
 		label?.isHidden = false
 		iconView?.isHidden = true

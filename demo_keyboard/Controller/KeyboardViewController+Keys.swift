@@ -22,17 +22,17 @@ extension KeyboardViewController {
 	}
 
 	func learnCommittedWord(context: [String], word: String) {
-		guard activeLanguageMode == .english else { return }
+		guard activeLanguageMode == .english, permitsTypingData else { return }
 		engine.learn(context: context, word: word)
 	}
 
 	func recordReplacement(original: String, replacement: String) {
-		guard activeLanguageMode == .english else { return }
+		guard activeLanguageMode == .english, permitsTypingData else { return }
 		engine.wordReplaced(original: original, with: replacement)
 	}
 
 	func rejectCorrection(_ word: String) {
-		guard activeLanguageMode == .english else { return }
+		guard activeLanguageMode == .english, permitsTypingData else { return }
 		engine.dontCorrect(word)
 	}
 
@@ -41,16 +41,18 @@ extension KeyboardViewController {
 	/// One physical screen tap. Called at the discrete key handlers, so a suggestion pick
 	/// or a whole glide gesture is a single tap even though it produces many characters —
 	/// exactly what makes the keystrokes-per-character ratio drop below 1.0.
-	func noteTap() {
-		KBDiagnostics.noteTap(atUptime: ProcessInfo.processInfo.systemUptime)
+	func noteTap(atUptime uptime: Double = ProcessInfo.processInfo.systemUptime) {
+		guard !isSecureField else { return }
+		KBDiagnostics.noteTap(atUptime: uptime)
 	}
 
 	/// Record a finalized word for the accuracy/speed counters, and settle the pending NWP
 	/// opportunity. `autocorrected` is true only when the engine changed the typed word.
-	func recordCommitMetrics(_ word: String, autocorrected: Bool) {
+	func recordCommitMetrics(_ word: String, autocorrected: Bool, source: String? = nil) {
 		let armed = nwpPredictionArmed
 		nwpPredictionArmed = false
 		guard !word.isEmpty, !isSecureField else { return }
+		recordCommit(word, evidence: source ?? (autocorrected ? "automatic-unverified" : "literal-unverified"))
 		KBDiagnostics.noteWordCommitted(chars: word.count + 1, autocorrected: autocorrected,
 			predictionShown: armed, predictionHit: armed && nwpPredictedTop3.contains(word.lowercased()))
 	}
@@ -69,13 +71,16 @@ extension KeyboardViewController {
 	func advanceWordSession() {
 		let finishedSession = wordSessionID
 		wordSessionID &+= 1
+		currentWordBuffer = ""
+		wordTaps.removeAll(keepingCapacity: true)
+		typingTrace = TypingTrace()
 		engine.discardModelSession(finishedSession)
 		wordSessionModelTier = engine.preferredModelTier(for: activeLanguageMode)
 	}
 
 	@inline(__always)
 	func insertIntoHost(_ text: String) {
-		#if DEBUG || INTERNAL_GRU
+		#if DEBUG || INTERNAL_GRU || INTERNAL_NSS
 		let started = ProcessInfo.processInfo.systemUptime
 		let signpost = KBDiagnostics.beginHostInsert()
 		textDocumentProxy.insertText(text)
@@ -92,9 +97,14 @@ extension KeyboardViewController {
 	@discardableResult
 	func replaceHostSuffix(_ suffix: String, with replacement: String) -> Bool {
 		lastReplaceDeleteCount = 0
-		guard let initial = textDocumentProxy.documentContextBeforeInput,
-			let plan = HostSuffixReplacementPlan(contextBeforeInput: initial,
-				suffix: suffix, replacement: replacement) else { return false }
+		guard let initial = textDocumentProxy.documentContextBeforeInput else { return false }
+		// Parsed words carry ASCII apostrophes; smart-punctuation hosts store ’ (canonical is
+		// one-to-one per Character), so replace the host's own spelling of the same word.
+		let hostSuffix = String(initial.suffix(suffix.count))
+		let matched = hostSuffix.count == suffix.count
+			&& String(hostSuffix.map(canonical)) == String(suffix.map(canonical)) ? hostSuffix : suffix
+		guard let plan = HostSuffixReplacementPlan(contextBeforeInput: initial,
+				suffix: matched, replacement: replacement) else { return false }
 		return plan.apply(initialContext: initial,
 			deleteBackward: {
 				textDocumentProxy.deleteBackward()

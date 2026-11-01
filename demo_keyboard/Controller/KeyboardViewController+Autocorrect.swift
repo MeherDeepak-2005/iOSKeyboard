@@ -26,12 +26,17 @@ extension KeyboardViewController {
 		guard !word.isEmpty,
 			  let correction = snapshot.correction,
 			  correction != word else { return nil }
-		for _ in 0..<word.count { textDocumentProxy.deleteBackward() }
-		insertIntoHost(correction)
+		// Use the same checked, grapheme-aware transaction as explicit suggestion picks.
+		guard textDocumentProxy.selectedText?.isEmpty != false,
+			replaceHostSuffix(word, with: correction) else {
+			KBDiagnostics.noteIntegrityEvent("correction-host-mismatch")
+			return nil
+		}
+		recordTyping("autocorrection", text: word, replacement: correction, evidence: "automatic-unverified")
 		noteProxyEdit()
 		recentCorrections.append((original: word, corrected: correction))
 		if recentCorrections.count > 4 { recentCorrections.removeFirst() }
-		return Correction(original: word, corrected: correction, trailing: "", fromAutocorrect: true)
+		return Correction(original: word, corrected: correction, trailing: "", fromAutocorrect: true, recordedWordSessionID: wordSessionID)
 	}
 
 
@@ -87,6 +92,7 @@ extension KeyboardViewController {
 			decodeSnapshot = nil
 			presentedDecodeSnapshot = nil
 		}
+		recordTyping("manual-replacement", text: erased, replacement: committed, evidence: "inferred-word-swap")
 		recordReplacement(original: erased, replacement: committed)
 	}
 }

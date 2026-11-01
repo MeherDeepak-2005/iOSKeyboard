@@ -329,6 +329,34 @@ struct KeyboardConsistencyTests {
         #expect(NSArray(array: gradient.colors ?? []).isEqual(to: [theme.specialKey.cgColor, theme.specialKey.cgColor]))
     }
 
+    @Test func inputHeightDoesNotFollowOversizedHostFrame() {
+        let root = KeyboardInputView(frame: CGRect(x: 0, y: 0, width: 393, height: 800), inputViewStyle: .keyboard)
+        root.allowsSelfSizing = true
+        root.desiredHeight = 240
+        #expect(root.intrinsicContentSize.height == 240)
+        #expect(root.sizeThatFits(CGSize(width: 393, height: 800)).height == 240)
+        root.desiredHeight = 328 // media expansion remains supported
+        #expect(root.sizeThatFits(CGSize(width: 700, height: 1000)).height == 328)
+    }
+
+    @Test func lowercaseLegendsGrowAndSuggestionsAlignAtTop() throws {
+        let theme = KeyboardTheme.preview(dark: false, accent: KBPalette.system, customTheme: nil)
+        let keyboard = KeyboardView(theme: theme)
+        let key = try #require(descendants(keyboard).compactMap { $0 as? KeyButton }.first { $0.letterBase == "a" })
+        key.setTitle("a")
+        let label = try #require(descendants(key).compactMap { $0 as? UILabel }.first)
+        #expect(abs(label.font.pointSize - 25.3) < 0.001)
+        #expect(label.textAlignment == .center)
+        key.setTitle("A")
+        #expect(label.font.pointSize == 23)
+        let strip = SuggestionBar(theme: theme)
+        strip.frame = CGRect(x: 0, y: 0, width: 393, height: 32)
+        strip.layoutIfNeeded()
+        let primary = try button("suggestion.primary", in: strip)
+        #expect(primary.contentVerticalAlignment == .top)
+        #expect(primary.frame.minY == 0)
+    }
+
     @Test func renderUpdatedKeyboardAndTools() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("keyboard-consistency-renders")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

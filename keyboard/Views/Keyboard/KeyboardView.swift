@@ -36,6 +36,11 @@ final class KeyboardView: UIView {
 
 	/// Set to the tapped key's landing offset for the duration of `key.action()`, so
 	/// the char closures can attach it to `onInsert`. nil outside a live letter tap.
+	var onTouchSample: ((String, UInt64, String?, TimeInterval, KeyTap?) -> Void)?
+	var recordedTouches: [UITouch: (UInt64, String?, KeyTap?)] = [:]
+	var nextRecordedTouch: UInt64 = 0
+	/// True while a held key's auto-repeat fires: one hold is one physical tap.
+	var isRepeatingKey = false
 	var activeTap: KeyTap?
 	/// Next-character priors (letter → 0…1) from the engine's background pass, used to
 	/// invisibly enlarge likely keys' targets. Purely a tie-breaker on edge/gap taps.
@@ -75,6 +80,7 @@ final class KeyboardView: UIView {
 	var actionEnabled = true
 	let suggestionBar: SuggestionBar
 	private(set) var inputKind: KeyboardInputKind = .standard
+	var lastLayoutWidth: CGFloat = 0
 	var lastLayoutProfile: KeyboardLayoutMetrics.Profile?
 
 	/// Light haptic on each key press. Off unless enabled in settings; iOS remains the

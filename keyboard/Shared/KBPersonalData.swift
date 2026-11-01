@@ -84,7 +84,8 @@ enum KBPersonalData {
 			KBSettings.sharedDefaults.removeObject(forKey: "kb.touchprofile")
 			return success
 		}
-		recordResetDeletion(deleted)
+		let recordingsDeleted = KBTypingRecorder.clear()
+		recordResetDeletion(deleted && recordingsDeleted)
 		KBStats.synchronizeAfterExternalReset()
 		postReset()
 	}
@@ -113,7 +114,8 @@ enum KBPersonalData {
 			}
 			return success
 		}
-		recordResetDeletion(deleted)
+		let recordingsDeleted = KBTypingRecorder.clear()
+		recordResetDeletion(deleted && recordingsDeleted)
 		KBStats.synchronizeAfterExternalReset()
 		postReset()
 	}

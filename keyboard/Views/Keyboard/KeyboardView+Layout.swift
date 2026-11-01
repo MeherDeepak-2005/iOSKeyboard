@@ -7,9 +7,10 @@ extension KeyboardView {
 		super.layoutSubviews()
 		let resolvedMetrics = metrics
 		trailLayer.lineWidth = max(7, min(10, resolvedMetrics.rowHeight * 0.20))
-		if lastLayoutProfile != resolvedMetrics.profile {
+		if lastLayoutProfile != resolvedMetrics.profile || lastLayoutWidth != bounds.width {
 			let wasResolved = lastLayoutProfile != nil
 			lastLayoutProfile = resolvedMetrics.profile
+			lastLayoutWidth = bounds.width
 			DispatchQueue.main.async { [weak self] in
 				guard let self else { return }
 				self.onHeightChange?()
