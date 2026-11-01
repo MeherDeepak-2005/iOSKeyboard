@@ -34,10 +34,13 @@ nonisolated struct HostDocumentSnapshot: Equatable, Sendable {
         return expected.hasSuffix(actual) || actual.hasSuffix(expected)
     }
 
+    /// Same document and text. Hosts report an empty context as nil or "" from one read to the
+    /// next; treating those as different reset the strip mid-word and dropped pending corrections.
     func matches(_ other: Self) -> Bool {
         guard documentID == other.documentID else { return false }
         if isEmpty && other.isEmpty { return true }
-        return self == other
+        return hasText == other.hasText && (before ?? "") == (other.before ?? "")
+            && (after ?? "") == (other.after ?? "") && (selection ?? "") == (other.selection ?? "")
     }
 }
 

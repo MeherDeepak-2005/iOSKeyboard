@@ -65,6 +65,16 @@ struct KeyboardConsistencyTests {
         #expect(cleared.matches(state("", hasText: false, id: id)))
     }
 
+    @Test func emptyContextReportedAsNilOrEmptyIsTheSameDocument() {
+        let id = UUID()
+        #expect(state("typo", after: nil, id: id).matches(state("typo", after: "", id: id)))
+        #expect(state("typo", selection: "", id: id).matches(state("typo", selection: nil, id: id)))
+        #expect(!state("typo", after: nil, id: id).matches(state("typo", after: "x", id: id)))
+        var tracker = HostDocumentReconciler()
+        #expect(tracker.observe(state("typo", after: "", id: id)) == .initial)
+        #expect(tracker.observe(state("typo", after: nil, id: id)) == .unchanged)
+    }
+
     @Test func recoveryFindsClearWithoutCallbacksAndStops() async throws {
         let id = UUID()
         var tracker = HostDocumentReconciler()

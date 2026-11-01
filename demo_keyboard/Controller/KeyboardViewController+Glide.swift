@@ -75,8 +75,13 @@ extension KeyboardViewController {
         }
         beginKeyboardEdit()
         defer { endKeyboardEdit() }
+        // An empty field reports nil here while the glide began with "": compare the text, or the
+        // field's first glided word was never committed.
         if let documentContext,
-            textDocumentProxy.documentContextBeforeInput != documentContext { return }
+            (textDocumentProxy.documentContextBeforeInput ?? "") != documentContext {
+            KBDiagnostics.noteIntegrityEvent("glide-context-moved")
+            return
+        }
 		let ctx = documentContext ?? textDocumentProxy.documentContextBeforeInput ?? ""
 		let autoShift = shouldAutoShift(ctx)
 		let display = SuggestionCasePolicy.display(word, sentenceStart: autoShift)
