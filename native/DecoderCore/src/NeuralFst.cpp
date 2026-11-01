@@ -332,7 +332,7 @@ std::vector<std::pair<std::uint32_t, double>> NgramFst::best(std::uint32_t state
 }
 
 double NeuralFstSearch::bound(const Token& t) const {
-    return t.language + graph_.lookahead(t.state, t.node) - channelWeight * t.cost;
+    return t.language + graph_.lookahead(t.state, t.node) - options_.channelWeight * t.cost;
 }
 double NeuralFstSearch::deletion(std::uint8_t letter, std::uint8_t previous, std::uint8_t typedLetter) const {
     return options_.raw ? deletionCost : deletionCostAt(letter, previous, typedLetter);
@@ -341,7 +341,9 @@ double NeuralFstSearch::insertion(std::uint8_t typedLetter, std::uint8_t previou
     return options_.raw ? insertionCost : insertionCostAt(typedLetter, previous, candidateLetter);
 }
 double NeuralFstSearch::substitution(std::uint8_t intended, std::uint8_t typed, std::optional<TouchOffset> tap, bool first) const {
-    return options_.raw ? geometricSubstitutionCost(intended, typed, tap) : substitutionCost(intended, typed, tap, first);
+    if (options_.raw) return geometricSubstitutionCost(intended, typed, tap);
+    if (tap && options_.touchSigma > 0) return touchSubstitutionCost(intended, typed, *tap, options_.touchSigma, first);
+    return substitutionCost(intended, typed, tap, first);
 }
 void NeuralFstSearch::reset() { beam_.clear(); complete_.clear(); completeRows_.clear(); typed_.clear(); taps_.clear(); revision_ = graph_.revision(); }
 std::vector<NeuralFstSearch::Token> NeuralFstSearch::prune(std::vector<Token> input, bool deletions, std::uint8_t typedLetter) {
@@ -437,13 +439,13 @@ void NeuralFstSearch::advance(std::uint8_t letter, std::optional<TouchOffset> ta
     }
     beam_ = prune(std::move(next), true, letter);
     auto ends = endings(beam_);
-    std::stable_sort(ends.begin(), ends.end(), [](const End& a, const End& b) {
-        auto x = a.language - channelWeight * a.token.cost, y = b.language - channelWeight * b.token.cost;
+    std::stable_sort(ends.begin(), ends.end(), [this](const End& a, const End& b) {
+        auto x = a.language - options_.channelWeight * a.token.cost, y = b.language - options_.channelWeight * b.token.cost;
         return x == y ? std::tie(a.next, a.word, a.token.prefix) < std::tie(b.next, b.word, b.token.prefix) : x > y;
     });
     expandedLastFrame_ = 0;
     for (const auto& e : ends) {
-        if (e.language - channelWeight * e.token.cost <= nssExpansionThreshold) break;
+        if (e.language - options_.channelWeight * e.token.cost <= nssExpansionThreshold) break;
         if (!graph_.expanded(e.next)) {
             graph_.extend(e.next);
             if (++expandedLastFrame_ == nssExpansionsPerFrame) break;
@@ -477,7 +479,7 @@ std::vector<RankedRow> NeuralFstSearch::decode(std::string_view typed, std::span
     std::unordered_map<std::string, RankedRow> full;
     for (const auto& e : ends) {
         auto phrase = e.token.prefix + std::string(graph_.lexicon().packed.word(e.word));
-        RankedRow row{{phrase, e.token.cost, 0}, phrase, 0, e.language, e.language - channelWeight * e.token.cost, {}};
+        RankedRow row{{phrase, e.token.cost, 0}, phrase, 0, e.language, e.language - options_.channelWeight * e.token.cost, {}};
         auto [it, fresh] = full.emplace(phrase, row);
         if (!fresh && row.score > it->second.score) it->second = row;
     }
@@ -494,7 +496,7 @@ std::vector<RankedRow> NeuralFstSearch::decode(std::string_view typed, std::span
     std::unordered_map<std::string, double> resultScores;
     auto remember = [&](const End& e) {
         auto key = e.token.prefix + std::string(graph_.lexicon().packed.word(e.word));
-        auto score = e.language - channelWeight * e.token.cost;
+        auto score = e.language - options_.channelWeight * e.token.cost;
         auto [it, fresh] = resultScores.emplace(std::move(key), score);
         if (!fresh) it->second = std::max(it->second, score);
     };
@@ -529,7 +531,7 @@ std::vector<RankedRow> NeuralFstSearch::decode(std::string_view typed, std::span
     for (std::size_t i = 0; i < ends.size(); ++i) {
         const auto& e = ends[i];
         auto phrase = e.token.prefix + std::string(graph_.lexicon().packed.word(e.word));
-        RankedRow row{{phrase, e.token.cost, 0}, phrase, 0, e.language, e.language - channelWeight * e.token.cost, {}};
+        RankedRow row{{phrase, e.token.cost, 0}, phrase, 0, e.language, e.language - options_.channelWeight * e.token.cost, {}};
         auto [it, fresh] = best.emplace(phrase, row); if (!fresh && row.score > it->second.score) it->second = std::move(row);
     }
     std::vector<RankedRow> out;

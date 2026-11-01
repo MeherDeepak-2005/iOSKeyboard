@@ -272,6 +272,25 @@ void EngineState::importPersonalization(PersonalizationSnapshot snapshot){
 
 namespace kb {
 DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineView& view, const CancellationToken* token) {
+    // A leading apostrophe on text that is not itself a word ('em, 'cause are) opens a quote:
+    // decode the rest and keep the quote ('accidentaly -> 'accidentally, 'happy stays).
+    if (input.normalized.size() >= 2 && input.normalized.front() == apostrophe && !view.lexicon.contains(input.normalized)) {
+        auto rest = input;
+        const auto quote = input.word.starts_with("’") ? 3 : input.word.starts_with("'") ? 1 : 0;
+        rest.word = input.word.substr(quote); rest.normalized = input.normalized.substr(1);
+        if (!rest.characterOffsets.empty()) {
+            rest.characterOffsets.erase(rest.characterOffsets.begin());
+            for (auto& at : rest.characterOffsets) --at;
+        }
+        if (!rest.letterFlags.empty()) rest.letterFlags.erase(rest.letterFlags.begin());
+        if (!rest.taps.empty() && rest.taps.size() == input.characterOffsets.size() - 1) rest.taps.erase(rest.taps.begin());
+        auto out = decodeNeural(rest, view, token);
+        auto quoted = [](std::string& word) { word.insert(word.begin(), char(apostrophe)); };
+        if (out.correction.word) quoted(*out.correction.word);
+        for (auto& word : out.suggestions) quoted(word);
+        for (auto& c : out.candidates) { quoted(c.ranked.key); quoted(c.ranked.channel.word); }
+        return out;
+    }
     DecodeOutput out; out.identity = input.identity;
     const auto started = Clock::now();
     auto cancelled = [&] { return token && token->cancelled(); };
@@ -282,7 +301,7 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
     if (newField) neuralGraph_->resetContext();
     const bool edited = !input.normalized.starts_with(neuralTyped_);
     neuralGraph_->update(input.context, newWord || edited);
-    if (!neuralSearch_) neuralSearch_ = std::make_unique<NeuralFstSearch>(*neuralGraph_);
+    if (!neuralSearch_) neuralSearch_ = std::make_unique<NeuralFstSearch>(*neuralGraph_, NeuralFstSearch::Options{nssBeam, std::size_t(nssWidth), false, nssTouchSigma, nssChannelWeight});
     if (newWord || neuralIdentity_.layoutRevision != input.identity.layoutRevision) neuralSearch_->reset();
     neuralIdentity_ = input.identity; neuralIdentityReady_ = true; neuralTyped_ = input.normalized;
     if (cancelled()) { out.status = EngineStatus::cancelled; return out; }
@@ -301,21 +320,77 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
     std::erase_if(ranked, [&](const auto& row) { return view.lexicon.isBlocked(row.key); });
     std::erase_if(correctionRows, [&](const auto& row) { return view.lexicon.isBlocked(row.key); });
     std::unordered_map<std::string, double> costs;
+    // The frequency prior ranks corrections; next-word predictions keep the model's order.
+    auto frequency = [&](const std::string& word) { return typed.empty() ? 0 : nssFrequencyWeight * view.lexicon.logFrequency(word).value_or(0); };
     auto personalize = [&](auto& row) {
         row.safety = view.penalty(row.key);
-        row.language += LanguageModel::personalBoost(row.key, input.context, counts(view), view.lexicon);
-        row.score = row.language - channelWeight * row.channel.cost - row.safety;
+        row.language += LanguageModel::personalBoost(row.key, input.context, counts(view), view.lexicon) + frequency(row.key);
+        row.score = row.language - nssChannelWeight * row.channel.cost - row.safety;
     };
     for (auto& row : ranked) personalize(row);
     for (auto& row : correctionRows) { personalize(row); costs[row.key] = row.channel.cost; }
+    const auto length = input.characterOffsets.empty() ? typed.size() : input.characterOffsets.size() - 1;
+    std::unordered_set<std::string> close, broad, injected;
+    bool aimedAtBlocked = false;
+    double nameMargin = 0;   // added to the typed text's score after any rescoring
+    if (!typed.empty() && nssRecovery > 0) {
+        // The n-gram tier's recovery (decode() above), scored by G: the joint search's complete
+        // words within the normal radius are the close set, and generateCandidates adds the narrow
+        // first-letter passes, broad recovery for severe typos, context injection of the model's
+        // likely next words and the blocked-word check. The gate judges recovered words as close
+        // words, or with nssRecovery 2 as the n-gram tier does (loose, severe).
+        std::vector<ChannelCandidate> retained;
+        const auto radius = normalSearchCost(length);
+        for (const auto& row : correctionRows)
+            if (row.channel.cost <= radius && row.key.find(' ') == std::string::npos)
+                retained.push_back({row.key, row.channel.cost, view.lexicon.logFrequency(row.key).value_or(0)});
+        std::vector<ContextSuccessor> successors;
+        std::vector<std::string> next;
+        if (length >= 4) for (const auto& [id, language] : neuralGraph_->best(0, 24)) {
+            (void)language;
+            std::string word(engine_->packed_->word(id));
+            if (view.lexicon.isBlocked(word)) continue;
+            successors.push_back({word, view.lexicon.characterCount(word), {}, {}});
+            next.push_back(std::move(word));
+        }
+        auto funding = input.funding;
+        if (!funding && !next.empty()) funding = rankFunding(next);
+        auto pools = generateCandidates(view.lexicon, typed, input.taps, successors,
+            funding ? std::optional<std::span<const WordFunding>>(*funding) : std::nullopt,
+            std::optional<std::span<const ChannelCandidate>>(retained), false, cancelled, input.characterOffsets);
+        if (pools.cancelled || cancelled()) { neuralGraph_->update(input.context, true); neuralSearch_->reset(); out.status = EngineStatus::cancelled; return out; }
+        aimedAtBlocked = pools.aimedAtBlocked;
+        close = words(pools.close); broad = words(pools.broad); injected = words(pools.injected);
+        auto add = [&](const ChannelCandidate& c, bool display) {
+            if (c.word == typed || view.lexicon.isBlocked(c.word)) return;
+            if (auto found = costs.find(c.word); found != costs.end()) { found->second = std::min(found->second, c.cost); return; }
+            const auto id = engine_->packed_->wordID(c.word);
+            if (!id || !std::isfinite(engine_->neuralLexicon_->unigram[std::size_t(*id)])) return;
+            RankedRow row{c, c.word, view.penalty(c.word), neuralGraph_->wordScore(0, std::uint32_t(*id)), 0, {}};
+            row.channel.logFrequency = 0;   // as the joint search's rows: frequency enters through personalize
+            personalize(row);
+            costs[c.word] = c.cost; correctionRows.push_back(row);
+            if (display) ranked.push_back(std::move(row));
+        };
+        for (const auto& c : pools.close) add(c, false);
+        for (const auto* rows : {&pools.broad, &pools.injected}) for (const auto& c : *rows) add(c, pools.completions.empty());
+    }
     if (!typed.empty()) {
-        // Literal/dynamic words are outside G, as in paper §4.2. Keep the existing
-        // context-free literal penalty; no learned UNK shift or OOV-share multiplier.
+        // Literal/dynamic words are outside G, as in paper §4.2: typed text outside the lexicon
+        // scores P(<unk>) in context (nssUnknownLiteral) or else the n-gram's context-free mass.
         std::vector<std::string> literal{typed};
         static const PersonalCounts none;
         double language = engine_->language_->scores(literal, {}, none, view.lexicon)[0];
         if (auto id = engine_->packed_->wordID(typed)) language = neuralGraph_->wordScore(0, std::uint32_t(*id));
-        language += LanguageModel::personalBoost(typed, input.context, counts(view), view.lexicon);
+        else {
+            if (engine_->options_.nssExact && (nssUnknownLiteral > 0 || engine_->options_.nssTypedUnknown))
+                if (const auto unknown = neuralGraph_->typedUnknown(); std::isfinite(unknown)) language = unknown;
+            const auto& shown = input.word;
+            const bool capitalized = shown.size() >= 2 && std::isupper(static_cast<unsigned char>(shown[0])) &&
+                std::any_of(shown.begin() + 1, shown.end(), [](unsigned char c) { return std::islower(c); });
+            if (capitalized && !input.context.empty()) nameMargin = nssCapitalMargin;
+        }
+        language += LanguageModel::personalBoost(typed, input.context, counts(view), view.lexicon) + frequency(typed);
         std::erase_if(ranked, [&](const auto& row) { return row.key == typed; });
         ranked.push_back({{typed, 0, 0}, typed, 0, language, language, {}}); costs[typed] = 0;
         std::erase_if(correctionRows, [&](const auto& row) { return row.key == typed; });
@@ -325,11 +400,32 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
                 if (view.lexicon.isBlocked(c.word) || c.word == typed) continue;
                 std::vector<std::string> word{c.word};
                 const auto prior = engine_->language_->scores(word, {}, counts(view), view.lexicon)[0];
-                ranked.push_back({{c.word, c.cost, 0}, c.word, view.penalty(c.word), prior, prior - channelWeight * c.cost - view.penalty(c.word), {}});
+                ranked.push_back({{c.word, c.cost, 0}, c.word, view.penalty(c.word), prior, prior - nssChannelWeight * c.cost - view.penalty(c.word), {}});
                 correctionRows.push_back(ranked.back()); costs[c.word] = c.cost;
             }
         }
     }
+    if (nssNgramWeight > 0 && !typed.empty()) {
+        // Rescore the candidates with the n-gram mixed in: its unigram statistics separate a
+        // common word from a rare one a cheaper edit away (abot: about, not abbot).
+        std::unordered_map<std::string, double> mixed;
+        for (const auto* rows : {&ranked, &correctionRows}) for (const auto& row : *rows) mixed.emplace(row.key, 0);
+        std::vector<std::string> single;
+        for (auto& [key, score] : mixed) {
+            if (key.find(' ') == std::string::npos) { single.push_back(key); continue; }
+            std::vector<std::string> phrase; std::string_view text = key;
+            while (!text.empty()) { auto pos = text.find(' '); if (pos) phrase.emplace_back(text.substr(0, pos)); if (pos == text.npos) break; text.remove_prefix(pos + 1); }
+            score = engine_->language_->sequence(phrase, input.context, counts(view), view.lexicon);
+        }
+        const auto probabilities = engine_->language_->scores(single, input.context, counts(view), view.lexicon);
+        for (std::size_t i = 0; i < single.size(); ++i) mixed[single[i]] = probabilities[i];
+        for (auto* rows : {&ranked, &correctionRows}) for (auto& row : *rows) {
+            row.language = (1 - nssNgramWeight) * row.language + nssNgramWeight * mixed[row.key];
+            row.score = row.language - nssChannelWeight * row.channel.cost - (row.key == typed ? 0 : row.safety);
+        }
+    }
+    if (nameMargin != 0) for (auto* rows : {&ranked, &correctionRows}) for (auto& row : *rows)
+        if (row.key == typed) { row.language += nameMargin; row.score += nameMargin; }
     std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.score == b.score ? a.key < b.key : a.score > b.score; });
     if (typed.empty()) {
         for (const auto& row : ranked) if (out.suggestions.size() < 3) out.suggestions.push_back(row.key);
@@ -341,9 +437,17 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
         if (out.suggestions.size() < 3) out.suggestions.push_back(row.key);
         if (out.candidates.size() < 24) out.candidates.push_back({row, row.key == typed ? CandidateSource::typed : row.key.find(' ') != std::string::npos ? CandidateSource::splitCorrection : costs.contains(row.key) ? CandidateSource::fuzzyLexicon : CandidateSource::completion, row.score - typedScore});
     }
-    const auto length = input.characterOffsets.empty() ? typed.size() : input.characterOffsets.size() - 1;
-    static const std::unordered_set<std::string> empty;
-    out.correction = correction(view.lexicon, correctionRows, costs, typed, length, input.letterFlags, input.context, input.kept, empty, empty, engine_->options_.correction);
+    // A typed "id" is I'd, is, rid or the noun; the model's favourite "i" (I think id -> I)
+    // drops the d the user typed.
+    if (typed == "id") std::erase_if(correctionRows, [](const auto& row) { return row.key == "i"; });
+    if (nssRecovery == 1 || nssRecovery == 3) broad.clear();
+    if (nssRecovery == 1) injected.clear();
+    auto loose = broad; loose.insert(injected.begin(), injected.end());
+    for (const auto& word : close) { loose.erase(word); broad.erase(word); }
+    auto policy = engine_->options_.correction;
+    policy.oovMargin += nssOovMarginShift; policy.realWordMargin += nssRealWordMarginShift;
+    // A typo aimed at a blocked word is left alone (biitch must not become "british").
+    out.correction = correction(view.lexicon, correctionRows, costs, typed, length, input.letterFlags, input.context, input.kept || aimedAtBlocked, loose, broad, policy, nssChannelWeight);
     static const std::unordered_set<std::string> iForms{"i", "i'm", "i'll", "i've", "i'd"};
     if (input.word == typed && iForms.contains(typed)) out.correction = {typed, 100, 0, {}};
     if (out.correction.word) {

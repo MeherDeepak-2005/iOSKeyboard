@@ -176,7 +176,9 @@ public:
     // raw: the channel is key geometry plus uniform insertion/deletion/transposition
     // costs, without the spelling rules (doubled letters, vowel/sound-alike confusions,
     // apostrophe skips); see EngineOptions::raw.
-    struct Options { double beam = 16; std::size_t width = 512; bool raw = false; };
+    // touchSigma > 0: taps scored by touchSubstitutionCost with this spread (not raw).
+    // channelWeight: the channel cost's weight against log P in every score and bound.
+    struct Options { double beam = 16; std::size_t width = 512; bool raw = false; double touchSigma = 0; double channelWeight = kb::channelWeight; };
     explicit NeuralFstSearch(SearchGraph& graph) : graph_(graph) {}
     NeuralFstSearch(SearchGraph& graph, Options options) : graph_(graph), options_(options) {}
     std::vector<RankedRow> decode(std::string_view typed, std::span<const std::optional<TouchOffset>> taps,

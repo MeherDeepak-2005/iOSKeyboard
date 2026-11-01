@@ -108,7 +108,7 @@ bool nearForm(std::string_view a, std::string_view b) {
 CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const RankedRow> rows,
         const std::unordered_map<std::string, double>& costs, std::string_view typed, std::size_t length,
         std::span<const std::uint8_t> letterFlags, std::span<const std::string> context, bool kept, const std::unordered_set<std::string>& loose,
-        const std::unordered_set<std::string>& broad, const CorrectionPolicy& suppliedPolicy) {
+        const std::unordered_set<std::string>& broad, const CorrectionPolicy& suppliedPolicy, double nonWordChannel) {
     if (kept) return {};
     auto literal = std::find_if(rows.begin(), rows.end(), [&](const auto& r) { return r.channel.word == typed; });
     if (literal == rows.end()) return {};
@@ -116,7 +116,7 @@ CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const Ra
     std::vector<const RankedRow*> eligible;
     for (const auto& r : rows) if (r.channel.word != typed && costs.contains(r.channel.word)) eligible.push_back(&r);
     const RankedRow* best = nullptr;
-    double channel = lexicon.contains(typed) ? realWordChannelWeight : channelWeight;
+    double channel = lexicon.contains(typed) ? realWordChannelWeight : nonWordChannel;
     // A non-word is judged against each candidate's correction cost: the same word as a
     // completion (cost 0, the typed text is its prefix) must not turn the gate into autocomplete
     // (successfull -> successfully). The real-word gate keeps the completion cost it was

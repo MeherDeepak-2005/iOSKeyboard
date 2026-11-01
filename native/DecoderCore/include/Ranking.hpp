@@ -61,5 +61,5 @@ bool nearForm(std::string_view a, std::string_view b);
 CorrectionResult correction(const GenerationLexicon& lexicon, std::span<const RankedRow> rows,
     const std::unordered_map<std::string, double>& costs, std::string_view typed, std::size_t characterCount,
     std::span<const std::uint8_t> letterFlags, std::span<const std::string> context, bool kept, const std::unordered_set<std::string>& loose,
-    const std::unordered_set<std::string>& broad, const CorrectionPolicy& policy);
+    const std::unordered_set<std::string>& broad, const CorrectionPolicy& policy, double nonWordChannel = channelWeight);
 } // namespace kb

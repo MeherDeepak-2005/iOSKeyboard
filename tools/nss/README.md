@@ -63,6 +63,17 @@ python3 evaluate.py score raw-nss --vs raw-ngram
 python3 context_report.py raw-ngram raw-nss
 ```
 
+## The NSS tier's product rules
+
+Outside raw mode, the `nss` tier applies product rules on top of the joint search
+(`EngineSession::decodeNeural`): the n-gram tier's recovered candidates and blocked-typo
+rule, kept opening quotes, the "id" rule, names protected by P(`<unk>`) in context and by
+capitalization, candidates rescored with a quarter of the n-gram and a frequency prior, and
+taps scored against the key they landed on (`touchSubstitutionCost`).
+Each is a tunable in `native/DecoderCore/include/Engine.hpp`; a `--tuning` benchmark build
+reads `KB_<tunable>` overrides. Results and rejected alternatives:
+[COMPARISON.md](../../docs/nss-paper/COMPARISON.md#nss-tier-with-product-rules-1-november-2026).
+
 ## Historical checkpoint implementation
 
 # Neural search space (NSS) word language model

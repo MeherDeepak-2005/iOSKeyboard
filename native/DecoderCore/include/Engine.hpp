@@ -63,6 +63,38 @@ struct EngineView {
     std::uint64_t personalizationRevision = 0, vocabularyRevision = 0;
     double penalty(std::string_view word) const;
 };
+// The NSS tier's product rules (EngineSession::decodeNeural), tuned on the autocorrect
+// benchmark's tune half (tools/evaluation/autocorrect; docs/nss-paper/COMPARISON.md).
+// nssRecovery: 0 none; 1 the n-gram tier's recovered candidates (narrow first-letter passes,
+// broad recovery, context injection) join the gate as close words, and a typo aimed at a
+// blocked word is left alone; 2 the n-gram tier's rule, recovered words judged as loose or
+// severe (changes rare words the user meant: 13% -> 37%); 3 only context injections loose.
+KB_TUNABLE(nssRecovery, 1);
+// Weight of the pack's log frequency added to a word's model score.
+KB_TUNABLE(nssFrequencyWeight, 0.1);
+// Typed text outside the lexicon scores P(<unk>) in context (NeuralFst::typedUnknown), so it
+// is likelier to stand where names and new words go; 0 uses the n-gram's context-free mass.
+KB_TUNABLE(nssUnknownLiteral, 1);
+// A non-word typed capitalized after the first word of a sentence (Jurevis, not JUREVIS) is
+// probably a name: correcting it needs this much more margin.
+KB_TUNABLE(nssCapitalMargin, 3.0);
+// Weight of the production n-gram in the final word scores (the joint search's candidates are
+// rescored as (1 - w) x G + w x n-gram); 0 scores with G alone.
+KB_TUNABLE(nssNgramWeight, 0.25);
+// Added to the supplied policy's non-word margin (oovMargin, -0.5) for the NSS tier, whose
+// unknown-text score sits higher than the n-gram's, and to its real-word margin (5). A real-word
+// shift of -1 fixed 4.5 points more real-word errors on the held split but changed four times
+// as many correct words (0.08% -> 0.34%), so it stays 0.
+KB_TUNABLE(nssOovMarginShift, -1.5);
+KB_TUNABLE(nssRealWordMarginShift, 0.0);
+// The channel cost's weight in the NSS tier's search, scores and non-word gate. 4.5 kept more
+// names and rare words but fixed fewer misspellings (held: -0.4 points, Birkbeck -2.5).
+KB_TUNABLE(nssChannelWeight, 4.0);
+// The NSS tier's joint search (NeuralFstSearch::Options): relative beam and token width, and
+// the touch spread for taps in key widths (touchSubstitutionCost; 0 keeps substitutionCost).
+KB_TUNABLE(nssBeam, 16);
+KB_TUNABLE(nssWidth, 512);
+KB_TUNABLE(nssTouchSigma, 0.7);
 struct EngineOptions {
     // Raw decoding, to measure the language models themselves: both tiers run the same
     // joint search (NeuralFstSearch) over their own graph (NeuralFst or NgramFst), with

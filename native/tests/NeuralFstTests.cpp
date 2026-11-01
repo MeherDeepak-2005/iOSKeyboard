@@ -6,6 +6,7 @@
 #include <iostream>
 #include <sstream>
 #include <cstring>
+#include <limits>
 using namespace kb;
 static std::vector<std::byte> read(const char* path) {
     std::ifstream in(path, std::ios::binary); assert(in);
@@ -95,5 +96,33 @@ int main(int argc, char** argv) {
     auto fresh = engine->createSession()->decode(in, state->view());
     assert(reset.suggestions == fresh.suggestions && reset.candidates.size() == fresh.candidates.size());
     for (std::size_t i = 0; i < reset.candidates.size(); ++i) assert(std::abs(reset.candidates[i].ranked.score - fresh.candidates[i].ranked.score) < 1e-6);
-    std::cout << "NSS graph: " << expectedArcs << " untruncated initial arcs; direct/fallback, ExtendLM, lookahead, pruning, cancellation and field reset passed\n";
+    // Taps scored against the key they landed on (touchSubstitutionCost): the typed key costs
+    // nothing however far off-centre, and a tap on the s|d border makes d cost only the base.
+    assert(touchSubstitutionCost('s', 's', TouchOffset{0.45, 0.4}, 0.7) == 0);
+    const auto border = touchSubstitutionCost('d', 's', TouchOffset{0.5, 0}, 0.7), centre = touchSubstitutionCost('d', 's', TouchOffset{0, 0}, 0.7);
+    assert(std::abs(border - substitutionBase) < 1e-9 && centre > border + 0.9);
+    // The NSS tier's product rules (decodeNeural).
+    std::uint64_t wordSession = 1000;
+    auto typedWord = [&](std::string shown, std::string normalized, std::vector<std::string> context) {
+        DecodeInput request; request.modelTier = "nss"; request.word = std::move(shown); request.normalized = std::move(normalized);
+        request.context = std::move(context); request.identity.fieldRevision = 3; request.identity.wordSessionID = ++wordSession;
+        return session->decode(request, state->view());
+    };
+    // A leading apostrophe opens a quote: the word keeps it, corrected or not.
+    auto quoted = typedWord("'happy", "'happy", {"i", "am", "so"});
+    assert(!quoted.correction.word);
+    for (const auto& suggestion : quoted.suggestions) assert(suggestion.front() == '\'');
+    // A typed "id" is never shortened to "i".
+    auto id = typedWord("id", "id", {"i", "think"});
+    assert(id.correction.word != std::optional<std::string>("i"));
+    // A capitalized non-word after the sentence's first word needs nssCapitalMargin more margin.
+    auto lower = typedWord("jurevis", "jurevis", {"i", "was", "talking", "to"}), name = typedWord("Jurevis", "jurevis", {"i", "was", "talking", "to"});
+    assert(lower.correction.gate && name.correction.gate);
+    assert(std::abs(lower.correction.margin - name.correction.margin - nssCapitalMargin) < 1e-6);
+    // A typo aimed at a blocked word is left alone, not recovered into another word.
+    state->setSafety({{"bitch", std::numeric_limits<double>::infinity()}});
+    auto aimed = typedWord("biitch", "biitch", {});
+    assert(!aimed.correction.word);
+    std::cout << "NSS graph: " << expectedArcs << " untruncated initial arcs; direct/fallback, ExtendLM, lookahead, pruning, cancellation, field reset "
+                 "and the NSS tier's touch, quote, id, name and blocked-typo rules passed\n";
 }

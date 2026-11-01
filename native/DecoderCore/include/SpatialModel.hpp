@@ -62,6 +62,11 @@ std::optional<GridPoint> grid(std::uint8_t letter) noexcept;
 // firstVowelSubstitutionCost instead.
 double substitutionCost(std::uint8_t intended, std::uint8_t typed,
                         std::optional<TouchOffset> tap = {}, bool typedFirst = false) noexcept;
+// A tap scored against the key it landed on: (d(intended)^2 - d(typed)^2) / (2 sigma^2), plus
+// substitutionBase for another key, capped like substitutionCost. The typed key costs nothing
+// however far off-centre the tap, and a tap on the border between two keys makes both nearly
+// equal; sigma is the touch spread in key widths. Spelling confusions keep their own costs.
+double touchSubstitutionCost(std::uint8_t intended, std::uint8_t typed, TouchOffset tap, double sigma, bool typedFirst = false) noexcept;
 // Key geometry alone: squared distance / 2 + substitutionBase, no spelling confusions
 // (vowel for vowel, c/k/s/z). The raw decoder's channel (EngineOptions::raw).
 double geometricSubstitutionCost(std::uint8_t intended, std::uint8_t typed, std::optional<TouchOffset> tap = {}) noexcept;
