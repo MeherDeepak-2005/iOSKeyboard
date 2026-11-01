@@ -1,0 +1,15 @@
+{
+  "implementation_commit": "d77aa92d8937b871ffb36515a11647853d8e22ff",
+  "sha256": {
+    "native/DecoderCore/src/NeuralFst.cpp": "85e6562c9305daa285e15c63449eecb75578f82195dfff9e3160e6d09d644674",
+    "native/DecoderCore/src/Engine.cpp": "82a3cee5314f8668c798e3ccfc81794d3f4b4106124ff5961e0429791196ef95",
+    "native/DecoderCore/src/Glide.cpp": "35357e413d4fd87343e4e81d5a2812afe482b3256e1c41a4b7d6ccf68eb4cf6f",
+    "keyboard/nss-english.nsslm": "ef8b999732e6afbc07b69b06feaf3a8170adb90f89923496d32ae8075ea3a9e2",
+    "tools/nss/artifacts/baseline-step8000.nsslm": "814966e17fb56dc8ecad73758f01cd94195e665885373ec4a92f4321e7556638",
+    "keyboard/langdata.bin": "9db0760697014aecdf540d1828cd523156bcf87a2ed04f2afaa724ac24cd8ea6",
+    "keyboard/safety.kbguard": "e49f5383ee1b14575cfcfe8e015d2e6760e8959c4a9f9bcea4f43f85e5b9c937"
+  },
+  "baseline_commit": "5f2df22065d4ac3aba3b6d76ff61c1ebc9e5fddc",
+  "full_quality_runs": "Three corpus processes; latency is confounded by concurrent host work. Separate alternating latency replay is required.",
+  "device": "Desktop native harness. iOS simulator checks are integration only; no physical-device measurement."
+}

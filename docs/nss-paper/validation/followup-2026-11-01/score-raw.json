@@ -1,0 +1,858 @@
+{
+ "ref": "cur-raw-ngram",
+ "runs": [
+  "cur-raw-generic",
+  "cur-raw-chat"
+ ],
+ "split": "held",
+ "metrics": {
+  "ECPS real misspellings fixed": {
+   "n": 9622,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 75.24423196840574,
+    "cur-raw-generic": 79.83787154437746,
+    "cur-raw-chat": 78.85055082103513
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 864,
+     "lost": 422,
+     "p": 1.9696024103827227e-35,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 809,
+     "lost": 462,
+     "p": 1.5736973228030592e-22,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS target in top 3": {
+   "n": 9622,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 91.58179172729163,
+    "cur-raw-generic": 92.28850550821035,
+    "cur-raw-chat": 91.7688630222407
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 282,
+     "lost": 214,
+     "p": 0.0025911878763793376,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 259,
+     "lost": 241,
+     "p": 0.44712950152481357,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS left uncorrected": {
+   "n": 9622,
+   "higher_is_better": false,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 12.689669507378923,
+    "cur-raw-generic": 9.55102889212222,
+    "cur-raw-chat": 10.735813760133029
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 215,
+     "lost": 517,
+     "p": 1.4514294545680797e-29,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 286,
+     "lost": 474,
+     "p": 9.267990028071895e-12,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS missing first letter fixed": {
+   "n": 30,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 76.66666666666667,
+    "cur-raw-generic": 76.66666666666667,
+    "cur-raw-chat": 73.33333333333333
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 1,
+     "lost": 1,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 1,
+     "lost": 2,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS other first letter fixed": {
+   "n": 29,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 24.137931034482758,
+    "cur-raw-generic": 24.137931034482758,
+    "cur-raw-chat": 20.689655172413794
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 1,
+     "lost": 2,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS first two swapped fixed": {
+   "n": 33,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 100.0,
+    "cur-raw-generic": 100.0,
+    "cur-raw-chat": 100.0
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic typos fixed": {
+   "n": 5606,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 87.0139136639315,
+    "cur-raw-generic": 91.17017481270068,
+    "cur-raw-chat": 90.3496254013557
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 368,
+     "lost": 135,
+     "p": 5.549780406158588e-26,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 349,
+     "lost": 162,
+     "p": 8.631323348179238e-17,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic target in top 3": {
+   "n": 5606,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 94.89832322511594,
+    "cur-raw-generic": 96.69996432393863,
+    "cur-raw-chat": 96.16482340349626
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 152,
+     "lost": 51,
+     "p": 7.411588886176222e-13,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 139,
+     "lost": 68,
+     "p": 9.029388340942277e-07,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic left uncorrected": {
+   "n": 5606,
+   "higher_is_better": false,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 4.138423118087763,
+    "cur-raw-generic": 2.425972172672137,
+    "cur-raw-chat": 3.264359614698537
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 45,
+     "lost": 141,
+     "p": 1.0020920854832654e-12,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 68,
+     "lost": 117,
+     "p": 0.0003886194340684363,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic first letter wrong fixed": {
+   "n": 977,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 84.33981576253838,
+    "cur-raw-generic": 88.7410440122825,
+    "cur-raw-chat": 88.63868986693961
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 68,
+     "lost": 25,
+     "p": 9.375635307717017e-06,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 68,
+     "lost": 26,
+     "p": 1.73169122624538e-05,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn omission fixed": {
+   "n": 827,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 78.71825876662636,
+    "cur-raw-generic": 84.76420798065297,
+    "cur-raw-chat": 84.64328899637243
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 89,
+     "lost": 39,
+     "p": 1.1653734361916297e-05,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 86,
+     "lost": 37,
+     "p": 1.1699599803798203e-05,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn insertion fixed": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 90.76638965835642,
+    "cur-raw-generic": 94.36749769159742,
+    "cur-raw-chat": 93.07479224376732
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 57,
+     "lost": 18,
+     "p": 7.2441565137744585e-06,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 50,
+     "lost": 25,
+     "p": 0.0052282430040142824,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn sub_adjacent fixed": {
+   "n": 1078,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 90.07421150278293,
+    "cur-raw-generic": 93.41372912801484,
+    "cur-raw-chat": 92.4860853432282
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 62,
+     "lost": 26,
+     "p": 0.00015714867103001833,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 59,
+     "lost": 33,
+     "p": 0.008780930806975222,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn double fixed": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 91.04339796860573,
+    "cur-raw-generic": 94.64450600184672,
+    "cur-raw-chat": 93.53647276084949
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 54,
+     "lost": 15,
+     "p": 2.612848003590018e-06,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 50,
+     "lost": 23,
+     "p": 0.002118172746400632,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn transposition fixed": {
+   "n": 1021,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 96.57198824681684,
+    "cur-raw-generic": 98.0411361410382,
+    "cur-raw-chat": 97.64936336924583
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 24,
+     "lost": 9,
+     "p": 0.013530986849218607,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 21,
+     "lost": 10,
+     "p": 0.07075554598122835,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn two_errors fixed": {
+   "n": 514,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 58.56031128404669,
+    "cur-raw-generic": 69.06614785992218,
+    "cur-raw-chat": 68.09338521400778
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 82,
+     "lost": 28,
+     "p": 2.519412514630621e-07,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 83,
+     "lost": 34,
+     "p": 6.775655653746717e-06,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn omission in top 3": {
+   "n": 827,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 89.72188633615478,
+    "cur-raw-generic": 93.71221281741234,
+    "cur-raw-chat": 92.38210399032648
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 49,
+     "lost": 16,
+     "p": 5.084767048790177e-05,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 43,
+     "lost": 21,
+     "p": 0.008146902228698568,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_aspell fixed": {
+   "n": 237,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 34.59915611814346,
+    "cur-raw-generic": 31.223628691983123,
+    "cur-raw-chat": 28.270042194092827
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 8,
+     "lost": 16,
+     "p": 0.15158963203430176,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 7,
+     "lost": 22,
+     "p": 0.008130058646202087,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_aspell in top 3": {
+   "n": 237,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 64.55696202531645,
+    "cur-raw-generic": 60.75949367088607,
+    "cur-raw-chat": 60.33755274261603
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 9,
+     "lost": 18,
+     "p": 0.12207812070846558,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 6,
+     "lost": 16,
+     "p": 0.052478790283203125,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_birkbeck fixed": {
+   "n": 15136,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 23.487050739957716,
+    "cur-raw-generic": 20.566860465116278,
+    "cur-raw-chat": 18.888742071881605
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 140,
+     "lost": 582,
+     "p": 7.436950990823287e-65,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 102,
+     "lost": 798,
+     "p": 1.5788800680258425e-134,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_birkbeck in top 3": {
+   "n": 15136,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 48.92970401691332,
+    "cur-raw-generic": 45.084566596194506,
+    "cur-raw-chat": 45.381871035940804
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 207,
+     "lost": 789,
+     "p": 1.4682416561754795e-80,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 258,
+     "lost": 795,
+     "p": 3.709973579186694e-64,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_holbrook fixed": {
+   "n": 450,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 37.77777777777778,
+    "cur-raw-generic": 34.22222222222222,
+    "cur-raw-chat": 32.22222222222222
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 11,
+     "lost": 27,
+     "p": 0.013852965261321515,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 7,
+     "lost": 32,
+     "p": 7.025478407740593e-05,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_holbrook in top 3": {
+   "n": 450,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 53.55555555555556,
+    "cur-raw-generic": 46.666666666666664,
+    "cur-raw-chat": 46.22222222222222
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 5,
+     "lost": 36,
+     "p": 7.84157236921601e-07,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 5,
+     "lost": 38,
+     "p": 2.4995097192004323e-07,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_wikipedia fixed": {
+   "n": 1100,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 59.27272727272727,
+    "cur-raw-generic": 59.90909090909091,
+    "cur-raw-chat": 52.0
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 54,
+     "lost": 47,
+     "p": 0.5507089135982718,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 17,
+     "lost": 97,
+     "p": 8.63623783016948e-15,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_wikipedia in top 3": {
+   "n": 1100,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "cur-raw-ngram": 87.45454545454545,
+    "cur-raw-generic": 85.72727272727273,
+    "cur-raw-chat": 84.0909090909091
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 15,
+     "lost": 34,
+     "p": 0.009399241523873059,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 10,
+     "lost": 47,
+     "p": 7.513043097095995e-07,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD false corrections, MacKenzie clean": {
+   "n": 1083,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 1.569713758079409,
+    "cur-raw-generic": 0.554016620498615,
+    "cur-raw-chat": 1.10803324099723
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 2,
+     "lost": 13,
+     "p": 0.00738525390625,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 6,
+     "lost": 11,
+     "p": 0.332305908203125,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD false corrections, ECPS correct": {
+   "n": 9522,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 1.2287334593572778,
+    "cur-raw-generic": 0.8191556395715186,
+    "cur-raw-chat": 0.945179584120983
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 27,
+     "lost": 66,
+     "p": 6.467045262218053e-05,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 32,
+     "lost": 59,
+     "p": 0.006105521074524772,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD hard valid words changed": {
+   "n": 95,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 21.05263157894737,
+    "cur-raw-generic": 18.94736842105263,
+    "cur-raw-chat": 21.05263157894737
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 3,
+     "lost": 5,
+     "p": 0.7265625,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 3,
+     "lost": 3,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD unknown names changed": {
+   "n": 292,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 47.945205479452056,
+    "cur-raw-generic": 53.082191780821915,
+    "cur-raw-chat": 53.082191780821915
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 26,
+     "lost": 11,
+     "p": 0.020073851919732988,
+     "guard_fail": true
+    },
+    "cur-raw-chat": {
+     "gained": 28,
+     "lost": 13,
+     "p": 0.027533155829587486,
+     "guard_fail": true
+    }
+   }
+  },
+  "GUARD unknown slang changed": {
+   "n": 8,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 100.0,
+    "cur-raw-generic": 100.0,
+    "cur-raw-chat": 100.0
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD rare dictionary words changed": {
+   "n": 1457,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 13.177762525737817,
+    "cur-raw-generic": 12.834591626630061,
+    "cur-raw-chat": 10.638297872340425
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 27,
+     "lost": 32,
+     "p": 0.6029232012571503,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 12,
+     "lost": 49,
+     "p": 1.969878418086636e-06,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD correct plurals stripped": {
+   "n": 1236,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 1.6181229773462784,
+    "cur-raw-generic": 0.08090614886731391,
+    "cur-raw-chat": 0.4854368932038835
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 0,
+     "lost": 19,
+     "p": 3.814697265625e-06,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 3,
+     "lost": 17,
+     "p": 0.0025768280029296875,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD real-word errors fixed": {
+   "n": 708,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 55.64971751412429,
+    "cur-raw-generic": 58.75706214689266,
+    "cur-raw-chat": 60.73446327683616
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 67,
+     "lost": 45,
+     "p": 0.04673506819395985,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 78,
+     "lost": 42,
+     "p": 0.001299333097250276,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD contractions restored": {
+   "n": 80,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 58.75,
+    "cur-raw-generic": 77.5,
+    "cur-raw-chat": 80.0
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 18,
+     "lost": 3,
+     "p": 0.0014896392822265625,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 20,
+     "lost": 3,
+     "p": 0.00048828125,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD next word in top 3": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "cur-raw-ngram": 17.174515235457065,
+    "cur-raw-generic": 20.313942751615883,
+    "cur-raw-chat": 19.29824561403509
+   },
+   "paired": {
+    "cur-raw-generic": {
+     "gained": 82,
+     "lost": 48,
+     "p": 0.0036340112928066486,
+     "guard_fail": false
+    },
+    "cur-raw-chat": {
+     "gained": 69,
+     "lost": 46,
+     "p": 0.03975050512654258,
+     "guard_fail": false
+    }
+   }
+  },
+  "keystroke savings": {
+   "n": 1083,
+   "rates": {
+    "cur-raw-ngram": 45.586643994435,
+    "cur-raw-generic": 49.45122893801206,
+    "cur-raw-chat": 48.47735353223064
+   }
+  }
+ }
+}

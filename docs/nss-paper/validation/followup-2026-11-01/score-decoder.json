@@ -1,0 +1,611 @@
+{
+ "ref": "head-nss-english",
+ "runs": [
+  "cur-nss-english"
+ ],
+ "split": "held",
+ "metrics": {
+  "ECPS real misspellings fixed": {
+   "n": 9622,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 86.69715235917688,
+    "cur-nss-english": 86.89461650384536
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 112,
+     "lost": 93,
+     "p": 0.20858388241278167,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS target in top 3": {
+   "n": 9622,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 94.32550405321139,
+    "cur-nss-english": 94.00332571191021
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 48,
+     "lost": 79,
+     "p": 0.007519595098399993,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS left uncorrected": {
+   "n": 9622,
+   "higher_is_better": false,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 4.89503221783413,
+    "cur-nss-english": 4.344211182706298
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 50,
+     "lost": 103,
+     "p": 2.1974609952518855e-05,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS missing first letter fixed": {
+   "n": 30,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 80.0,
+    "cur-nss-english": 73.33333333333333
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 0,
+     "lost": 2,
+     "p": 0.5,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS other first letter fixed": {
+   "n": 29,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 48.275862068965516,
+    "cur-nss-english": 44.827586206896555
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 0,
+     "lost": 1,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "ECPS first two swapped fixed": {
+   "n": 33,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 100.0,
+    "cur-nss-english": 96.96969696969697
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 0,
+     "lost": 1,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic typos fixed": {
+   "n": 5606,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 91.40206921155904,
+    "cur-nss-english": 91.7588298251873
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 37,
+     "lost": 17,
+     "p": 0.009073340339587177,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic target in top 3": {
+   "n": 5606,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 96.0756332500892,
+    "cur-nss-english": 96.27185158758473
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 27,
+     "lost": 16,
+     "p": 0.12628947438543037,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic left uncorrected": {
+   "n": 5606,
+   "higher_is_better": false,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 1.80164109882269,
+    "cur-nss-english": 1.5162326079200856
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 7,
+     "lost": 23,
+     "p": 0.005222879350185394,
+     "guard_fail": false
+    }
+   }
+  },
+  "Synthetic first letter wrong fixed": {
+   "n": 977,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 87.81985670419652,
+    "cur-nss-english": 88.43398157625384
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 8,
+     "lost": 2,
+     "p": 0.109375,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn omission fixed": {
+   "n": 827,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 83.31318016928658,
+    "cur-nss-english": 83.55501813784764
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 7,
+     "lost": 5,
+     "p": 0.7744140625,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn insertion fixed": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 94.18282548476455,
+    "cur-nss-english": 94.36749769159742
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 6,
+     "lost": 4,
+     "p": 0.75390625,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn sub_adjacent fixed": {
+   "n": 1078,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 91.4656771799629,
+    "cur-nss-english": 91.92949907235622
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 9,
+     "lost": 4,
+     "p": 0.266845703125,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn double fixed": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 97.96860572483841,
+    "cur-nss-english": 98.33795013850416
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 5,
+     "lost": 1,
+     "p": 0.21875,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn transposition fixed": {
+   "n": 1021,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 97.35553379040157,
+    "cur-nss-english": 97.84524975514202
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 6,
+     "lost": 1,
+     "p": 0.125,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn two_errors fixed": {
+   "n": 514,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 72.76264591439688,
+    "cur-nss-english": 73.15175097276264
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 4,
+     "lost": 2,
+     "p": 0.6875,
+     "guard_fail": false
+    }
+   }
+  },
+  "  syn omission in top 3": {
+   "n": 827,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 91.77750906892382,
+    "cur-nss-english": 92.01934703748489
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 5,
+     "lost": 3,
+     "p": 0.7265625,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_aspell fixed": {
+   "n": 237,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 48.52320675105485,
+    "cur-nss-english": 46.835443037974684
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 5,
+     "lost": 9,
+     "p": 0.4239501953125,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_aspell in top 3": {
+   "n": 237,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 70.88607594936708,
+    "cur-nss-english": 69.19831223628692
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 7,
+     "lost": 11,
+     "p": 0.480682373046875,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_birkbeck fixed": {
+   "n": 15136,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 29.783298097251585,
+    "cur-nss-english": 29.77669133192389
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 171,
+     "lost": 172,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_birkbeck in top 3": {
+   "n": 15136,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 54.221723044397464,
+    "cur-nss-english": 52.41807610993658
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 177,
+     "lost": 450,
+     "p": 2.3379092441506856e-28,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_holbrook fixed": {
+   "n": 450,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 38.888888888888886,
+    "cur-nss-english": 36.44444444444444
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 6,
+     "lost": 17,
+     "p": 0.03468966484069824,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_holbrook in top 3": {
+   "n": 450,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 53.333333333333336,
+    "cur-nss-english": 52.0
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 9,
+     "lost": 15,
+     "p": 0.30745625495910645,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_wikipedia fixed": {
+   "n": 1100,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 74.72727272727273,
+    "cur-nss-english": 79.0
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 62,
+     "lost": 15,
+     "p": 6.083249930070788e-08,
+     "guard_fail": false
+    }
+   }
+  },
+  "ext_wikipedia in top 3": {
+   "n": 1100,
+   "higher_is_better": true,
+   "guardrail": false,
+   "rates": {
+    "head-nss-english": 89.36363636363636,
+    "cur-nss-english": 89.54545454545455
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 17,
+     "lost": 15,
+     "p": 0.860050065908581,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD false corrections, MacKenzie clean": {
+   "n": 1083,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 0.18467220683287167,
+    "cur-nss-english": 0.18467220683287167
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD false corrections, ECPS correct": {
+   "n": 9522,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 0.7036336904011762,
+    "cur-nss-english": 0.5461037597143458
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 6,
+     "lost": 21,
+     "p": 0.005924612283706665,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD hard valid words changed": {
+   "n": 95,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 17.894736842105264,
+    "cur-nss-english": 16.842105263157894
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 4,
+     "lost": 5,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD unknown names changed": {
+   "n": 292,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 59.93150684931507,
+    "cur-nss-english": 59.24657534246575
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 3,
+     "lost": 5,
+     "p": 0.7265625,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD unknown slang changed": {
+   "n": 8,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 100.0,
+    "cur-nss-english": 100.0
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD rare dictionary words changed": {
+   "n": 1457,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 12.148249828414551,
+    "cur-nss-english": 14.481811942347289
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 40,
+     "lost": 6,
+     "p": 3.1028037028590916e-07,
+     "guard_fail": true
+    }
+   }
+  },
+  "GUARD correct plurals stripped": {
+   "n": 1236,
+   "higher_is_better": false,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 0.0,
+    "cur-nss-english": 0.0
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD real-word errors fixed": {
+   "n": 708,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 48.30508474576271,
+    "cur-nss-english": 48.163841807909606
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 4,
+     "lost": 5,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD contractions restored": {
+   "n": 80,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 92.5,
+    "cur-nss-english": 93.75
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 1,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "GUARD next word in top 3": {
+   "n": 1083,
+   "higher_is_better": true,
+   "guardrail": true,
+   "rates": {
+    "head-nss-english": 17.2668513388735,
+    "cur-nss-english": 17.2668513388735
+   },
+   "paired": {
+    "cur-nss-english": {
+     "gained": 0,
+     "lost": 0,
+     "p": 1.0,
+     "guard_fail": false
+    }
+   }
+  },
+  "keystroke savings": {
+   "n": 1083,
+   "rates": {
+    "head-nss-english": 48.29185345493894,
+    "cur-nss-english": 47.96722831967847
+   }
+  }
+ }
+}

@@ -1,0 +1,91 @@
+{
+  "date": "2026-11-01",
+  "head_commit": "d77aa92d8937b871ffb36515a11647853d8e22ff",
+  "working_tree": {
+    "changed": [
+      "native/CMakeLists.txt",
+      "native/DecoderCore/include/Engine.hpp",
+      "native/DecoderCore/include/NeuralFst.hpp",
+      "native/DecoderCore/include/SpatialModel.hpp",
+      "native/DecoderCore/src/Engine.cpp",
+      "native/DecoderCore/src/NeuralFst.cpp",
+      "native/DecoderCore/src/SpatialModel.cpp",
+      "native/iOS/KBDecoderBridge.mm",
+      "native/tests/run.sh",
+      "tools/evaluation/autocorrect/IOSBench.cpp",
+      "tools/nss/README.md",
+      "tools/nss/nss/build_corpus.py",
+      "tools/nss/nss/metrics.py",
+      "tools/nss/nss/text.py",
+      "tools/nss/tests/test_text.py"
+    ],
+    "diff_sha256": "389b406100edd97b26d05f143b3f12116cc64d6ffbd889da2c4afee7904b5f2e",
+    "diff_scope": "git diff HEAD -- native tools/evaluation/autocorrect/IOSBench.cpp",
+    "untracked": {
+      "native/tests/RawDecoderTests.cpp": "73734bbf9ced85c21966d1ca9e63aa82b899d6adc26f93ca924acd28d2b11b75",
+      "tools/nss/latency_paper.py": "88b0afd156e2bf438b9ab891a3ae894d2c06bdd98c6363e58a18409a18965bdb",
+      "tools/nss/compare_models.py": "e1643b69746c1e08af5be958431862b9b2fbab3bb095cb2b808c98f16837bfae",
+      "tools/evaluation/autocorrect/score_runs.py": "a05569e77dc445f3c6f07a77cecbc20b96f86e81c70858b4252d561d527c18b3"
+    }
+  },
+  "models": {
+    "keyboard/nss-english.nsslm": "ef8b999732e6afbc07b69b06feaf3a8170adb90f89923496d32ae8075ea3a9e2",
+    "tools/nss/artifacts/baseline-step8000.nsslm": "814966e17fb56dc8ecad73758f01cd94195e665885373ec4a92f4321e7556638",
+    "tools/nss/artifacts/generic-final.nsslm": "d1cecea11a181771dc260b701e6afa64a358973bd631a9b6e1a16299552b4067",
+    "tools/nss/artifacts/chat-final.nsslm": "842645d41e188aa6fcfc42b006c0010b4bde87636c94e7eceb49fcd847b0ca3b"
+  },
+  "checkpoints": {
+    "tools/nss/runs/cifg-lstm-96x670/best.pt": "44651d705db867c370665335d99d0ca196a79f6d81e280c95fcaf6c1356dc94a",
+    "tools/nss/runs/cifg-lstm-96x670-chat/best.pt": "00d054aca26a32c986d54cc17a2d58f0692ea7e7a7d069d2d3abd6f419cabc08"
+  },
+  "lexicon_sha256": "9db0760697014aecdf540d1828cd523156bcf87a2ed04f2afaa724ac24cd8ea6",
+  "safety_sha256": "e49f5383ee1b14575cfcfe8e015d2e6760e8959c4a9f9bcea4f43f85e5b9c937",
+  "corpora": {
+    "cases.tsv": "8ae9f394b3e83dfb2ee8e30d9a94d8d7ccee95d6a2daa7a0a0672d870707e664",
+    "ext-cases.tsv": "c7c0787c207b9dbca8b99b548c6e09132440cf094d293ce48b3c8e902798fe3e",
+    "keep-cases.tsv": "190895959e9a763c7967cc76a66366fe4d4b5f1b0c18885dd8b4be2690ee1de6"
+  },
+  "results": {
+    "cur-ngram.ext.jsonl": "ec5b4cce8f7c0385ae0f62433aebf36f9c972afbb7c37bc14a9c72af76625ff3",
+    "cur-ngram.jsonl": "f5cda2bbeb8768ec0fd67e3f2b2fe602e9d7c1471c403b0e29c0a0f76fa4fac0",
+    "cur-ngram.keep.jsonl": "53a5c14932f8344a550970bb9fa0c8cbfac45522a167119e9553f4a285663661",
+    "cur-nss-chat.ext.jsonl": "03aed5ed153aa395ed346dcc8dedea5c6e21c82a864a6a28c09559fddfb0522a",
+    "cur-nss-chat.jsonl": "04d18286424f78775ddc148b892e7c1851aea6c0245c6c036288b51644366ca3",
+    "cur-nss-chat.keep.jsonl": "1cb8764f8160b197166173d47d6ffdd6845b72c039eb1dcc7772d15f47a85569",
+    "cur-nss-english.ext.jsonl": "96212c417b299db5afe122ead8c4206719c6b9057b0667fd74dd2abbdb1d4c19",
+    "cur-nss-english.jsonl": "f8592d75d20b0ed89a58a6776b98507394d2b576499fc33d6f18feed55ffdc1e",
+    "cur-nss-english.keep.jsonl": "cb3283a5e248c2e97bff1bf8bff68042b9b004ffeaef4b1194104c8fc78cfdec",
+    "cur-nss-generic.ext.jsonl": "5de11c40442d4a61624bd4f9cdb7978b629b10ebdcd770c3d2538a8dcfd3e7b7",
+    "cur-nss-generic.jsonl": "40f41bc7d247d4d6709fa035e9b87481860bd75f5fd015a67846fdcc1af72424",
+    "cur-nss-generic.keep.jsonl": "2fa4c98dc1245563be57094333eaab340736dc21b495ea20ac35b7af8142a2d4",
+    "cur-raw-chat.ext.jsonl": "d6307dbb82d1d10443d1021853bfb1c10582a613ec655ec441646a7ef256f2a9",
+    "cur-raw-chat.jsonl": "ce2e3370cc4b3eeaa41033a8e0800d42e35dfd1b8c66bf998961168b8a22edba",
+    "cur-raw-chat.keep.jsonl": "87470dd3130a0cb84294eba9899db36caa0b569fcce60c4f086dafac0b1b6c44",
+    "cur-raw-generic.ext.jsonl": "de83f45db547d7cd928644687af200ca9825c1f5b9f8034cf749366317e0d63c",
+    "cur-raw-generic.jsonl": "468df981815d1e055597e2b24dc232c30f7954bee24631cc1fc2777efa646847",
+    "cur-raw-generic.keep.jsonl": "c3d936a758f2b47231d343d8a1f2bb4df1d289c74dadbdb9954ef926935a6069",
+    "cur-raw-ngram.ext.jsonl": "bdb00bf1323b62815c437bc158f563ed994ef42e6887680a006f61bbd5d3f3ec",
+    "cur-raw-ngram.jsonl": "a910f640d2a6185f61bd64e34494eebd38c9aa90f4e150bbcffa2d2a85a0bf4a",
+    "cur-raw-ngram.keep.jsonl": "4256242a4eba42375815899eea3b07a2a5d2fd66aac344c9ad7c73f68cee9d7b",
+    "head-nss-english.ext.jsonl": "cf49d05752d408af69476ee22874c4282d6837d4e4a62db97cc8fcff757a46c5",
+    "head-nss-english.jsonl": "6e8150bdebb95205e27c1992669cdb21b17fa128b0edb94999d605cdc0597084",
+    "head-nss-english.keep.jsonl": "9ade9dc3d8065683675d37b56d03a7738a1199fbf0d56b4934a02643a44d1a3c",
+    "nss-paper-after.ext.jsonl": "50bb27c67a371834c18f256ecb5a67b34d763713ead44d2f6cd9b658b3a62f91",
+    "nss-paper-after.jsonl": "04cd261de2339867f737ba8d0245a7502af8bbe8a10936deadac5c2767dc3d61",
+    "nss-paper-after.keep.jsonl": "77caaab4324cee811bedcef18508eaa4082cf3bef7986d9c68a80ba03c77562a"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "flags": [
+    "-std=c++20",
+    "-Os",
+    "-DNDEBUG"
+  ],
+  "binaries": {
+    "nss-cur": "evaluate.py build --bin nss-cur, working tree (cur-* runs)",
+    "nss-latency-paper": "tools/nss/latency_paper.py: d77aa92 with its harness plus fixed-prefix replay (head-nss-english)"
+  },
+  "notes": [
+    "head-nss-english (current compiler) and nss-paper-after (clang-2100.1.1.101, 31 October) give identical outputs on all 96,143 cases.",
+    "models.json was produced by tools/nss/compare_models.py and matches an earlier run of the same code exactly."
+  ]
+}

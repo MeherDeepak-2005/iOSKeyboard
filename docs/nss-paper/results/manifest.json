@@ -1,0 +1,26 @@
+{
+  "nss-paper-before.jsonl": {
+    "sha256": "687b0ab79d1935dccf983da60605b96bff72a90c8bd4dcff5deed2315e595340",
+    "bytes": 5056271
+  },
+  "nss-paper-before.ext.jsonl": {
+    "sha256": "d6a1876c7bab34498fb8f6db74c692ceade4e3e9db7b31a022ee0d7c5df8b13b",
+    "bytes": 3223078
+  },
+  "nss-paper-before.keep.jsonl": {
+    "sha256": "74a790688908259635ebe2a0765978d6224eaaf5766fffef9442e9c48372bacb",
+    "bytes": 332045
+  },
+  "nss-paper-after.ext.jsonl": {
+    "sha256": "50bb27c67a371834c18f256ecb5a67b34d763713ead44d2f6cd9b658b3a62f91",
+    "bytes": 3377665
+  },
+  "nss-paper-after.keep.jsonl": {
+    "sha256": "77caaab4324cee811bedcef18508eaa4082cf3bef7986d9c68a80ba03c77562a",
+    "bytes": 357040
+  },
+  "nss-paper-after.jsonl": {
+    "sha256": "04cd261de2339867f737ba8d0245a7502af8bbe8a10936deadac5c2767dc3d61",
+    "bytes": 5373253
+  }
+}

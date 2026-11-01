@@ -1,0 +1,25 @@
+Test project /tmp/nss-paper-asan
+      Start  1: shared-engine
+ 1/10 Test  #1: shared-engine ....................   Passed   10.45 sec
+      Start  2: candidate-generation
+ 2/10 Test  #2: candidate-generation .............   Passed    0.82 sec
+      Start  3: neural-search
+ 3/10 Test  #3: neural-search ....................   Passed    0.64 sec
+      Start  4: nss-fst
+ 4/10 Test  #4: nss-fst ..........................   Passed    1.85 sec
+      Start  5: nss-fst-trained
+ 5/10 Test  #5: nss-fst-trained ..................   Passed    1.78 sec
+      Start  6: nss-expanded-model-reference
+ 6/10 Test  #6: nss-expanded-model-reference .....   Passed    1.29 sec
+      Start  7: nss-word-model-cifg-tied
+ 7/10 Test  #7: nss-word-model-cifg-tied .........   Passed    0.57 sec
+      Start  8: nss-word-model-lstm-untied
+ 8/10 Test  #8: nss-word-model-lstm-untied .......   Passed    0.42 sec
+      Start  9: nss-word-model-gru-projected
+ 9/10 Test  #9: nss-word-model-gru-projected .....   Passed    0.46 sec
+      Start 10: decoder-core-parity
+10/10 Test #10: decoder-core-parity ..............   Passed    2.78 sec
+
+100% tests passed out of 10
+
+Total Test time (real) =  21.12 sec

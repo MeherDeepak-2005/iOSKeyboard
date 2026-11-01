@@ -1,0 +1,115 @@
+{
+  "sample_sha256": "166e1de5b015c1c4dfedae0b98a8913bc43f4c16dd6192781ae7c479617a185e",
+  "sampling": "Every floor(N/500)th row of cases.tsv, preserving original order.",
+  "scope": "Desktop shared host; no physical-device latency claim. Two runs per decoder; ABBA order. All sampled next-word prefixes replayed regardless of suggestion rank.",
+  "runs": [
+    {
+      "order": 0,
+      "decoder": "before",
+      "events": 501,
+      "request_count": 477,
+      "request_ms": {
+        "p50": 2.17867,
+        "p95": 10.3531,
+        "p99": 12.7121
+      },
+      "keystroke_count": 82,
+      "keystroke_ms": {
+        "p50": 0.404916,
+        "p95": 1.72933,
+        "p99": 8.80892
+      },
+      "process": [
+        {
+          "kind": "process",
+          "at": "end",
+          "peak_rss_bytes": 39796736,
+          "footprint_bytes": 24805784,
+          "heap_in_use_bytes": 2438672,
+          "heap_allocated_bytes": 41943040
+        }
+      ]
+    },
+    {
+      "order": 1,
+      "decoder": "after",
+      "events": 501,
+      "request_count": 477,
+      "request_ms": {
+        "p50": 10.0805,
+        "p95": 16.0616,
+        "p99": 21.5174
+      },
+      "keystroke_count": 82,
+      "keystroke_ms": {
+        "p50": 1.55296,
+        "p95": 3.18325,
+        "p99": 3.62796
+      },
+      "process": [
+        {
+          "kind": "process",
+          "at": "end",
+          "peak_rss_bytes": 66961408,
+          "footprint_bytes": 45826480,
+          "heap_in_use_bytes": 24635904,
+          "heap_allocated_bytes": 58720256
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "decoder": "after",
+      "events": 501,
+      "request_count": 477,
+      "request_ms": {
+        "p50": 9.59475,
+        "p95": 13.4961,
+        "p99": 14.9525
+      },
+      "keystroke_count": 82,
+      "keystroke_ms": {
+        "p50": 1.72679,
+        "p95": 3.38283,
+        "p99": 3.95329
+      },
+      "process": [
+        {
+          "kind": "process",
+          "at": "end",
+          "peak_rss_bytes": 65781760,
+          "footprint_bytes": 49971632,
+          "heap_in_use_bytes": 24635904,
+          "heap_allocated_bytes": 58720256
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "decoder": "before",
+      "events": 501,
+      "request_count": 477,
+      "request_ms": {
+        "p50": 2.11675,
+        "p95": 9.38192,
+        "p99": 11.5686
+      },
+      "keystroke_count": 82,
+      "keystroke_ms": {
+        "p50": 0.3935,
+        "p95": 1.65762,
+        "p99": 7.98404
+      },
+      "process": [
+        {
+          "kind": "process",
+          "at": "end",
+          "peak_rss_bytes": 39813120,
+          "footprint_bytes": 23593368,
+          "heap_in_use_bytes": 2438720,
+          "heap_allocated_bytes": 46137344
+        }
+      ]
+    }
+  ]
+}

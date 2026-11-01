@@ -1,0 +1,476 @@
+{
+  "baseline_commit": "5f2df22065d4ac3aba3b6d76ff61c1ebc9e5fddc",
+  "total_paired_cases": 96143,
+  "split": "held",
+  "metrics": {
+    "ECPS real misspellings fixed": {
+      "n": 9622,
+      "before": 88.57825815838703,
+      "after": 86.69715235917688,
+      "gained": 127,
+      "lost": 308,
+      "p": 1.9516080363724886e-18,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ECPS target in top 3": {
+      "n": 9622,
+      "before": 94.84514653918104,
+      "after": 94.32550405321139,
+      "gained": 149,
+      "lost": 199,
+      "p": 0.008528144789657532,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ECPS left uncorrected": {
+      "n": 9622,
+      "before": 4.344211182706298,
+      "after": 4.89503221783413,
+      "gained": 184,
+      "lost": 131,
+      "p": 0.003326846526535983,
+      "higher_is_better": false,
+      "guardrail": false,
+      "failed": false
+    },
+    "ECPS missing first letter fixed": {
+      "n": 30,
+      "before": 66.66666666666667,
+      "after": 80.0,
+      "gained": 4,
+      "lost": 0,
+      "p": 0.125,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ECPS other first letter fixed": {
+      "n": 29,
+      "before": 37.93103448275862,
+      "after": 48.275862068965516,
+      "gained": 3,
+      "lost": 0,
+      "p": 0.25,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ECPS first two swapped fixed": {
+      "n": 33,
+      "before": 96.96969696969697,
+      "after": 100.0,
+      "gained": 1,
+      "lost": 0,
+      "p": 1.0,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "Synthetic typos fixed": {
+      "n": 5606,
+      "before": 89.97502675704602,
+      "after": 91.40206921155904,
+      "gained": 170,
+      "lost": 90,
+      "p": 7.943108500395604e-07,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "Synthetic target in top 3": {
+      "n": 5606,
+      "before": 94.45237245808063,
+      "after": 96.0756332500892,
+      "gained": 181,
+      "lost": 90,
+      "p": 3.434081729530426e-08,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "Synthetic left uncorrected": {
+      "n": 5606,
+      "before": 2.3546200499464858,
+      "after": 1.80164109882269,
+      "gained": 37,
+      "lost": 68,
+      "p": 0.003220989868798528,
+      "higher_is_better": false,
+      "guardrail": false,
+      "failed": false
+    },
+    "Synthetic first letter wrong fixed": {
+      "n": 977,
+      "before": 77.58444216990789,
+      "after": 87.81985670419652,
+      "gained": 117,
+      "lost": 17,
+      "p": 1.5115278183336548e-19,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "  syn omission fixed": {
+      "n": 827,
+      "before": 83.31318016928658,
+      "after": 83.31318016928658,
+      "gained": 24,
+      "lost": 24,
+      "p": 1.0,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "  syn insertion fixed": {
+      "n": 1083,
+      "before": 93.25946445060019,
+      "after": 94.18282548476455,
+      "gained": 24,
+      "lost": 14,
+      "p": 0.14330665429588407,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "  syn sub_adjacent fixed": {
+      "n": 1078,
+      "before": 89.8886827458256,
+      "after": 91.4656771799629,
+      "gained": 39,
+      "lost": 22,
+      "p": 0.03961701489849968,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "  syn double fixed": {
+      "n": 1083,
+      "before": 98.15327793167128,
+      "after": 97.96860572483841,
+      "gained": 3,
+      "lost": 5,
+      "p": 0.7265625,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "  syn transposition fixed": {
+      "n": 1021,
+      "before": 97.74730656219393,
+      "after": 97.35553379040157,
+      "gained": 6,
+      "lost": 10,
+      "p": 0.454498291015625,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "  syn two_errors fixed": {
+      "n": 514,
+      "before": 61.284046692607006,
+      "after": 72.76264591439688,
+      "gained": 74,
+      "lost": 15,
+      "p": 1.5342060632791784e-10,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "  syn omission in top 3": {
+      "n": 827,
+      "before": 92.503022974607,
+      "after": 91.77750906892382,
+      "gained": 24,
+      "lost": 30,
+      "p": 0.4966174353179338,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_aspell fixed": {
+      "n": 237,
+      "before": 47.257383966244724,
+      "after": 48.52320675105485,
+      "gained": 17,
+      "lost": 14,
+      "p": 0.720100131817162,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_aspell in top 3": {
+      "n": 237,
+      "before": 75.10548523206751,
+      "after": 70.88607594936708,
+      "gained": 12,
+      "lost": 22,
+      "p": 0.12144948495551944,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_birkbeck fixed": {
+      "n": 15136,
+      "before": 31.07161733615222,
+      "after": 29.783298097251585,
+      "gained": 580,
+      "lost": 775,
+      "p": 1.2988792808355457e-07,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_birkbeck in top 3": {
+      "n": 15136,
+      "before": 57.432610993657505,
+      "after": 54.221723044397464,
+      "gained": 658,
+      "lost": 1144,
+      "p": 1.3896494316362748e-30,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_holbrook fixed": {
+      "n": 450,
+      "before": 40.0,
+      "after": 38.888888888888886,
+      "gained": 21,
+      "lost": 26,
+      "p": 0.5600646295802107,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_holbrook in top 3": {
+      "n": 450,
+      "before": 54.22222222222222,
+      "after": 53.333333333333336,
+      "gained": 28,
+      "lost": 32,
+      "p": 0.6988834276200057,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_wikipedia fixed": {
+      "n": 1100,
+      "before": 74.18181818181819,
+      "after": 74.72727272727273,
+      "gained": 50,
+      "lost": 44,
+      "p": 0.606295937693966,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "ext_wikipedia in top 3": {
+      "n": 1100,
+      "before": 91.9090909090909,
+      "after": 89.36363636363636,
+      "gained": 21,
+      "lost": 49,
+      "p": 0.0010932449729686132,
+      "higher_is_better": true,
+      "guardrail": false,
+      "failed": false
+    },
+    "GUARD false corrections, MacKenzie clean": {
+      "n": 1083,
+      "before": 0.18467220683287167,
+      "after": 0.18467220683287167,
+      "gained": 0,
+      "lost": 0,
+      "p": 1.0,
+      "higher_is_better": false,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD false corrections, ECPS correct": {
+      "n": 9522,
+      "before": 0.3780718336483932,
+      "after": 0.7036336904011762,
+      "gained": 36,
+      "lost": 5,
+      "p": 7.84157236921601e-07,
+      "higher_is_better": false,
+      "guardrail": true,
+      "failed": true
+    },
+    "GUARD hard valid words changed": {
+      "n": 95,
+      "before": 16.842105263157894,
+      "after": 17.894736842105264,
+      "gained": 8,
+      "lost": 7,
+      "p": 1.0,
+      "higher_is_better": false,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD unknown names changed": {
+      "n": 292,
+      "before": 63.35616438356164,
+      "after": 59.93150684931507,
+      "gained": 23,
+      "lost": 33,
+      "p": 0.22880554123435617,
+      "higher_is_better": false,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD unknown slang changed": {
+      "n": 8,
+      "before": 87.5,
+      "after": 100.0,
+      "gained": 1,
+      "lost": 0,
+      "p": 1.0,
+      "higher_is_better": false,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD rare dictionary words changed": {
+      "n": 1457,
+      "before": 26.286890871654084,
+      "after": 12.148249828414551,
+      "gained": 42,
+      "lost": 248,
+      "p": 9.985744056735225e-37,
+      "higher_is_better": false,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD correct plurals stripped": {
+      "n": 1236,
+      "before": 0.0,
+      "after": 0.0,
+      "gained": 0,
+      "lost": 0,
+      "p": 1.0,
+      "higher_is_better": false,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD real-word errors fixed": {
+      "n": 708,
+      "before": 46.89265536723164,
+      "after": 48.30508474576271,
+      "gained": 38,
+      "lost": 28,
+      "p": 0.267811664846587,
+      "higher_is_better": true,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD contractions restored": {
+      "n": 80,
+      "before": 95.0,
+      "after": 92.5,
+      "gained": 0,
+      "lost": 2,
+      "p": 0.5,
+      "higher_is_better": true,
+      "guardrail": true,
+      "failed": false
+    },
+    "GUARD next word in top 3": {
+      "n": 1083,
+      "before": 17.2668513388735,
+      "after": 17.2668513388735,
+      "gained": 0,
+      "lost": 0,
+      "p": 1.0,
+      "higher_is_better": true,
+      "guardrail": true,
+      "failed": false
+    },
+    "typo_request_p50_ms": {
+      "before": 2.23508,
+      "after": 12.0807
+    },
+    "typo_request_p95_ms": {
+      "before": 9.16308,
+      "after": 71.1188
+    },
+    "typo_request_p99_ms": {
+      "before": 10.9068,
+      "after": 162.741
+    },
+    "keystroke_p95_ms": {
+      "before": 0.678459,
+      "after": 8.2705
+    }
+  },
+  "memory": {
+    "before": [
+      {
+        "kind": "process",
+        "at": "end",
+        "peak_rss_bytes": 52117504,
+        "footprint_bytes": 20824496,
+        "heap_in_use_bytes": 7158880,
+        "heap_allocated_bytes": 46137344
+      },
+      {
+        "kind": "process",
+        "at": "end",
+        "peak_rss_bytes": 53919744,
+        "footprint_bytes": 63209928,
+        "heap_in_use_bytes": 8091472,
+        "heap_allocated_bytes": 50331648
+      },
+      {
+        "kind": "process",
+        "at": "end",
+        "peak_rss_bytes": 63766528,
+        "footprint_bytes": 52281800,
+        "heap_in_use_bytes": 2438528,
+        "heap_allocated_bytes": 41943040
+      }
+    ],
+    "after": [
+      {
+        "kind": "process",
+        "at": "end",
+        "peak_rss_bytes": 68321280,
+        "footprint_bytes": 31883696,
+        "heap_in_use_bytes": 24240528,
+        "heap_allocated_bytes": 83886080
+      },
+      {
+        "kind": "process",
+        "at": "end",
+        "peak_rss_bytes": 56066048,
+        "footprint_bytes": 32981400,
+        "heap_in_use_bytes": 24635040,
+        "heap_allocated_bytes": 71303168
+      },
+      {
+        "kind": "process",
+        "at": "end",
+        "peak_rss_bytes": 56049664,
+        "footprint_bytes": 44679600,
+        "heap_in_use_bytes": 23518528,
+        "heap_allocated_bytes": 75497472
+      }
+    ]
+  },
+  "model_before_sha256": "814966e17fb56dc8ecad73758f01cd94195e665885373ec4a92f4321e7556638",
+  "model_after_sha256": "ef8b999732e6afbc07b69b06feaf3a8170adb90f89923496d32ae8075ea3a9e2",
+  "lexicon_sha256": "9db0760697014aecdf540d1828cd523156bcf87a2ed04f2afaa724ac24cd8ea6",
+  "corpus_sha256": {
+    "cases.tsv": "8ae9f394b3e83dfb2ee8e30d9a94d8d7ccee95d6a2daa7a0a0672d870707e664",
+    "ext-cases.tsv": "c7c0787c207b9dbca8b99b548c6e09132440cf094d293ce48b3c8e902798fe3e",
+    "keep-cases.tsv": "190895959e9a763c7967cc76a66366fe4d4b5f1b0c18885dd8b4be2690ee1de6"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+  "flags": [
+    "-std=c++20",
+    "-Os",
+    "-DNDEBUG"
+  ]
+}

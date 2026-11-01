@@ -1,0 +1,38 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project keyboard.xcodeproj -scheme keyboard -configuration Debug -destination "platform=iOS Simulator,id=262C5558-8BFE-4442-AAE2-A9B93B17A3B7" -derivedDataPath /tmp/nss-paper-ios-tests "-only-testing:keyboardTests/KeyboardTests/wordNeuralSearchSpaceTierDecodesInTheSharedEngine()" CODE_SIGNING_ALLOWED=NO test-without-building
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+2026-10-31 19:44:33.643595+0530 keyboard[1989:8562080] [unspecified] container_create_or_lookup_app_group_path_by_app_group_identifier: client is not entitled
+2026-10-31 19:44:35.128973+0530 keyboard[1989:8562080] [General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-10-31 19:44:36.170222+0530 keyboard[1989:8560907] Successfully load keyboard extensions
+2026-10-31 19:44:36.328420+0530 keyboard[1989:8562259] [General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+Test Suite 'Selected tests' started at 2026-10-31 19:44:40.700.
+Test Suite 'keyboardTests.xctest' started at 2026-10-31 19:44:40.711.
+Test Suite 'keyboardTests.xctest' passed at 2026-10-31 19:44:40.712.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-31 19:44:40.712.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.012) seconds
+◇ Test run started.
+↳ Testing Library Version: 1902
+↳ Target Platform: arm64-apple-ios13.0-simulator
+◇ Suite KeyboardTests started.
+◇ Test wordNeuralSearchSpaceTierDecodesInTheSharedEngine() started.
+2026-10-31 19:44:41.030056+0530 keyboard[1989:8562338] [unspecified] container_create_or_lookup_app_group_path_by_app_group_identifier: client is not entitled
+2026-10-31 19:44:41.136672+0530 keyboard[1989:8562338] [diag] storage operation failed: personal-container-unavailable
+2026-10-31 19:44:43.561255+0530 keyboard[1989:8562259] [unspecified] container_create_or_lookup_app_group_path_by_app_group_identifier: client is not entitled
+2026-10-31 19:44:43.576096+0530 keyboard[1989:8562259] [diag] storage operation failed: personal-container-unavailable
+✔ Test wordNeuralSearchSpaceTierDecodesInTheSharedEngine() passed after 3.632 seconds.
+✔ Suite KeyboardTests passed after 3.637 seconds.
+✔ Test run with 1 test in 1 suite passed after 3.638 seconds.
+2026-10-31 19:44:45.801 xcodebuild[1549:8555297] [MT] IDETestOperationsObserverDebug: 154.442 elapsed -- Testing started completed.
+2026-10-31 19:44:45.807 xcodebuild[1549:8555297] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-31 19:44:45.812 xcodebuild[1549:8555297] [MT] IDETestOperationsObserverDebug: 154.442 sec, +154.442 sec -- end
+
+Test session results, code coverage, and logs:
+	/tmp/nss-paper-ios-tests/Logs/Test/Test-keyboard-2026.10.31_19-42-08-+0530.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started
