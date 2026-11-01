@@ -371,6 +371,167 @@ final class keyboardUITests: XCTestCase {
 		XCTAssertEqual(failures, [])
 	}
 
+	private enum ComparedKeyboard: String, CaseIterable { case glyph, apple, gboard }
+
+	/// The name each keyboard has in the globe key's long-press menu (testProbeEnabledKeyboards).
+	private func menuName(_ keyboard: ComparedKeyboard) -> String {
+		switch keyboard { case .glyph: return "Glyph"; case .apple: return "English"; case .gboard: return "Gboard" }
+	}
+
+	/// Selects a keyboard by name from the globe key's long-press menu.
+	@MainActor
+	private func activate(_ keyboard: ComparedKeyboard, in app: XCUIApplication) -> Bool {
+		app.buttons["Next keyboard"].firstMatch.press(forDuration: 1.2)
+		// The menu's rows report element type 75; match a row by its label.
+		let row = XCUIElement.ElementType(rawValue: 75) ?? .any
+		let item = app.descendants(matching: row).matching(NSPredicate(format: "label BEGINSWITH %@", menuName(keyboard))).firstMatch
+		guard item.waitForExistence(timeout: 2) else { return false }
+		item.tap()
+		RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+		let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+		shot.name = "selected \(keyboard.rawValue)"; shot.lifetime = .keepAlways; add(shot)
+		return true
+	}
+
+	/// Regression: switching to Glyph with the globe key in a focused field left its keys
+	/// disabled and the strip empty until the field was tapped again.
+	@MainActor
+	func testGlyphTypesRightAfterGlobeSwitch() throws {
+		let host = launchRuntimeHost()
+		let field = host.textFields["runtime.text"]
+		XCTAssertTrue(activate(.apple, in: host))
+		XCTAssertTrue(activate(.glyph, in: host))
+		XCTAssertTrue(host.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 5))
+		for ch in "the" { tapLetter(String(ch), in: host) }
+		let text = waitForText(field, toDifferFrom: "")
+		RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+		let primary = host.descendants(matching: .any)["suggestion.primary"]
+		NSLog("GLOBE-SWITCH text=[%@] strip=[%@]", text, primary.exists ? primary.label : "")
+		XCTAssertEqual(text.lowercased(), "the", "Glyph did not type until the field was tapped")
+		XCTAssertFalse(primary.exists ? primary.label.isEmpty : true, "The strip stayed empty after the switch")
+	}
+
+	/// Gboard exposes no keys, so it is tapped at key centres measured on the iPhone 17's
+	/// screenshot (fractions of the window; QWERTY, default theme, portrait).
+	private static let gboardKeys: [Character: CGVector] = {
+		var keys: [Character: CGVector] = [:]
+		let rows: [(String, [CGFloat], CGFloat)] = [
+			("qwertyuiop", [52, 143, 233, 323, 414, 505, 596, 686, 777, 867], 1398),
+			("asdfghjkl", [97, 187, 278, 368, 459, 550, 641, 731, 822], 1522),
+			("zxcvbnm", [187, 278, 368, 459, 550, 641, 731], 1646)]
+		for (letters, xs, y) in rows {
+			for (letter, x) in zip(letters, xs) { keys[letter] = CGVector(dx: x / 920, dy: y / 2000) }
+		}
+		keys[" "] = CGVector(dx: 459.0 / 920, dy: 1770.0 / 2000)
+		return keys
+	}()
+
+	/// Where each key is, measured once per keyboard: Glyph's and Apple's from their keys' frames,
+	/// Gboard's (which exposes none) from its screenshot. Tapping positions skips the per-tap
+	/// accessibility search that made the first run take 13 s a word.
+	@MainActor
+	private func keyPoints(for keyboard: ComparedKeyboard, in app: XCUIApplication) -> [Character: CGPoint] {
+		let window = app.windows.firstMatch.frame
+		if keyboard == .gboard {
+			return Self.gboardKeys.mapValues { CGPoint(x: window.minX + $0.dx * window.width, y: window.minY + $0.dy * window.height) }
+		}
+		var points: [Character: CGPoint] = [:]
+		for key in app.keys.allElementsBoundByIndex where key.exists {
+			let label = key.label.lowercased(), centre = CGPoint(x: key.frame.midX, y: key.frame.midY)
+			if label.count == 1, let letter = label.first, letter.isLetter { points[letter] = centre }
+			else if label == " " || label == "space" { points[" "] = centre }
+		}
+		return points
+	}
+
+	/// Types keyboardComparisonCases into an empty field through Glyph, Apple's keyboard and
+	/// Gboard (each enabled in Settings) and logs COMPARE lines; reports, never fails on accuracy.
+	@MainActor
+	func testCompareKeyboards() throws {
+		let host = XCUIApplication()
+		host.launchArguments = ["-keyboard-runtime-host"]
+		// TEST_RUNNER_KB_COMPARE_PER_BUCKET=n types the first n cases of every kind.
+		let perBucket = Int(ProcessInfo.processInfo.environment["KB_COMPARE_PER_BUCKET"] ?? "") ?? .max
+		var taken: [String: Int] = [:]
+		let cases = keyboardComparisonCases.filter { c in
+			taken[c.kind, default: 0] += 1
+			return taken[c.kind]! <= perBucket
+		}
+		let contexts = cases.map(\.context)
+		host.launchEnvironment["KB_RUNTIME_CONTEXTS"] = String(decoding: try JSONEncoder().encode(contexts), as: UTF8.self)
+		host.launch()
+		let field = host.textFields["runtime.text"]
+		XCTAssertTrue(field.waitForExistence(timeout: 5))
+		field.tap()
+		let origin = host.coordinate(withNormalizedOffset: .zero)
+		func tap(_ point: CGPoint) { origin.withOffset(CGVector(dx: point.x, dy: point.y)).tap() }
+		func pause(_ seconds: TimeInterval) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+		// Places the next case's context (or empties the field): every keyboard reads it from the document.
+		let nextFrame = host.buttons["runtime.next"].frame
+		let next = CGPoint(x: nextFrame.midX, y: nextFrame.midY)
+		pause(2)
+		var summary: [String] = []
+		for keyboard in ComparedKeyboard.allCases {
+			guard activate(keyboard, in: host) else {
+				NSLog("COMPARE %@ not in the globe menu", keyboard.rawValue)
+				continue
+			}
+			let points = keyPoints(for: keyboard, in: host)
+			guard points.count == 27 else {
+				NSLog("COMPARE %@ found %ld of 27 keys", keyboard.rawValue, points.count)
+				continue
+			}
+			var right: [String: (Int, Int)] = [:]
+			for (n, c) in cases.enumerated() {
+				let started = Date()
+				tap(next)
+				pause(0.2)
+				let before = fieldText(field)
+				for letter in c.typed { tap(points[letter]!) }
+				pause(0.3)   // a typist's pause before Space; lets each keyboard's strip settle
+				tap(points[" "]!)
+				let text = waitForText(field, toDifferFrom: before, timeout: 1.5)
+				// Everything after the context: a split ("julian to") is one wrong commit, not "to".
+				let typed = text.hasPrefix(before) ? String(text.dropFirst(before.count)) : String(text.split(separator: " ").last ?? "")
+				let committed = typed.trimmingCharacters(in: .whitespaces)
+					.replacingOccurrences(of: "\u{2019}", with: "'").lowercased()
+					.trimmingCharacters(in: .punctuationCharacters)
+				let ok = committed == c.intended
+				let tally = right[c.kind] ?? (0, 0)
+				right[c.kind] = (tally.0 + (ok ? 1 : 0), tally.1 + 1)
+				NSLog("COMPARE %@ %@ [%@] %@ -> %@ [want %@] %@ %.1fs", keyboard.rawValue, c.kind, c.context, c.typed,
+					committed, c.intended, ok ? "OK" : "MISS", Date().timeIntervalSince(started))
+				if n < 3 {
+					let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+					shot.name = "\(keyboard.rawValue) \(c.typed)"; shot.lifetime = .keepAlways; add(shot)
+				}
+			}
+			let line = keyboard.rawValue + " " + right.keys.sorted().map { "\($0)=\(right[$0]!.0)/\(right[$0]!.1)" }.joined(separator: " ")
+			NSLog("COMPARE-SUMMARY %@", line)
+			summary.append(line)
+		}
+		let attachment = XCTAttachment(string: summary.joined(separator: "\n"))
+		attachment.name = "keyboard comparison"; attachment.lifetime = .keepAlways; add(attachment)
+	}
+
+	/// Logs the globe key's long-press menu (KBMENU lines): the names it offers for each enabled
+	/// keyboard, which testCompareKeyboards selects by.
+	@MainActor
+	func testProbeEnabledKeyboards() throws {
+		let host = launchRuntimeHost()
+		RunLoop.current.run(until: Date().addingTimeInterval(2))
+		let before = Set(host.descendants(matching: .any).allElementsBoundByIndex.filter(\.exists).map(\.label))
+		host.buttons["Next keyboard"].firstMatch.press(forDuration: 1.2)
+		RunLoop.current.run(until: Date().addingTimeInterval(1))
+		let all = host.descendants(matching: .any).allElementsBoundByIndex.filter(\.exists)
+		for element in all where !before.contains(element.label) && !element.label.isEmpty {
+			NSLog("KBMENU type=%lu label=[%@] id=[%@] frame=%@", element.elementType.rawValue, element.label,
+				element.identifier, NSCoder.string(for: element.frame))
+		}
+		let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+		shot.name = "globe menu"; shot.lifetime = .keepAlways; add(shot)
+	}
+
 	@MainActor
 	private func inputModeSwitch(in app: XCUIApplication) -> XCUIElement {
 		let keys = app.keys.allElementsBoundByIndex

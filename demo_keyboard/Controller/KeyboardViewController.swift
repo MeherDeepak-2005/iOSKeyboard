@@ -459,6 +459,14 @@ final class KeyboardViewController: UIInputViewController {
 		keyboard?.prepareHaptics()     // prime the engine so the first tap isn't delayed
 	}
 
+	/// Switching to Glyph with the globe key in a field that already has focus sends no
+	/// text-input callback until the user taps the field: the keys stayed disabled and the
+	/// strip empty. On screen, the host connection is live, so connect now.
+	override func viewDidAppear(_ animated: Bool) {
+		super.viewDidAppear(animated)
+		if !hostConnectionReady { handleHostCallback() }
+	}
+
 	override func viewWillDisappear(_ animated: Bool) {
 		super.viewWillDisappear(animated)
 		hostConnectionReady = false

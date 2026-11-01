@@ -39,7 +39,11 @@ struct keyboardApp: App {
 #if DEBUG
 private struct KeyboardRuntimeHostView: View {
 	@State private var text = ""
+	@State private var contextIndex = 0
 	@FocusState private var isFocused: Bool
+	/// Sentences the keyboard comparison places before each typed word (KB_RUNTIME_CONTEXTS, JSON).
+	private let contexts: [String] = ProcessInfo.processInfo.environment["KB_RUNTIME_CONTEXTS"]
+		.flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) } ?? []
 
 	var body: some View {
         VStack {
@@ -48,6 +52,13 @@ private struct KeyboardRuntimeHostView: View {
                     .accessibilityIdentifier("runtime.clear")
                 Button("Copy sample") { UIPasteboard.general.string = "Clipboard sample" }
                     .accessibilityIdentifier("runtime.copy")
+                Button("Next context") {
+                    let context = contexts.isEmpty ? "" : contexts[contextIndex % contexts.count]
+                    text = context.isEmpty ? "" : context + " "
+                    contextIndex += 1
+                    isFocused = true
+                }
+                .accessibilityIdentifier("runtime.next")
             }
             TextField("Type", text: $text)
                 .keyboardType(ProcessInfo.processInfo.arguments.contains("-keyboard-runtime-url") ? .URL : .default)
