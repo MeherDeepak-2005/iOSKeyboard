@@ -35,6 +35,21 @@ def words(fragment: str) -> list[str]:
     return [canonical(match) for match in WORD.findall(fragment) if match.strip("'’ʼ")]
 
 
+def cased_sentences(text: str) -> list[list[tuple[str, bool]]]:
+    """sentences(text), each word paired with whether the source writes it capitalized: a
+    capital first letter, not all capitals (a name or place inside a sentence, any
+    sentence's first word; not OK, TV or the U of U.S.)."""
+    def capitalized(match: str) -> bool:
+        letters = match.strip("'’ʼ")
+        return letters[:1].isupper() and not (len(letters) > 1 and letters.isupper()) and len(letters) > 1
+    out = []
+    for fragment in SENTENCE_END.split(text):
+        found = [(canonical(match), capitalized(match)) for match in WORD.findall(fragment) if match.strip("'’ʼ")]
+        if found:
+            out.append(found)
+    return out
+
+
 def sentences(text: str) -> list[list[str]]:
     """Non-empty sentences of `text`, each a list of lowercase words."""
     out = []

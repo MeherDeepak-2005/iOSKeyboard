@@ -90,8 +90,10 @@ def evaluate(model, shard: Shard, device, scored: np.ndarray | None = None, max_
         m = torch.from_numpy(mask).to(device)
         features, _ = model(x)
         rows, wanted = features[m], y[m]
-        for start in range(0, rows.shape[0], 2048):
-            f, t = rows[start:start + 2048], wanted[start:start + 2048]
+        # 512 rows: each [rows, 30k] logits copy is ~60 MB, so validation fits beside
+        # training on an 8 GB machine (2048 rows peaked near 1.5 GB).
+        for start in range(0, rows.shape[0], 512):
+            f, t = rows[start:start + 512], wanted[start:start + 512]
             logits = (logits_fn or model.logits)(f)
             all_lp = torch.log_softmax(logits, -1)
             totals.nll_all -= all_lp.gather(1, t[:, None]).sum().item()

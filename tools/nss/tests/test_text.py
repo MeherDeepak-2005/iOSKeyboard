@@ -1,7 +1,8 @@
 import unittest
 
 from nss.lexicon import Lexicon, UnkPolicy
-from nss.text import sentences, words
+from nss import build_corpus
+from nss.text import cased_sentences, sentences, words
 from nss.vocab import BOS, UNK, Vocabulary
 
 
@@ -18,6 +19,31 @@ class TextTests(unittest.TestCase):
         # U+2026 is a separator for the keyboard, not a sentence end.
         self.assertEqual(sentences("wait… what"), [["wait", "what"]])
         self.assertEqual(sentences("... !!"), [])
+
+
+    def test_cased_sentences_keep_the_words(self):
+        text = "I met Sarah in London. 'Hello' – don’t   STOP!\nwait… What"
+        self.assertEqual([[w for w, _ in c] for c in cased_sentences(text)], sentences(text))
+        self.assertEqual(cased_sentences("we met Sarah"), [[("we", False), ("met", False), ("sarah", True)]])
+        # Acronyms and single letters are not names: "OK", "TV", the "U" of "U.S."
+        self.assertEqual(cased_sentences("ok OK TV U Sarah's"), [[("ok", False), ("ok", False), ("tv", False), ("u", False), ("sarah's", True)]])
+
+
+class NameUnkTests(unittest.TestCase):
+    def test_capitalized_names_become_unk(self):
+        build_corpus._init(str(build_corpus.DEFAULT_VOCAB), str(build_corpus.DEFAULT_LANGDATA), frozenset({"sarah"}), 1.0)
+        vocab = build_corpus._vocab
+        self.assertNotEqual(vocab.id("sarah"), UNK)
+        _, ids, lengths, stats = build_corpus._encode(("chat", "k", "I met Sarah. Sarah is here.\nhey sarah"))
+        first, second, third = ids[:lengths[0]], ids[lengths[0]:lengths[0] + lengths[1]], ids[lengths[0] + lengths[1]:]
+        self.assertEqual(first[3], UNK)    # inside a sentence, capitalized
+        self.assertEqual(second[1], UNK)   # opening a sentence
+        self.assertEqual(third[2], vocab.id("sarah"))   # lowercase: a word, not a name
+        self.assertEqual(stats["names"], 2)
+        build_corpus._init(str(build_corpus.DEFAULT_VOCAB), str(build_corpus.DEFAULT_LANGDATA))
+        _, ids, _, stats = build_corpus._encode(("chat", "k", "I met Sarah."))
+        self.assertEqual(stats["names"], 0)
+        self.assertEqual(ids[3], vocab.id("sarah"))
 
 
 class VocabularyTests(unittest.TestCase):

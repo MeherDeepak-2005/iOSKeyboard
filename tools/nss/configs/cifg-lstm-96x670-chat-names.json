@@ -1,0 +1,7 @@
+{
+  "description": "The chat model's data with names and places as <unk> (data-v3: build_corpus --sources tatoeba wikitext soda --stock-name-keep 0.25 --name-unk 0.9): the vocabulary's names become <unk> nine times in ten, so <unk> is likely wherever a name or place goes and the decoder can leave typed names alone.",
+  "model": {"arch": "lstm", "embed": 96, "hidden": 670, "proj": 96, "cifg": true, "layers": 1, "tied": true, "dropout": 0.0},
+  "data": {"weights": {"soda": 0.45, "tatoeba": 2.0, "wikitext": 0.3}},
+  "train": {"batch": 128, "bptt": 48, "tokens": 130000000, "lr": 3e-3, "warmup": 1000, "clip": 1.0, "weight_decay": 0.01, "eval_every": 2000,
+            "valid": ["soda", "tatoeba", "wikitext"]}
+}
