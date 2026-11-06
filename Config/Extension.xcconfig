@@ -18,11 +18,15 @@ INTERNAL_GRU_TOKENIZER_MODEL =
 INTERNAL_GRU_SCORE_PACKAGE =
 INTERNAL_GRU_ENABLED = NO
 
-// Word-level neural search space LM (tools/nss, an .nsslm file). Same opt-in rule:
-// INTERNAL_NSS_ENABLED = YES with the INTERNAL_NSS Swift compile flag bundles the model
-// and selects the shared C++ engine's "nss" tier; ordinary builds stay n-gram-only.
-INTERNAL_NSS_MODEL = $(SRCROOT)/keyboard/nss-english.nsslm
-INTERNAL_NSS_ENABLED = NO
+// Word-level neural search space LM (tools/nss, an .nsslm file): the English decoder in
+// every build. NSS_ENABLED bundles NSS_MODEL as nss-english.nsslm and KeyboardEngine.shared
+// selects the shared C++ engine's "nss" tier from the first word. KB_NSS_RAW runs it as the
+// official configuration: the word model alone (no correction rules, no n-gram mixing),
+// exact scores with the published unigram fallback kept as a floor (KBDecoderBridge.mm).
+// Set NSS_ENABLED = NO in Secrets.xcconfig for an n-gram-only comparison build.
+NSS_MODEL = $(SRCROOT)/keyboard/nss-english.nsslm
+NSS_ENABLED = YES
+GCC_PREPROCESSOR_DEFINITIONS = $(inherited) KB_NSS_RAW=1
 
 #include? "Secrets.xcconfig"
 #include? "Klipy.xcconfig"

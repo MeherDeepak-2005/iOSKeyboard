@@ -109,6 +109,15 @@ final class KeyboardView: UIView {
 	/// FST/LM and its own labelled path benchmark. Disabling here preserves normal
 	/// fire-on-touch typing instead of reclassifying a stroke and dropping the first key.
 	var glideEnabled = true
+	/// Debug builds name the decoder tier on the space bar ("space · NSS"), so a
+	/// silent fallback to n-gram is visible. Nil keeps the stock "space".
+	var spaceBadge: String? {
+		didSet {
+			guard spaceBadge != oldValue else { return }
+			for key in rows.joined() where key.isSpace { key.setTitle(spaceTitle) }
+		}
+	}
+	var spaceTitle: String { spaceBadge.map { "space · \($0)" } ?? "space" }
 	var glideTouch: UITouch?            // the single finger tracked for a glide
 	var glide: GlideTrack?
 	let trailLayer = CAShapeLayer()

@@ -1,16 +1,99 @@
 {
-  "initialization": "function-preserving CIFG expansion; not newly trained",
-  "source_sha256": "814966e17fb56dc8ecad73758f01cd94195e665885373ec4a92f4321e7556638",
-  "sha256": "ef8b999732e6afbc07b69b06feaf3a8170adb90f89923496d32ae8075ea3a9e2",
-  "bytes": 7056928,
-  "parameters": 6372332,
+  "schema_version": 1,
+  "format": "NSLM v1",
+  "file": "nss-english.nsslm",
+  "bytes": 3922400,
+  "sha256": "d1cecea11a181771dc260b701e6afa64a358973bd631a9b6e1a16299552b4067",
   "architecture": {
     "arch": "lstm",
     "embed": 96,
     "hidden": 670,
     "proj": 96,
+    "cifg": true,
     "layers": 1,
-    "cifg": false,
-    "tied": false
-  }
+    "tied": true
+  },
+  "parameters": 3362638,
+  "vocabulary_sha256": "6baffcfede08a37d7c67acd5c360e70f180aa10225ee4a302881366679aabef7",
+  "langdata_sha256": "9db0760697014aecdf540d1828cd523156bcf87a2ed04f2afaa724ac24cd8ea6",
+  "unk_policy": {
+    "formula": "P(w|ctx) = P(<unk>|ctx) * share * u(w) / oov_mass for lexicon words outside the vocabulary",
+    "unk_lexicon_share": 0.3166785501996787,
+    "mean_log_unk_validation": -3.596767246110534
+  },
+  "quantization": {
+    "scheme": "int8 symmetric per row, fp32 scales; biases fp32",
+    "max_abs_error": {
+      "1": 0.004624694585800171,
+      "10": 0.009227249771356583,
+      "12": 0.007110342383384705
+    }
+  },
+  "training": {
+    "step": 21158,
+    "config": {
+      "description": "Gboard NSS reference: one CIFG-LSTM layer, 96-wide embedding, 670 cells projected to 96, input/output embeddings tied (3.3M parameters).",
+      "model": {
+        "arch": "lstm",
+        "embed": 96,
+        "hidden": 670,
+        "proj": 96,
+        "cifg": true,
+        "layers": 1,
+        "tied": true,
+        "dropout": 0.0
+      },
+      "data": {
+        "weights": {
+          "tatoeba": 3.0,
+          "wikitext": 0.6
+        }
+      },
+      "train": {
+        "batch": 128,
+        "bptt": 48,
+        "tokens": 130000000,
+        "lr": 0.003,
+        "min_lr_ratio": 0.05,
+        "warmup": 1000,
+        "clip": 1.0,
+        "weight_decay": 0.01,
+        "eval_every": 2000,
+        "log_every": 50,
+        "seed": 1234,
+        "valid": [
+          "tatoeba",
+          "wikitext"
+        ],
+        "chunk": 1024,
+        "eval_device": "cpu"
+      }
+    },
+    "valid": {
+      "tatoeba": {
+        "ppl_all": 42.778128116994054,
+        "ppl_word": 60.684701798444316,
+        "top1": 0.26160572337042926,
+        "top3": 0.4109432962374139,
+        "unk_pred": 0.05149508508102715,
+        "unk_rate": 0.05281782931144825,
+        "tokens": 90383
+      },
+      "wikitext": {
+        "ppl_all": 143.2272236735656,
+        "ppl_word": 161.8033494810397,
+        "top1": 0.2152822692414303,
+        "top3": 0.339301922376638,
+        "unk_pred": 0.06689793222133483,
+        "unk_rate": 0.06622513195290296,
+        "tokens": 413850
+      }
+    },
+    "data_weights": {
+      "tatoeba": 3.0,
+      "wikitext": 0.6
+    }
+  },
+  "source_checkpoint_sha256": "44651d705db867c370665335d99d0ca196a79f6d81e280c95fcaf6c1356dc94a",
+  "source": "tools/nss/artifacts/generic-final.nsslm"
 }

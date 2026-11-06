@@ -275,6 +275,7 @@ final class KeyboardViewController: UIInputViewController {
 		kb.accessibilityElementsHidden = !hostConnectionReady
 		kb.hapticsEnabled   = KBSettings.haptics
 		kb.glideEnabled     = activeLanguageMode == .english
+		showModelTier(on: kb)
 		let touchViewID = UUID().uuidString
 		kb.onTouchSample = { [weak self, weak kb] phase, id, key, time, tap in
 			guard let self, let kb, self.keyboard === kb,

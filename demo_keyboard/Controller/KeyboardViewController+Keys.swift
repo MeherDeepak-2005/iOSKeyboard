@@ -78,11 +78,28 @@ extension KeyboardViewController {
 		typingTrace = TypingTrace()
 		engine.discardModelSession(finishedSession)
 		wordSessionModelTier = engine.preferredModelTier(for: activeLanguageMode)
+		showModelTier(on: keyboard)
+	}
+
+	/// Debug and internal GRU builds only: name the session's decoder tier on the space bar.
+	func showModelTier(on keyboard: KeyboardView?) {
+		#if DEBUG || INTERNAL_GRU
+		switch wordSessionModelTier {
+		case .neuralSearchSpace: keyboard?.spaceBadge = "NSS"
+		case .neuralGRU: keyboard?.spaceBadge = "GRU"
+		case .ngram:
+			// Say why NSS is not in use: no bundled or loadable model, or no engine for it.
+			let reason = engine.neuralWordModel == nil ? "no model"
+				: engine.neuralSearchSpaceReady ? nil : "no engine"
+			keyboard?.spaceBadge = activeLanguageMode != .english ? "n-gram"
+				: "n-gram" + (reason.map { " (\($0))" } ?? "")
+		}
+		#endif
 	}
 
 	@inline(__always)
 	func insertIntoHost(_ text: String) {
-		#if DEBUG || INTERNAL_GRU || INTERNAL_NSS
+		#if DEBUG || INTERNAL_GRU
 		let started = ProcessInfo.processInfo.systemUptime
 		let signpost = KBDiagnostics.beginHostInsert()
 		textDocumentProxy.insertText(text)

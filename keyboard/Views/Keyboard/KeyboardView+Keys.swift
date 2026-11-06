@@ -143,7 +143,7 @@ extension KeyboardView {
 			return KeySpec(symbol: "return", accessibilityLabel: "Return",
 				role: .accent, width: .ret) { [weak self] in self?.routeReturn() }
 		}()
-		let space = KeySpec(label: "space", accessibilityLabel: "Space", width: .flex,
+		let space = KeySpec(label: spaceTitle, accessibilityLabel: "Space", width: .flex,
 			isSpace: true) { [weak self] in
 			self?.routeInsert(" ", nil)
 			self?.returnToLettersFromSymbolPage()   // stock: space snaps back to ABC from 123/#+=

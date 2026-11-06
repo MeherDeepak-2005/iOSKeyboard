@@ -402,7 +402,7 @@
 				83C6F3022FE821180014EA39 /* Sources */,
 				83C6F3032FE821180014EA39 /* Frameworks */,
 				83C6F3042FE821180014EA39 /* Resources */,
-				A10000042FE821180014EA39 /* Install Internal Neural Model */,
+				A10000042FE821180014EA39 /* Install Neural Models */,
 			);
 			buildRules = (
 			);
@@ -498,7 +498,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		A10000042FE821180014EA39 /* Install Internal Neural Model */ = {
+		A10000042FE821180014EA39 /* Install Neural Models */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -508,10 +508,10 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/tools/lm/install_internal_gru.sh",
-				"$(SRCROOT)/tools/nss/install_internal_nss.sh",
-				"$(INTERNAL_NSS_MODEL)",
+				"$(SRCROOT)/tools/nss/install_nss.sh",
+				"$(NSS_MODEL)",
 			);
-			name = "Install Internal Neural Model";
+			name = "Install Neural Models";
 			outputFileListPaths = (
 			);
 			outputPaths = (
@@ -519,7 +519,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# The installers self-gate on INTERNAL_GRU_ENABLED / INTERNAL_NSS_ENABLED and no-op\n# otherwise, so ordinary Debug and Release builds bundle no model.\n\"${SRCROOT}/tools/lm/install_internal_gru.sh\"\n\"${SRCROOT}/tools/nss/install_internal_nss.sh\"\n";
+			shellScript = "# The GRU installer self-gates on INTERNAL_GRU_ENABLED; the NSS installer bundles the\n# English word model unless NSS_ENABLED=NO.\n\"${SRCROOT}/tools/lm/install_internal_gru.sh\"\n\"${SRCROOT}/tools/nss/install_nss.sh\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -815,11 +815,11 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/native/DecoderCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -838,11 +838,11 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/native/DecoderCore/include";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -860,10 +860,10 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -881,10 +881,10 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
-				DEVELOPMENT_TEAM = U66M5N8GCZ;
 				PRODUCT_BUNDLE_IDENTIFIER = com.meherdeepak.glyph.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

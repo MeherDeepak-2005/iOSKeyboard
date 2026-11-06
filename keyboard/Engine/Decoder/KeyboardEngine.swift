@@ -208,27 +208,25 @@ final class KeyboardEngine {
 	/// Process-wide engine: iOS may prewarm more than one controller, while language
 	/// data and personalization should be loaded exactly once per extension process.
 	///
-	/// Default builds use the n-gram decoder. Internal builds install the GRU neural search
-	/// space (`INTERNAL_GRU`), whose evidence carries through ranking and boundary selection.
-	/// Enable model bundling separately in Secrets.xcconfig and measure residency before promotion.
+	/// English decodes with the bundled word-level neural search space (tools/nss); a build
+	/// without the model (NSS_ENABLED=NO) keeps the n-gram decoder. Internal GRU builds
+	/// (`INTERNAL_GRU`) install the GRU search space instead.
 	static let shared: KeyboardEngine = {
 		#if INTERNAL_GRU
 		return KeyboardEngine(searchPrior: GRULanguagePrior.bundled())
-		#elseif INTERNAL_NSS
-		return KeyboardEngine(neuralWordModelURL: Bundle.main.url(forResource: "nss-english", withExtension: "nsslm"))
 		#else
-		return KeyboardEngine()
+		return KeyboardEngine(neuralWordModelURL: Bundle.main.url(forResource: "nss-english", withExtension: "nsslm"))
 		#endif
 	}()
 
 	/// The word-level neural search space model (tools/nss), mapped on `queue` at startup.
-	/// Only `INTERNAL_NSS` builds bundle and pass one; nil keeps the n-gram tier.
+	/// Nil (no bundled model) keeps the n-gram tier.
 	private let neuralWordModelURL: URL?
 	var neuralWordModel: KBNeuralWordModel?
 	private let neuralTierLock = NSLock()
 	private var neuralTierReady = false
 	/// True once the shared engine decodes the "nss" tier; read on the main thread when a
-	/// word session picks its tier, so a session never asks for a tier the engine lacks.
+	/// word session picks its tier.
 	var neuralSearchSpaceReady: Bool {
 		neuralTierLock.lock(); defer { neuralTierLock.unlock() }
 		return neuralTierReady
@@ -293,13 +291,17 @@ final class KeyboardEngine {
 		}
 	}
 
-	/// Called by the controller only when a new word session begins. Release builds use
-	/// the production singleton above, which has no neural model and therefore always
-	/// return `.ngram`. Internal profiling can inject a verified model without creating
-	/// a second ranking path in the controller.
+	/// Called by the controller only when a new word session begins. English sessions take
+	/// the "nss" tier whenever a model is bundled, including the words typed while the
+	/// engine is still starting: every decode queues behind initialization on `queue`, so
+	/// it runs once the model is mapped. Only a model that fails to load downgrades those
+	/// first sessions (their results are dropped as a tier mismatch); later sessions then
+	/// see the engine without NSS and take n-gram.
 	func preferredModelTier(for languageMode: KBLanguageMode) -> DecodeModelTier {
 		guard languageMode == .english else { return .ngram }
 		if neuralSearchSpaceReady { return .neuralSearchSpace }
+		if neuralWordModelURL != nil, candidateBackend == .cpp,
+		   initializationGroup.wait(timeout: .now()) == .timedOut { return .neuralSearchSpace }
 		guard let searchPrior else { return .ngram }
 		searchPrior.prepareForSelection()
 		return searchPrior.isReady ? searchPrior.modelTier : .ngram

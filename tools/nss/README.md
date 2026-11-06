@@ -200,8 +200,8 @@ KB_NSS=../../../keyboard/nss-english.nsslm python3 evaluate.py run nss
 python3 evaluate.py score nss --vs <n-gram run>
 ```
 
-On iOS the model is opt-in (`Config/README.md`): `INTERNAL_NSS_ENABLED=YES` bundles
-it and the `INTERNAL_NSS` Swift condition selects the `nss` tier, so ordinary builds
-stay n-gram-only. In the checkpoint implementation, Glide still scored with the n-gram. The new graph tier also supplies neural lookahead and word scores to Glide. The promotion gates in
+On iOS the model ships in every build (`Config/README.md`): `NSS_ENABLED` bundles
+`keyboard/nss-english.nsslm` (currently `artifacts/generic-final.nsslm`) and English
+word sessions take the `nss` tier from the first word; `NSS_ENABLED=NO` builds n-gram-only. In the checkpoint implementation, Glide still scored with the n-gram. The new graph tier also supplies neural lookahead and word scores to Glide. The promotion gates in
 `tools/lm/README.md` (data rights, blind user-separated evaluation, device latency and
 memory) apply before it ships.
