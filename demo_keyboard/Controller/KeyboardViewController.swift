@@ -464,6 +464,9 @@ final class KeyboardViewController: UIInputViewController {
 	/// strip empty. On screen, the host connection is live, so connect now.
 	override func viewDidAppear(_ animated: Bool) {
 		super.viewDidAppear(animated)
+		// The system's edge-swipe gates delay touches near the screen sides, so Q, A
+		// and P arrive late, often with their lift, and their balloon never shows.
+		view.window?.gestureRecognizers?.forEach { $0.delaysTouchesBegan = false }
 		if !hostConnectionReady { handleHostCallback() }
 	}
 

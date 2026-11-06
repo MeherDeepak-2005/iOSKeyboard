@@ -162,8 +162,10 @@ final class KeyboardView: UIView {
 	// MARK: State for Touch
 	var touchKeys: [UITouch: KeyButton] = [:]
 	// Stock-style character balloon above the pressed key. One per active touch so
-	// two-thumb typing shows both; removed on lift, slide-off, or cancel.
+	// two-thumb typing shows both. Quick taps retain 100ms of visual feedback;
+	// cancellation and glide classification dismiss immediately.
 	var touchPopups: [UITouch: UIView] = [:]
+	var popupShownAt: [UITouch: TimeInterval] = [:]
 	var poppedKeys: [UITouch: KeyButton] = [:]   // key whose glyph is hidden under its balloon
 	var alternativeTimers: [UITouch: Timer] = [:]
 	var alternativePopups: [UITouch: KeyAlternativesView] = [:]

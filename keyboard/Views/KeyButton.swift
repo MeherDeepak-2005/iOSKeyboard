@@ -219,7 +219,7 @@ final class KeyButton: UIView {
 		label?.font = legendFont(text)
 		label?.textAlignment = .center
 		label?.text = text
-		label?.isHidden = false
+		label?.isHidden = covered
 		iconView?.isHidden = true
 		contentView = label
 		if !spokenLabelWasExplicit { accessibilityLabel = text }

@@ -376,6 +376,57 @@ struct KeyboardConsistencyTests {
         #expect(primary.frame.minY == 0)
     }
 
+    @Test func largeKeyPopupsStayInsideDeckAtEdgesWithoutChangingHeight() throws {
+        for dark in [false, true] {
+            for width: CGFloat in [320, 375, 393, 440, 700, 1024] {
+                for suggestions in [false, true] {
+                    let keyboard = KeyboardView(theme: .preview(dark: dark, accent: KBPalette.system, customTheme: nil))
+                    keyboard.traitOverrides.userInterfaceIdiom = width >= 1000 ? .pad : .phone
+                    keyboard.frame.size.width = width
+                    keyboard.setShowsSuggestions(suggestions)
+                    keyboard.frame.size.height = keyboard.keyboardHeight
+                    keyboard.layoutIfNeeded()
+                    let height = keyboard.keyboardHeight
+                    for letter in ["q", "p", "a", "l", "z", "m"] {
+                        let key = try #require(keyboard.letterKeys.first { $0.base == letter }?.key)
+                        // Include taps just outside the cap in its expanded target.
+                        for x in [key.frame.midX, key.frame.minX - 2, key.frame.maxX + 2] {
+                            let popup = try #require(keyboard.makeKeyPopup(for: key,
+                                at: CGPoint(x: x, y: key.frame.midY)))
+                            #expect(keyboard.bounds.insetBy(dx: 1, dy: 1).contains(popup.frame))
+                            let label = try #require(popup.subviews.first as? UILabel)
+                            // The stem is the cap: the balloon ends exactly at its bottom.
+                            #expect(popup.frame.maxY == key.frame.maxY)
+                            #expect(popup.frame.width >= 55.5)
+                            #expect(!popup.isUserInteractionEnabled)
+                            #expect(label.text == key.popupText)
+                            if suggestions {
+                                // Room above the cap: a full-size head and glyph.
+                                #expect(label.frame.height >= 50)
+                                #expect(label.font.pointSize == 38)
+                                if letter == "q" || letter == "p" { #expect(popup.frame.minY == 2) }
+                            } else {
+                                #expect(label.font.pointSize >= 26)
+                            }
+                            #expect(keyboard.keyboardHeight == height)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test func shiftRelabelKeepsCoveredKeyHiddenUntilPreviewEnds() throws {
+        let key = KeyButton(spec: KeySpec(label: "A", width: .unit, popup: true, letterBase: "a") {},
+            theme: .preview(dark: false, accent: KBPalette.system, customTheme: nil))
+        key.setCovered(true)
+        key.setTitle("a")
+        let label = try #require(descendants(key).compactMap { $0 as? UILabel }.first)
+        #expect(label.isHidden)
+        key.setCovered(false)
+        #expect(!label.isHidden)
+    }
+
     @Test func renderUpdatedKeyboardAndTools() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("keyboard-consistency-renders")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

@@ -3,43 +3,35 @@ import UIKit
 extension KeyboardView {
 	// MARK: Multi-touch — fire on contact, track every finger
 
-
-
 	private func showPopup(for key: KeyButton, at point: CGPoint, touch: UITouch) {
-		guard let text = key.popupText else { return }
+		guard let popupView = makeKeyPopup(for: key, at: point) else { return }
+		addSubview(popupView)
+		bringSubviewToFront(popupView)
+		touchPopups[touch] = popupView
+		popupShownAt[touch] = ProcessInfo.processInfo.systemUptime
+		key.setCovered(true)
+		poppedKeys[touch] = key
+	}
 
-		// Prevent duplicates for the same touch.
-		touchPopups[touch]?.removeFromSuperview()
-
+	/// Stock-style balloon: a wide head carrying the character, joined by a neck to a
+	/// stem that is the pressed cap itself. The extension cannot draw above its own
+	/// bounds, so a top-row head borrows the suggestion strip and slides down over the
+	/// cap rather than growing the deck. Edge heads shift inward; the stem stays put.
+	func makeKeyPopup(for key: KeyButton, at point: CGPoint) -> UIView? {
+		guard let text = key.popupText else { return nil }
 		let keyFrame = key.frame
-		let edge: CGFloat = 3
-		let tailHeight: CGFloat = 7
-
-		// Prefer a key-height balloon, but cap it to the visible keyboard bounds.
-		let popupWidth = max(keyFrame.width * 1.32, 42)
-		let preferredPopupHeight = keyFrame.height + 5
-		let maximumPopupHeight = max(1, bounds.height - edge * 2)
-		let popupHeight = min(preferredPopupHeight, maximumPopupHeight)
-
-		// Taps in expanded edge/gap targets resolve to a key even when they are outside
-		// the visible cap. Anchor those previews at the touch so the popup follows the
-		// same resolved press that will commit on lift.
-		let anchorX = keyFrame.contains(point) ? keyFrame.midX : point.x
-		let desiredX = anchorX - popupWidth / 2
-		let maximumX = max(edge, bounds.width - edge - popupWidth)
-		let popupX = min(max(desiredX, edge), maximumX)
-
-		// Normally place it just above the key, then clamp within the keyboard frame.
-		let desiredY = keyFrame.minY - popupHeight
-		let maximumY = max(edge, bounds.height - edge - popupHeight)
-		let popupY = min(max(edge, desiredY), maximumY)
-
-		let popupFrame = CGRect(
-			x: popupX,
-			y: popupY,
-			width: popupWidth,
-			height: popupHeight
-		)
+		let edge: CGFloat = 2
+		let headWidth = min(max(keyFrame.width * 1.65, 56), max(1, bounds.width - edge * 2))
+		let preferredHeadHeight = max(keyFrame.height * 1.3, 54)
+		let headX = min(max(keyFrame.midX - headWidth / 2, edge),
+			max(edge, bounds.width - edge - headWidth))
+		// Lower rows: the head sits above the cap. Top row: pinned to the deck top, and
+		// with no strip above it the head may swallow the whole cap.
+		let headTop = max(edge, keyFrame.minY + 2 - preferredHeadHeight)
+		let headBottom = min(headTop + preferredHeadHeight, keyFrame.maxY)
+		let popupFrame = CGRect(x: min(headX, keyFrame.minX), y: headTop,
+			width: max(headX + headWidth, keyFrame.maxX) - min(headX, keyFrame.minX),
+			height: keyFrame.maxY - headTop)
 
 		let popupView = UIView(frame: popupFrame)
 		popupView.isUserInteractionEnabled = false
@@ -47,50 +39,73 @@ extension KeyboardView {
 		popupView.layer.masksToBounds = false
 		popupView.layer.zPosition = 1000
 
-		let body = CGRect(x: 0, y: 0, width: popupView.bounds.width,
-			height: max(1, popupView.bounds.height - tailHeight))
-		let bubblePath = UIBezierPath(roundedRect: body, cornerRadius: 11)
-		let anchor = min(max(keyFrame.midX - popupFrame.minX, 10), popupFrame.width - 10)
-		let tail = UIBezierPath()
-		tail.move(to: CGPoint(x: anchor - 7, y: body.maxY - 1))
-		tail.addLine(to: CGPoint(x: anchor, y: popupView.bounds.maxY))
-		tail.addLine(to: CGPoint(x: anchor + 7, y: body.maxY - 1))
-		tail.close()
-		bubblePath.append(tail)
+		// Local geometry. Every piece winds the same way, so nonzero fill unions them.
+		let head = CGRect(x: headX - popupFrame.minX, y: 0,
+			width: headWidth, height: headBottom - headTop)
+		let stem = CGRect(x: keyFrame.minX - popupFrame.minX, y: keyFrame.minY - headTop,
+			width: keyFrame.width, height: keyFrame.height)
+		let headRadius: CGFloat = 12
+		let path = UIBezierPath(roundedRect: head, cornerRadius: headRadius)
+		path.append(UIBezierPath(roundedRect: stem, cornerRadius: theme.cornerRadius))
+		let neckTop = head.maxY - headRadius
+		let neckBottom = min(head.maxY + 8, stem.maxY - theme.cornerRadius)
+		if neckBottom > neckTop {
+			let neck = UIBezierPath()
+			neck.move(to: CGPoint(x: head.minX, y: neckTop))
+			neck.addLine(to: CGPoint(x: head.maxX, y: neckTop))
+			neck.addQuadCurve(to: CGPoint(x: stem.maxX, y: neckBottom),
+				controlPoint: CGPoint(x: stem.maxX, y: head.maxY))
+			neck.addLine(to: CGPoint(x: stem.minX, y: neckBottom))
+			neck.addQuadCurve(to: CGPoint(x: head.minX, y: neckTop),
+				controlPoint: CGPoint(x: stem.minX, y: head.maxY))
+			neck.close()
+			path.append(neck)
+		}
 
 		let shapeLayer = CAShapeLayer()
 		shapeLayer.frame = popupView.bounds
-		shapeLayer.path = bubblePath.cgPath
+		shapeLayer.path = path.cgPath
 		shapeLayer.fillColor = theme.popupFill.cgColor
 
 		shapeLayer.shadowColor = UIColor.black.cgColor
 		shapeLayer.shadowOpacity = theme.isDark ? 0.45 : 0.20
 		shapeLayer.shadowRadius = 4
 		shapeLayer.shadowOffset = CGSize(width: 0, height: 2)
-		shapeLayer.shadowPath = bubblePath.cgPath
+		shapeLayer.shadowPath = path.cgPath
 
 		popupView.layer.addSublayer(shapeLayer)
 
-		let label = UILabel(frame: body.insetBy(dx: 4, dy: 2))
+		let label = UILabel(frame: head.insetBy(dx: 4, dy: 2))
 		label.text = text
 		label.textAlignment = .center
-		label.font = .systemFont(ofSize: min(34, popupHeight * 0.78))
+		label.font = .systemFont(ofSize: min(text.count > 1 ? 30 : 38, head.height * 0.72),
+			weight: UIAccessibility.isBoldTextEnabled ? .medium : .regular)
+		label.adjustsFontSizeToFitWidth = true
+		label.minimumScaleFactor = 0.65
 		label.textColor = theme.popupText
 
 		popupView.addSubview(label)
-		addSubview(popupView)
-		bringSubviewToFront(popupView)
-
-		touchPopups[touch] = popupView
-
-		key.setCovered(true)
-		poppedKeys[touch] = key
+		return popupView
 	}
-	private func removePopup(for touch: UITouch) {
-		touchPopups[touch]?.removeFromSuperview()
-		touchPopups[touch] = nil
-		poppedKeys[touch]?.setCovered(false)
-		poppedKeys[touch] = nil
+	private func removePopup(for touch: UITouch, afterMinimumDuration: Bool = false) {
+		if afterMinimumDuration, let popup = touchPopups[touch], let shownAt = popupShownAt[touch] {
+			// Deferred edge touches can begin and end in the same display frame.
+			// Keep feedback visible without delaying the already-committed character.
+			let remaining = 0.10 - (ProcessInfo.processInfo.systemUptime - shownAt)
+			if remaining > 0 {
+				DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self, weak popup] in
+					guard let self, let popup, self.touchPopups[touch] === popup else { return }
+					self.removePopup(for: touch)
+				}
+				return
+			}
+		}
+		touchPopups.removeValue(forKey: touch)?.removeFromSuperview()
+		popupShownAt[touch] = nil
+		if let key = poppedKeys.removeValue(forKey: touch),
+			!poppedKeys.values.contains(where: { $0 === key }) {
+			key.setCovered(false)
+		}
 	}
 	private func registerKey(_ key: KeyButton, at point: CGPoint, for touch: UITouch) {
 		touchKeys[touch]?.setHighlighted(false)
@@ -99,10 +114,10 @@ extension KeyboardView {
 		key.setHighlighted(true)
 		showPopup(for: key, at: point, touch: touch)
 	}
-	private func clearRegisteredKey(for touch: UITouch) {
+	private func clearRegisteredKey(for touch: UITouch, keepingPopupBriefly: Bool = false) {
 		touchKeys[touch]?.setHighlighted(false)
 		touchKeys[touch] = nil
-		removePopup(for: touch)
+		removePopup(for: touch, afterMinimumDuration: keepingPopupBriefly)
 	}
 
 	private func beginAlternatives(for key: KeyButton, touch: UITouch,
@@ -373,12 +388,12 @@ extension KeyboardView {
 			if cursorTouch === touch { endCursorHold() }
 			if finishAlternatives(for: touch, commit: true) {
 				if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }
-				clearRegisteredKey(for: touch)
+				clearRegisteredKey(for: touch, keepingPopupBriefly: true)
 				continue
 			}
 			if let key = touchKeys[touch], key.isInputModeSwitch {
 				if let event { onInputModeEvent?(key, event) }
-				clearRegisteredKey(for: touch)
+				clearRegisteredKey(for: touch, keepingPopupBriefly: true)
 				continue
 			}
 			if touch == glideTouch, glide?.isGlide == true {   // a glide: decode, commit nothing
@@ -386,17 +401,17 @@ extension KeyboardView {
 				let times = glide?.times ?? []
 				let layout = glideLayout()
 				glideTouch = nil; glide = nil; lastGlidePreviewTime = 0; clearTrail()
-				clearRegisteredKey(for: touch)
+				clearRegisteredKey(for: touch, keepingPopupBriefly: true)
 				onGlide?(pts, times, layout)
 				continue
 			}
 			if touch == repeatTouch {                          // delete: just stop
 				endRepeat()
-				clearRegisteredKey(for: touch)
+				clearRegisteredKey(for: touch, keepingPopupBriefly: true)
 				continue
 			}
 			if touch == glideTouch { glideTouch = nil; glide = nil; clearTrail() }
-			clearRegisteredKey(for: touch)
+			clearRegisteredKey(for: touch, keepingPopupBriefly: true)
 		}
 	}
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
