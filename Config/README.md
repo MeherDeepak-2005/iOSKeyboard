@@ -76,3 +76,13 @@ xcodebuild -scheme keyboard -configuration Release -sdk iphoneos \
 
 Audit a shipping extension with `tools/verify_release_artifacts.py --allow-neural`;
 without the flag the verifier applies the n-gram-only 14 MB/no-neural gate.
+
+## Debug builds
+
+Debug compiles C, C++ and Objective-C++ with `-Os` (`GCC_OPTIMIZATION_LEVEL = s`, set
+once at project level); Swift stays at `-Onone`. At `-O0` the decoder core made a Debug
+keyboard 20-25x slower per keystroke than Release on an iPhone 17 (16-20 ms against
+0.8 ms, swipe previews ~100 ms against 8 ms), so a Debug install misrepresented the
+keyboard. With the C++ optimised, Debug stays within 2x of Release (1.6 ms per keystroke).
+Step through decoder C++ in `native/tests`, which builds with `-g` and sanitizers, or
+set the level back to 0 locally. `tools/perf/device_perf.sh` measures either build.
