@@ -9,6 +9,7 @@ extension KeyboardView {
 		page = .emoji
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
 		rows = []
+		accessibilityElements = nil                   // the panel, not the removed keys (they stay alive in the list)
 		suggestionBar.isHidden = true
 		let ev = EmojiKeyboardView(theme: theme, showsGlobe: showsGlobe)
 		ev.onPick = { [weak self] in self?.onInsert?($0, nil) }
@@ -23,6 +24,7 @@ extension KeyboardView {
 		onHeightChange?()                             // height snaps back if search was up
 		setNeedsLayout()
 		KBDiagnostics.recorder.sample()               // emoji page footprint shows up in health telemetry
+		KBDiagnostics.noteSurface("emoji")
 	}
 	private func hideEmoji() {
 		emojiView?.removeFromSuperview()
@@ -32,6 +34,8 @@ extension KeyboardView {
 		suggestionBar.isHidden = !showsSuggestions
 		reload()
 		onHeightChange?()                             // expansion released
+		returnPanelMemory()
+		KBDiagnostics.noteSurface("letters")
 	}
 
 	func showMedia(kind: KlipyKind, query: String? = nil, hasFullAccess: Bool) {
@@ -43,6 +47,7 @@ extension KeyboardView {
 		page = .media
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
 		rows = []
+		accessibilityElements = nil                   // the panel, not the removed keys (they stay alive in the list)
 		suggestionBar.isHidden = true
 		let panel = MediaPanelView(theme: theme, showsGlobe: showsGlobe,
 			hasFullAccess: hasFullAccess, kind: kind, query: query)
@@ -53,6 +58,8 @@ extension KeyboardView {
 		mediaView = panel
 		onHeightChange?()
 		setNeedsLayout()
+		returnPanelMemory()                           // the emoji page or previous panel just went
+		KBDiagnostics.noteSurface(kind.rawValue)
 	}
 
 	private func hideMedia() {
@@ -62,6 +69,8 @@ extension KeyboardView {
 		suggestionBar.isHidden = !showsSuggestions
 		reload()
 		onHeightChange?()
+		returnPanelMemory()
+		KBDiagnostics.noteSurface("letters")
 	}
 
 	// MARK: Clipboard panel (overlay at deck height — the emoji-page pattern)
@@ -75,6 +84,7 @@ extension KeyboardView {
 		page = .clipboard
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
 		rows = []
+		accessibilityElements = nil                   // the panel, not the removed keys (they stay alive in the list)
 		suggestionBar.isHidden = true
 		let panel = ClipboardPanelView(theme: theme, showsGlobe: showsGlobe, hasFullAccess: hasFullAccess)
 		panel.onPick = { [weak self] in self?.onClipboardPick?($0) }
@@ -85,6 +95,8 @@ extension KeyboardView {
 		clipboardView = panel
 		onHeightChange?()
 		setNeedsLayout()
+		returnPanelMemory()
+		KBDiagnostics.noteSurface("clipboard")
 	}
 
 	private func hideClipboard() {
@@ -95,6 +107,8 @@ extension KeyboardView {
 		suggestionBar.isHidden = !showsSuggestions
 		reload()
 		onHeightChange?()
+		returnPanelMemory()
+		KBDiagnostics.noteSurface("letters")
 	}
 
 	private func showMediaSearch(kind: KlipyKind) {
@@ -137,6 +151,15 @@ extension KeyboardView {
 		mediaView?.prepareForDismissal()
 		mediaView?.removeFromSuperview()
 		mediaView = nil
+	}
+
+	/// Once a panel has gone, hand the memory its views and images freed back to iOS. The
+	/// allocator otherwise keeps those pages for reuse, and jetsam still counts them against
+	/// the keyboard. Off the main thread, after the panel's deferred releases have run.
+	private func returnPanelMemory() {
+		DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
+			_ = malloc_zone_pressure_relief(nil, 0)
+		}
 	}
 
 	private func exitMediaSearch(submit: Bool) {

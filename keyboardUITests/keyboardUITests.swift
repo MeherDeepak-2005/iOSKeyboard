@@ -319,6 +319,48 @@ final class keyboardUITests: XCTestCase {
 	/// that word in the middle, and the next Space keeps it: the undo must stick. Dictionary
 	/// words only, so the undo it teaches leaves nothing new in the phone's learned words.
 	/// Logs UNDO lines with non-ASCII characters spelled out.
+	/// Types, then opens emoji, GIFs and stickers and returns to the letters, three times, so the
+	/// keyboard's "Memory by surface" log (Keyboard health) shows what each surface leaves behind.
+	/// Opt-in, as it scrolls live GIFs: TEST_RUNNER_KB_MEMORY_TOUR=1.
+	@MainActor
+	func testMemoryAcrossSurfaces() throws {
+		try XCTSkipUnless(ProcessInfo.processInfo.environment["KB_MEMORY_TOUR"] == "1",
+			"set TEST_RUNNER_KB_MEMORY_TOUR=1 to tour the keyboard's surfaces")
+		let host = launchRuntimeHost()   // types English: tour with the keyboard set to English
+		let keyboard = host.descendants(matching: .any)["glyph.keyboard"]
+		guard keyboard.waitForExistence(timeout: 10) else {
+			throw XCTSkip("Glyph is not the active software keyboard")
+		}
+		func settle(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+		func type(_ text: String) {
+			for character in text {
+				if character == " " { key("Space", in: host).tap() } else { tapLetter(String(character), in: host) }
+			}
+		}
+		func control(_ name: String) -> XCUIElement { keyboard.descendants(matching: .any)[name].firstMatch }
+		func tap(_ element: XCUIElement) {
+			guard element.waitForExistence(timeout: 5) else {
+				return XCTFail("\(element) missing from:\n\(keyboard.debugDescription)")
+			}
+			element.tap()
+		}
+		func scroll(_ times: Int) {
+			let grid = keyboard.collectionViews.firstMatch
+			guard grid.waitForExistence(timeout: 5) else { return }
+			for _ in 0..<times { grid.swipeUp(); settle(1.5) }
+		}
+		for _ in 0..<3 {
+			type("hello there how are you "); settle(2)
+			tap(key("Emoji", in: host)); settle(2)
+			for index in 1...7 { tap(control("emoji.category.\(index)")); settle(0.6) }
+			tap(control("GIFs")); settle(4)
+			scroll(4)
+			tap(control("Stickers")); settle(4)
+			scroll(4)
+			tap(control("ABC")); settle(3)
+		}
+	}
+
 	@MainActor
 	func testBackspaceUndoOfACorrectionSticks() throws {
 		try selectLanguage(identifier: "language.english", title: "English")

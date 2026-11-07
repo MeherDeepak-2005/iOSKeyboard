@@ -13,6 +13,8 @@ enum KBDiagnostics {
 		var peakFootprintMB = 0.0   // highest phys_footprint seen (what jetsam watches)
 		var minAvailableMB = 0.0    // lowest headroom seen (0 = never sampled)
 		var limitMB = 0.0           // inferred kill ceiling = footprint + headroom, at the tightest moment
+		var footprintNowMB: Double? // the latest sample: what the keyboard holds now (the peak never falls)
+		var surfaceLog: [String]?   // recent surface changes and the footprint each left behind, oldest first
 		var integrityEvents: [String: Int]?
 		var storageFailureCount: Int?
 		var lastStorageOperation: String?
@@ -61,7 +63,13 @@ enum KBDiagnostics {
 	}
 
 	static let key = "kb.diag"
-	static var store: UserDefaults { KBSettings.sharedDefaults }
+	/// The App Group the keyboard and the app share. Unit tests and benchmarks run the engine
+	/// inside the app, so a test host keeps its own store: its samples never reach the
+	/// keyboard's numbers (a benchmark once set the keyboard's peak footprint to 98 MB).
+	static var store: UserDefaults { isTestHost ? testHostStore : KBSettings.sharedDefaults }
+	private static let isTestHost = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+		|| NSClassFromString("XCTestCase") != nil
+	nonisolated(unsafe) private static let testHostStore = UserDefaults(suiteName: "kb.diag.test-host") ?? .standard
 	private static let log = Logger(subsystem: KBSettings.appGroup, category: "diag")
 	private static let glideCaptureQueue = DispatchQueue(label: "keyboard.glide.capture", qos: .utility)
 	private static let metricsQueue = DispatchQueue(label: "keyboard.metrics", qos: .utility)
@@ -133,6 +141,18 @@ enum KBDiagnostics {
 	/// A fixed integrity code (host edit diverged, stale decode, …). Never user text.
 	static func noteIntegrityEvent(_ code: String) {
 		metricsQueue.async { Recorder.shared.noteIntegrityEvent(code) }
+	}
+
+	/// Records the footprint when the visible surface changes (letters, emoji, GIFs, stickers,
+	/// clipboard), and again a second later, once the previous surface's memory is released.
+	/// Extension only: the app builds keyboard views for previews in its own, roomier process.
+	static func noteSurface(_ surface: String) {
+		guard LanguagePackHealthInspector.isExtensionProcess else { return }
+		let bytes = footprintBytes()
+		metricsQueue.async { Recorder.shared.noteSurface(surface, bytes: bytes) }
+		metricsQueue.asyncAfter(deadline: .now() + 1) {
+			Recorder.shared.noteSurface(surface + " +1s", bytes: footprintBytes())
+		}
 	}
 
 	static func finishTypingSession() {
@@ -473,6 +493,22 @@ enum KBDiagnostics {
 		}
 		func flush() { lock.lock(); synchronizeResetLocked(); persistLocked(); lock.unlock() }
 
+		private static let clock: DateFormatter = {
+			let formatter = DateFormatter()
+			formatter.dateFormat = "HH:mm:ss"
+			return formatter
+		}()
+		func noteSurface(_ surface: String, bytes: UInt64) {
+			lock.lock(); synchronizeResetLocked()
+			let megabytes = Double(bytes) / 1_048_576
+			snap.footprintNowMB = megabytes
+			if megabytes > snap.peakFootprintMB { snap.peakFootprintMB = megabytes }
+			let entry = String(format: "%@  %@  %.1f MB", Self.clock.string(from: Date()), surface, megabytes)
+			snap.surfaceLog = Array(((snap.surfaceLog ?? []) + [entry]).suffix(40))
+			persistLocked()
+			lock.unlock()
+		}
+
 		func memoryPressure(critical: Bool) {
 			lock.lock(); synchronizeResetLocked()
 			if critical { snap.criticalCount += 1 } else { snap.warningCount += 1 }
@@ -630,6 +666,7 @@ enum KBDiagnostics {
 			let foot = Double(KBDiagnostics.footprintBytes()) / 1_048_576
 			let avail = Double(KBDiagnostics.availableBytes()) / 1_048_576
 			if foot > snap.peakFootprintMB { snap.peakFootprintMB = foot }
+			snap.footprintNowMB = foot
 			if avail > 0, snap.minAvailableMB == 0 || avail < snap.minAvailableMB {
 				snap.minAvailableMB = avail
 				snap.limitMB = foot + avail        // the ceiling, inferred at the tightest point

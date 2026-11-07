@@ -460,6 +460,7 @@ struct DiagnosticsView: View {
 	var body: some View {
 		List {
 			Section {
+				row("Footprint now", snap.footprintNowMB.map(mb) ?? "—")
 				row("Peak footprint", mb(snap.peakFootprintMB))
 				row("Lowest headroom", snap.minAvailableMB > 0 ? mb(snap.minAvailableMB) : "—")
 				row("Inferred kill limit", snap.limitMB > 0 ? mb(snap.limitMB) : "—")
@@ -469,7 +470,19 @@ struct DiagnosticsView: View {
 			} header: {
 				Text("Memory & CPU")
 			} footer: {
-				Text("iOS can terminate a keyboard extension under memory pressure. Peak CPU is sampled while a search is running (can exceed 100% across cores). These counters contain no typed text.")
+				Text("iOS can terminate a keyboard extension under memory pressure. \"Now\" is the latest sample; the peak is the highest ever seen and never falls. Peak CPU is sampled while a search is running (can exceed 100% across cores). These counters contain no typed text.")
+			}
+
+			if let log = snap.surfaceLog, !log.isEmpty {
+				Section {
+					ForEach(Array(log.reversed().enumerated()), id: \.offset) { _, entry in
+						Text(entry).font(.footnote.monospacedDigit())
+					}
+				} header: {
+					Text("Memory by surface")
+				} footer: {
+					Text("The keyboard's footprint when it switched surface, and one second later, after the previous surface was released. Newest first.")
+				}
 			}
 
 			Section {

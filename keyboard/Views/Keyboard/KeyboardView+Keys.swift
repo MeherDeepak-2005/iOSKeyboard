@@ -37,6 +37,9 @@ extension KeyboardView {
 		actionKey = all.first { $0.role == .accent }
 		applyActionKeyState()
 		var orderedAccessibilityElements: [Any] = [suggestionBar]
+		// A search types on this deck: its header and results come first.
+		let searchViews: [UIView?] = [emojiSearchHeader, mediaSearchHeader, mediaSearchStrip]
+		orderedAccessibilityElements.append(contentsOf: searchViews.compactMap { $0 })
 		for row in rows { orderedAccessibilityElements.append(contentsOf: row) }
 		accessibilityElements = orderedAccessibilityElements
 		bringSubviewToFront(suggestionBar)

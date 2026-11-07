@@ -279,6 +279,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		updateKinds()
 		collection.setCollectionViewLayout(Self.layout(for: next), animated: false)
 		loadFirstPage()
+		KBDiagnostics.noteSurface(next.rawValue)
 	}
 
 	private func updateKinds() {
