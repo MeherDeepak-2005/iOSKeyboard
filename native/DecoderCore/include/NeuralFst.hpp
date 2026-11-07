@@ -2,6 +2,7 @@
 #include "LanguageModel.hpp"
 #include "NeuralLanguageModel.hpp"
 #include "Ranking.hpp"
+#include <bit>
 #include <queue>
 #include <unordered_map>
 
@@ -15,14 +16,35 @@ inline constexpr std::size_t nssExpansionsPerFrame = 1;
 // channel supplies C; this trie supplies L. Unigram arcs cover the entire lexicon.
 class NeuralLexicon final {
 public:
+    // A trie node, decoded on access from the mapped dictionary: the lexicon keeps no copy of
+    // the 275k-node trie (6.6 MB decoded, twice that at a grown vector's capacity).
+    struct Node { std::uint8_t label; std::uint32_t firstChild, childCount; std::optional<std::int32_t> wordID; };
     const PackedLexicon& packed;
-    std::vector<PackedLexicon::TrieNodeRecord> nodes;
     std::vector<std::uint32_t> parent, terminal;
     std::vector<float> unigram, lookahead;
     // Emittable words by unigram probability, best first (next-word prediction's fallback).
     std::vector<std::uint32_t> topUnigrams;
     double mass = 0;   // sum of frequency + 1 over the emittable words unigram[] normalizes by
     explicit NeuralLexicon(const PackedLexicon&);
+    // The nodes reachable from the root. The constructor range-checks every one, so node(),
+    // which the search only calls on the root and on child links, reads without a check.
+    std::size_t nodeCount() const noexcept { return parent.size(); }
+    Node node(std::size_t index) const noexcept {
+        const auto* at = trie_ + nodeSize_ * index;
+        const std::uint32_t id = wideIDs_ ? le32(at + 6) : (le16(at + 6) == 0xffffu ? 0xffffffffu : le16(at + 6));
+        return {std::to_integer<std::uint8_t>(at[0]), le32(at + 2), std::to_integer<std::uint8_t>(at[1]),
+            id == 0xffffffffu ? std::nullopt : std::optional<std::int32_t>(std::int32_t(id))};
+    }
+private:
+    const std::byte* trie_;
+    std::size_t nodeSize_;
+    bool wideIDs_;
+    static std::uint32_t le16(const std::byte* at) noexcept {
+        return std::to_integer<std::uint32_t>(at[0]) | std::to_integer<std::uint32_t>(at[1]) << 8;
+    }
+    static std::uint32_t le32(const std::byte* at) noexcept {
+        return le16(at) | std::to_integer<std::uint32_t>(at[2]) << 16 | std::to_integer<std::uint32_t>(at[3]) << 24;
+    }
 };
 
 // The best arc score under each trie node, kept only for nodes on some arc's path: an
@@ -77,9 +99,37 @@ public:
     // unknownExponent (with exact): u(w) inside the <unk> share becomes u^a, flattening the
     // frequencies so rare words keep a usable probability; 0 is TF-IDF's sublinear 1 + ln u.
     struct Options { bool exact = false, unigramFloor = false; double unknownExponent = 1; };
+    // How the model's vocabulary maps onto the lexicon for one model, lexicon and options:
+    // most of a graph's construction and immutable once built, so every graph over them
+    // shares one (Engine builds it once for the typing session and each Glide gesture).
+    struct Tables {
+        Tables(std::shared_ptr<const NeuralWordModel>, std::shared_ptr<const NeuralLexicon>, Options);
+        std::shared_ptr<const NeuralWordModel> model;
+        std::shared_ptr<const NeuralLexicon> lexicon;
+        Options options;
+        std::vector<std::int32_t> modelToWord, wordToModel;   // model id <-> lexicon id, -1 outside
+        std::vector<float> outsideUnigram, outsideLookahead;  // exact: log share * u / outside mass
+        double outsideMass = 0;                               // exact: sum of scaled u outside
+        std::vector<std::uint32_t> topOutside;
+        // exact: the trie nodes on some vocabulary word's path, numbered in trie order (parents
+        // first). A node's number is how many such nodes precede it: a rank over one bit per node
+        // (51 KB) instead of a 4-byte number per node (1.1 MB). UINT32_MAX off every path.
+        struct Numbering {
+            std::vector<std::uint64_t> bits;     // the node is on a path
+            std::vector<std::uint32_t> before;   // numbered nodes ahead of each 64-node block
+            std::uint32_t operator[](std::size_t node) const noexcept {
+                const auto word = bits[node >> 6], mask = std::uint64_t(1) << (node & 63);
+                return word & mask ? before[node >> 6] + std::uint32_t(std::popcount(word & (mask - 1))) : UINT32_MAX;
+            }
+        } vocabularyNode;
+        // number -> parent's number, model id -> its terminal's number.
+        std::vector<std::uint32_t> vocabularyParent, vocabularyTerminal;
+    };
+    explicit NeuralFst(std::shared_ptr<const Tables>);
     NeuralFst(std::shared_ptr<const NeuralWordModel> model, std::shared_ptr<const NeuralLexicon> lex)
         : NeuralFst(std::move(model), std::move(lex), Options{}) {}
-    NeuralFst(std::shared_ptr<const NeuralWordModel>, std::shared_ptr<const NeuralLexicon>, Options);
+    NeuralFst(std::shared_ptr<const NeuralWordModel> model, std::shared_ptr<const NeuralLexicon> lex, Options options)
+        : NeuralFst(std::make_shared<Tables>(std::move(model), std::move(lex), options)) {}
     void update(std::span<const std::string> context, bool newWord = false) override;
     void resetContext() override;
     bool expanded(std::uint32_t state) const override;
@@ -105,18 +155,12 @@ private:
         std::vector<float> vocabularyLookahead;   // exact: best vocabulary score per vocabulary node
         ArcLookahead lookahead;            // published graph: best arc score under each node
     };
+    std::shared_ptr<const Tables> tables_;
     std::shared_ptr<const NeuralWordModel> model_;
     std::shared_ptr<const NeuralLexicon> lexicon_;
     Options options_;
-    std::vector<std::int32_t> wordToModel_;              // lexicon id -> model id, -1 outside
-    std::vector<float> outsideUnigram_, outsideLookahead_;   // exact: log share * u / outside mass
-    double outsideMass_ = 0;                                  // exact: sum of scaled u outside
-    std::vector<std::uint32_t> topOutside_;
-    // exact: the trie nodes on some vocabulary word's path, numbered in trie order (parents
-    // first): node -> number, number -> parent's number, model id -> its terminal's number.
-    std::vector<std::uint32_t> vocabularyNode_, vocabularyParent_, vocabularyTerminal_;
     std::unique_ptr<ContextRing> ring_;
-    std::vector<std::int32_t> context_, modelToWord_;
+    std::vector<std::int32_t> context_;
     std::vector<State> states_;
     std::vector<Arc> arcs_;
     std::vector<Expansion> expansions_;

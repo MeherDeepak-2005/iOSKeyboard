@@ -1167,6 +1167,9 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
     } return self;
 }
 - (BOOL)supportsNeuralSearchSpace { return _engine->supportsNeuralSearchSpace(); }
+- (void)prepareNeuralSearchSpace {
+    try { _session->prepareNeural(); } catch (const std::exception&) {}   // the first decode reports it
+}
 - (KBEngineResult *)decodeWord:(NSString *)word normalized:(NSString *)normalized context:(NSArray<NSString *> *)context
     identity:(NSData *)identity offsets:(NSArray<NSNumber *> *)characterOffsets letterFlags:(NSData *)flags
     tapOffsets:(NSData *)offsets tapValidity:(NSData *)validity lexicon:(KBGenerationLexicon *)lexicon

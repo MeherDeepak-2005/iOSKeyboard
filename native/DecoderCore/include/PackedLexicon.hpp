@@ -49,6 +49,12 @@ public:
     struct TrieNodeRecord { std::uint8_t label; std::uint32_t firstChild, childCount, maxFrequency; std::optional<std::int32_t> wordID; };
     bool hasTrie() const noexcept { return nodes_ > 0; }
     TrieNodeRecord trieRecord(std::size_t node) const;
+    // The trie as stored, for readers that walk it in place instead of copying it:
+    // trieNodeSize() bytes per node - label, child count, first child (32-bit), word ID
+    // (16-bit in v5, else 32-bit; all ones = none), subtree max frequency - little-endian.
+    const std::byte* trieData() const noexcept { return bytes_.data() + trie_; }
+    std::size_t trieNodeSize() const noexcept { return nodeSize_; }
+    std::size_t trieNodeCount() const noexcept { return nodes_; }
     const void* backingAddress() const noexcept { return bytes_.data(); }
     std::string_view word(std::uint32_t id) const;
     std::uint32_t frequency(std::uint32_t id) const;

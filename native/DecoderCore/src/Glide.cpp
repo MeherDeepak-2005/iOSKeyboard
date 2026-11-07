@@ -1,5 +1,6 @@
 #include "../include/Glide.hpp"
 #include <algorithm>
+#include <array>
 #include "../include/TextOrder.hpp"
 #include <cmath>
 #include <limits>
@@ -126,15 +127,17 @@ double shape(std::span<const Point> observed, std::span<const Point> observedTan
     auto ideal = letters.size() == 1 ? std::vector<Point>(32, letters.front()) : resampleN(letters, 32);
     if (ideal.size() != 32) return maximum;
     auto idealTangents = direction > 0 ? tangents(ideal) : std::vector<Point>{};
-    std::vector<double> previous(33, maximum), current(33, maximum); previous[0] = 0;
+    // Two DTW rows on the stack: a Glide decode scores thousands of words.
+    std::array<double, 33> rows[2]; rows[0].fill(maximum); rows[1].fill(maximum);
+    auto* previous = &rows[0]; auto* current = &rows[1]; (*previous)[0] = 0;
     for (int i = 1; i <= 32; ++i) {
-        std::fill(current.begin(), current.end(), maximum);
+        current->fill(maximum);
         for (int j = std::max(1, i - band); j <= std::min(32, i + band); ++j) {
             auto d = distance(observed[i - 1], ideal[j - 1]);
             if (direction > 0) { auto a = observedTangents[i - 1], b = idealTangents[j - 1]; d += direction * (1 - (a.x * b.x + a.y * b.y)); }
-            current[j] = d + std::min(previous[j], std::min(current[j - 1], previous[j - 1]));
-        } previous.swap(current);
-    } return previous[32] / 32.0;
+            (*current)[j] = d + std::min((*previous)[j], std::min((*current)[j - 1], (*previous)[j - 1]));
+        } std::swap(previous, current);
+    } return (*previous)[32] / 32.0;
 }
 std::optional<std::vector<Point>> wordPath(std::string_view word) {
     std::vector<Point> points;
@@ -164,15 +167,26 @@ std::vector<ChannelCandidate> decodeGlide(std::span<const Point> points, const P
     std::vector<Path> arena; arena.reserve(std::max<std::size_t>(256, width * 20));
     auto addPath = [&](Point p, std::int64_t parent) { arena.push_back({p, parent}); return std::int64_t(arena.size() - 1); };
     std::vector<ChannelCandidate> result; std::unordered_map<std::string, std::size_t> indices;
+    std::vector<Point> trace;
     auto emit = [&](std::size_t node, std::int64_t index) {
         auto record = lexicon.trieRecord(node); if (!record.wordID || lexicon.blocked(std::uint32_t(*record.wordID))) return;
         std::string word(lexicon.word(*record.wordID)); if (word.size() < 2) return;
-        std::vector<Point> path;
-        while (index >= 0) { path.push_back(arena[index].point); index = arena[index].parent; }
-        std::reverse(path.begin(), path.end());
-        auto cost = shape(observed, obsTan, path, band, direction);
-        auto [found, inserted] = indices.emplace(word, result.size());
-        if (inserted) result.push_back({word, cost, 0}); else if (cost < result[found->second].cost) result[found->second].cost = cost;
+        // A node's path is its letters' key centers, whichever hypothesis reached it, so a
+        // word scored once already holds the only cost it can get: skip the repeat.
+        if (indices.contains(word)) return;
+        trace.clear();
+        while (index >= 0) { trace.push_back(arena[index].point); index = arena[index].parent; }
+        std::reverse(trace.begin(), trace.end());
+        indices.emplace(word, result.size());
+        result.push_back({std::move(word), shape(observed, obsTan, trace, band, direction), 0});
+    };
+    // Distance from each key center to each observed point, filled per label on first use:
+    // the beam asks for the same pairs for every hypothesis and window step.
+    std::vector<double> near(256 * 32, -1.0);
+    auto distances = [&](std::uint8_t label, Point p) -> const double* {
+        auto* row = near.data() + std::size_t(label) * 32;
+        if (row[0] < 0) for (std::size_t k = 0; k < 32; ++k) row[k] = distance(observed[k], p);
+        return row;
     };
     struct Hyp { std::size_t node, j; double prune, key; std::int64_t path; };
     auto better = [](const Hyp& a, const Hyp& b) { return a.key == b.key ? a.node < b.node : a.key < b.key; };
@@ -212,9 +226,10 @@ std::vector<ChannelCandidate> decodeGlide(std::span<const Point> points, const P
                 auto label = lexicon.trieRecord(node).label;
                 if (label == apostrophe) { next.push_back({node, h.j, h.prune, key(h.prune, node), h.path}); emit(node, h.path); continue; }
                 auto p = center(label); if (!p) continue;
-                auto j = h.j; auto d = distance(observed[j], *p);
+                const auto* row = distances(label, *p);
+                auto j = h.j; auto d = row[j];
                 for (auto k = h.j + 1; k < std::min<std::size_t>(32, h.j + 1 + window); ++k)
-                    if (auto value = distance(observed[k], *p); value < d) { d = value; j = k; }
+                    if (auto value = row[k]; value < d) { d = value; j = k; }
                 auto prune = h.prune + d; auto path = addPath(*p, h.path);
                 next.push_back({node, j, prune, key(prune, node), path}); emit(node, path);
             }

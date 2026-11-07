@@ -288,6 +288,15 @@ final class KeyboardEngine {
 			}
             if self.candidateBackend == .cpp { self.sharedEngine = self.makeSharedEngine() }
 			KBPersonalData.acknowledgeReset(epoch: KBPersonalData.currentEpoch)
+			// Build the NSS graph in the first idle moment instead of inside the first decode,
+			// whose cost it otherwise is. Enqueued behind any decode already waiting, which then
+			// builds it itself; English only, as nothing else decodes with it.
+			if self.neuralSearchSpaceReady {
+				self.queue.async { [weak self] in
+					guard KBSettings.languageMode == .english else { return }
+					self?.sharedEngine?.prepareNeuralSearchSpace()
+				}
+			}
 		}
 	}
 

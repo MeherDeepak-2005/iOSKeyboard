@@ -7,6 +7,7 @@
 #include "Glide.hpp"
 #include "Personalization.hpp"
 #include <atomic>
+#include <mutex>
 #include <stdexcept>
 #include "TextOrder.hpp"
 
@@ -158,6 +159,10 @@ class Engine final : public std::enable_shared_from_this<Engine> {
     std::shared_ptr<const LanguageModel> language_;
     std::shared_ptr<const NeuralWordModel> neural_;
     std::shared_ptr<const NeuralLexicon> neuralLexicon_;
+    // The NSS graph tables every session's graph shares, built once on first use.
+    mutable std::once_flag neuralTablesOnce_;
+    mutable std::shared_ptr<const NeuralFst::Tables> neuralTables_;
+    std::shared_ptr<const NeuralFst::Tables> neuralTables() const;
 public:
     explicit Engine(std::shared_ptr<const PackedLexicon> packed, EngineOptions options = {}, std::shared_ptr<const LanguageModel> language = {},
         std::shared_ptr<const NeuralWordModel> neural = {});
@@ -185,6 +190,7 @@ class EngineSession final {
     RequestIdentity neuralIdentity_;
     std::string neuralTyped_;
     bool neuralIdentityReady_ = false;
+    NeuralFst& neuralGraph();
     DecodeOutput decodeNeural(const DecodeInput&, const EngineView&, const CancellationToken*);
     DecodeOutput decodeRaw(const DecodeInput&, const EngineView&, const CancellationToken*, bool neural);
     std::vector<RankedRow> score(std::vector<ChannelCandidate> rows, const std::optional<ChannelCandidate>& typed,
@@ -197,6 +203,8 @@ public:
     std::vector<RankedRow> updateGlide(std::span<const Point> path, const GlideLayout&, const EngineView&,
         std::span<const std::string> dynamicWords, const CancellationToken* = nullptr);
     void endGlide() { glide_.reset(); glideContext_.clear(); }
+    // Builds the NSS graph ahead of the first decode, which otherwise pays for it.
+    void prepareNeural() { if (engine_->neural_) neuralGraph(); }
     void memoryPressure() { search_.reset(); seedTaps_.clear(); neuralSearch_.reset(); rawSearch_.reset(); rawGraph_ = nullptr; neuralGraph_.reset(); ngramGraph_.reset(); neuralIdentityReady_ = false; endGlide(); }
     // Model steps the session's NSS context ring has run (0 without the NSS tier).
     std::uint64_t neuralSteps() const noexcept { return neuralGraph_ ? neuralGraph_->modelSteps() : 0; }

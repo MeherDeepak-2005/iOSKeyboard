@@ -46,6 +46,18 @@ Engine::Engine(std::shared_ptr<const PackedLexicon> packed, EngineOptions option
     }
 }
 std::unique_ptr<EngineSession> Engine::createSession() { return std::make_unique<EngineSession>(shared_from_this()); }
+std::shared_ptr<const NeuralFst::Tables> Engine::neuralTables() const {
+    // Sessions run on different queues (typing, each Glide gesture); call_once builds it once.
+    std::call_once(neuralTablesOnce_, [&] {
+        neuralTables_ = std::make_shared<NeuralFst::Tables>(neural_, neuralLexicon_,
+            NeuralFst::Options{options_.nssExact, options_.nssUnigramFloor, options_.nssUnknownExponent});
+    });
+    return neuralTables_;
+}
+NeuralFst& EngineSession::neuralGraph() {
+    if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neuralTables());
+    return *neuralGraph_;
+}
 std::vector<std::string> EngineSession::nextWords(std::span<const std::string> context, const EngineView& view, std::size_t limit) const {
     auto tri = engine_->language_->successors(context, counts(view), true, limit);
     auto bi = engine_->language_->successors(context, counts(view), false, limit);
@@ -209,7 +221,7 @@ std::vector<RankedRow> EngineSession::updateGlide(std::span<const Point> path, c
     if (token && token->cancelled()) return {};
     if (!glide_) beginGlide({});
     if (engine_->neural_) {
-        if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_, NeuralFst::Options{engine_->options_.nssExact, engine_->options_.nssUnigramFloor, engine_->options_.nssUnknownExponent});
+        neuralGraph();
         neuralGraph_->update(glideContext_);
         std::vector<Point> points;
         for (auto point : path) points.push_back(toGrid(point, layout));
@@ -307,7 +319,7 @@ DecodeOutput EngineSession::decodeNeural(const DecodeInput& input, const EngineV
     const bool newField = !neuralIdentityReady_ || neuralIdentity_.fieldRevision != input.identity.fieldRevision ||
         neuralIdentity_.vocabularyEpoch != input.identity.vocabularyEpoch || neuralIdentity_.personalizationEpoch != input.identity.personalizationEpoch;
     const bool newWord = newField || neuralIdentity_.wordSessionID != input.identity.wordSessionID;
-    if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_, NeuralFst::Options{engine_->options_.nssExact, engine_->options_.nssUnigramFloor, engine_->options_.nssUnknownExponent});
+    neuralGraph();
     if (newField) neuralGraph_->resetContext();
     const bool edited = !input.normalized.starts_with(neuralTyped_);
     neuralGraph_->update(input.context, newWord || edited);
@@ -482,7 +494,7 @@ DecodeOutput EngineSession::decodeRaw(const DecodeInput& input, const EngineView
     auto cancelled = [&] { return token && token->cancelled(); };
     SearchGraph* graph;
     if (neural) {
-        if (!neuralGraph_) neuralGraph_ = std::make_unique<NeuralFst>(engine_->neural_, engine_->neuralLexicon_, NeuralFst::Options{engine_->options_.nssExact, engine_->options_.nssUnigramFloor, engine_->options_.nssUnknownExponent});
+        neuralGraph();
         graph = neuralGraph_.get();
     } else {
         if (!ngramGraph_) ngramGraph_ = std::make_unique<NgramFst>(*engine_->packed_, engine_->neuralLexicon_);

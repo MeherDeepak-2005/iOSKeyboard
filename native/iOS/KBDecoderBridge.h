@@ -407,6 +407,9 @@ NS_ASSUME_NONNULL_BEGIN
     neural:(nullable KBNeuralWordModel *)neural policy:(NSArray<NSNumber *> *)policy
     safety:(nullable KBNativeSafetyLexicon *)safety profile:(BOOL)profile;
 @property(nonatomic, readonly) BOOL supportsNeuralSearchSpace;
+// Builds the NSS graph now, off the first decode that would otherwise pay for it. Call it on
+// the queue that serializes this engine's decodes.
+- (void)prepareNeuralSearchSpace;
 // modelTier: "ngram", or "nss" when supportsNeuralSearchSpace.
 - (nullable KBEngineResult *)decodeWord:(NSString *)word normalized:(NSString *)normalized context:(NSArray<NSString *> *)context
     identity:(NSData *)identity offsets:(NSArray<NSNumber *> *)characterOffsets letterFlags:(NSData *)flags

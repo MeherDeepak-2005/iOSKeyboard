@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 #include <unordered_set>
 namespace kb {
 namespace {
@@ -10,29 +11,37 @@ bool letters(std::string_view word) {
     return !word.empty() && std::all_of(word.begin(), word.end(), [](char c) { return (c >= 'a' && c <= 'z') || c == '\''; });
 }
 }
-NeuralLexicon::NeuralLexicon(const PackedLexicon& lex) : packed(lex) {
-    nodes.push_back(lex.trieRecord(0)); parent.push_back(0);
+NeuralLexicon::NeuralLexicon(const PackedLexicon& lex)
+    : packed(lex), trie_(lex.trieData()), nodeSize_(lex.trieNodeSize()), wideIDs_(lex.version() != 5) {
     terminal.assign(lex.wordCount(), UINT32_MAX);
-    // Packed trie children are contiguous and strictly follow their parent.
-    for (std::size_t i = 0; i < nodes.size(); ++i) {
-        const auto n = nodes[i];
-        if (n.wordID) terminal[std::size_t(*n.wordID)] = std::uint32_t(i);
-        const auto end = n.firstChild + n.childCount;
-        while (nodes.size() < end) { parent.push_back(0); nodes.push_back(lex.trieRecord(nodes.size())); }
-        for (auto j = n.firstChild; j < end; ++j) parent[j] = std::uint32_t(i);
+    parent.assign(std::max<std::size_t>(lex.trieNodeCount(), 1), 0);
+    // Packed trie children are contiguous and strictly follow their parent. This one checked
+    // walk (trieRecord throws past the last node) covers every node node() can reach.
+    std::size_t reach = 1;
+    for (std::size_t i = 0; i < reach; ++i) {
+        const auto n = lex.trieRecord(i);
+        if (n.wordID) {
+            if (std::uint32_t(*n.wordID) >= lex.wordCount()) throw std::invalid_argument("invalid trie word ID");
+            terminal[std::size_t(*n.wordID)] = std::uint32_t(i);
+        }
+        const auto end = std::size_t(n.firstChild) + n.childCount;
+        if (end > parent.size()) throw std::out_of_range("invalid trie node");
+        reach = std::max(reach, end);
+        for (auto j = std::size_t(n.firstChild); j < end; ++j) parent[j] = std::uint32_t(i);
     }
+    parent.resize(reach); parent.shrink_to_fit();
     for (std::uint32_t w = 0; w < lex.wordCount(); ++w) if (letters(lex.word(w))) mass += double(lex.frequency(w)) + 1;
-    unigram.assign(lex.wordCount(), negInf); lookahead.assign(nodes.size(), negInf);
+    unigram.assign(lex.wordCount(), negInf); lookahead.assign(nodeCount(), negInf);
     for (std::uint32_t w = 0; w < lex.wordCount(); ++w) if (letters(lex.word(w))) {
         unigram[w] = float(std::log((double(lex.frequency(w)) + 1) / mass));
         if (terminal[w] != UINT32_MAX) lookahead[terminal[w]] = unigram[w];
     }
-    for (std::size_t i = nodes.size(); i-- > 1;) lookahead[parent[i]] = std::max(lookahead[parent[i]], lookahead[i]);
+    for (std::size_t i = nodeCount(); i-- > 1;) lookahead[parent[i]] = std::max(lookahead[parent[i]], lookahead[i]);
     for (std::uint32_t w = 0; w < lex.wordCount(); ++w) if (std::isfinite(unigram[w]) && terminal[w] != UINT32_MAX) topUnigrams.push_back(w);
     const auto keep = std::min<std::size_t>(64, topUnigrams.size());
     std::partial_sort(topUnigrams.begin(), topUnigrams.begin() + std::ptrdiff_t(keep), topUnigrams.end(),
         [&](auto a, auto b) { return unigram[a] == unigram[b] ? a < b : unigram[a] > unigram[b]; });
-    topUnigrams.resize(keep);
+    topUnigrams.resize(keep); topUnigrams.shrink_to_fit();
 }
 void ArcLookahead::build(const NeuralLexicon& lex, std::span<const std::pair<std::uint32_t, float>> wordScores, std::vector<float>& scratch) {
     std::vector<std::uint32_t> touched;
@@ -53,43 +62,51 @@ float ArcLookahead::at(std::uint32_t node) const {
     auto found = std::lower_bound(nodes_.begin(), nodes_.end(), node);
     return found != nodes_.end() && *found == node ? values_[std::size_t(found - nodes_.begin())] : negInf;
 }
-NeuralFst::NeuralFst(std::shared_ptr<const NeuralWordModel> model, std::shared_ptr<const NeuralLexicon> lex, Options options)
-    : model_(std::move(model)), lexicon_(std::move(lex)), options_(options), ring_(std::make_unique<ContextRing>(model_)), scratch_(lexicon_->nodes.size(), negInf) {
-    modelToWord_.assign(model_->vocabularySize(), -1);
-    wordToModel_.assign(lexicon_->unigram.size(), -1);
-    for (std::size_t id = 4; id < modelToWord_.size(); ++id)
-        if (auto word = lexicon_->packed.wordID(model_->word(std::int32_t(id)))) { modelToWord_[id] = *word; wordToModel_[std::size_t(*word)] = std::int32_t(id); }
-    if (!options_.exact) return;
-    const auto& lexicon = *lexicon_;
-    auto outside = [&](std::uint32_t w) { return std::isfinite(lexicon.unigram[w]) && wordToModel_[w] < 0; };
-    auto scaled = [&](double u) { return options_.unknownExponent > 0 ? std::pow(u, options_.unknownExponent) : 1 + std::log(u); };
+NeuralFst::Tables::Tables(std::shared_ptr<const NeuralWordModel> m, std::shared_ptr<const NeuralLexicon> lex, Options o)
+    : model(std::move(m)), lexicon(std::move(lex)), options(o) {
+    modelToWord.assign(model->vocabularySize(), -1);
+    wordToModel.assign(lexicon->unigram.size(), -1);
+    for (std::size_t id = 4; id < modelToWord.size(); ++id)
+        if (auto word = lexicon->packed.wordID(model->word(std::int32_t(id)))) { modelToWord[id] = *word; wordToModel[std::size_t(*word)] = std::int32_t(id); }
+    if (!options.exact) return;
+    const auto& lex_ = *lexicon;
+    auto outside = [&](std::uint32_t w) { return std::isfinite(lex_.unigram[w]) && wordToModel[w] < 0; };
+    // pow(u, 1) is u exactly; skipping it for the shipped exponent saves two passes of pow().
+    auto scaled = [&](double u) { return options.unknownExponent == 1 ? u : options.unknownExponent > 0 ? std::pow(u, options.unknownExponent) : 1 + std::log(u); };
     double mass = 0;
-    for (std::uint32_t w = 0; w < lexicon.unigram.size(); ++w) if (outside(w)) mass += scaled(double(lexicon.packed.frequency(w)) + 1);
-    outsideMass_ = mass;
-    const double logShare = std::log(double(model_->unknownLexiconShare()));
-    outsideUnigram_.assign(lexicon.unigram.size(), negInf); outsideLookahead_.assign(lexicon.nodes.size(), negInf);
-    for (std::uint32_t w = 0; w < lexicon.unigram.size(); ++w) if (outside(w)) {
-        outsideUnigram_[w] = float(logShare + std::log(scaled(double(lexicon.packed.frequency(w)) + 1) / mass));
-        if (lexicon.terminal[w] != UINT32_MAX) { outsideLookahead_[lexicon.terminal[w]] = outsideUnigram_[w]; topOutside_.push_back(w); }
+    for (std::uint32_t w = 0; w < lex_.unigram.size(); ++w) if (outside(w)) mass += scaled(double(lex_.packed.frequency(w)) + 1);
+    outsideMass = mass;
+    const double logShare = std::log(double(model->unknownLexiconShare()));
+    outsideUnigram.assign(lex_.unigram.size(), negInf); outsideLookahead.assign(lex_.nodeCount(), negInf);
+    for (std::uint32_t w = 0; w < lex_.unigram.size(); ++w) if (outside(w)) {
+        outsideUnigram[w] = float(logShare + std::log(scaled(double(lex_.packed.frequency(w)) + 1) / mass));
+        if (lex_.terminal[w] != UINT32_MAX) { outsideLookahead[lex_.terminal[w]] = outsideUnigram[w]; topOutside.push_back(w); }
     }
-    for (std::size_t i = lexicon.nodes.size(); i-- > 1;) outsideLookahead_[lexicon.parent[i]] = std::max(outsideLookahead_[lexicon.parent[i]], outsideLookahead_[i]);
-    const auto keep = std::min<std::size_t>(64, topOutside_.size());
-    std::partial_sort(topOutside_.begin(), topOutside_.begin() + std::ptrdiff_t(keep), topOutside_.end(),
-        [&](auto a, auto b) { return outsideUnigram_[a] == outsideUnigram_[b] ? a < b : outsideUnigram_[a] > outsideUnigram_[b]; });
-    topOutside_.resize(keep);
+    for (std::size_t i = lex_.nodeCount(); i-- > 1;) outsideLookahead[lex_.parent[i]] = std::max(outsideLookahead[lex_.parent[i]], outsideLookahead[i]);
+    const auto keep = std::min<std::size_t>(64, topOutside.size());
+    std::partial_sort(topOutside.begin(), topOutside.begin() + std::ptrdiff_t(keep), topOutside.end(),
+        [&](auto a, auto b) { return outsideUnigram[a] == outsideUnigram[b] ? a < b : outsideUnigram[a] > outsideUnigram[b]; });
+    topOutside.resize(keep); topOutside.shrink_to_fit();
     // Every expansion's lookahead covers the same nodes; number them once.
-    std::vector<char> marked(lexicon.nodes.size());
-    for (auto w : modelToWord_) if (w >= 0 && lexicon.terminal[std::size_t(w)] != UINT32_MAX && std::isfinite(lexicon.unigram[std::size_t(w)]))
-        for (auto node = lexicon.terminal[std::size_t(w)]; !marked[node]; node = lexicon.parent[node]) { marked[node] = 1; if (!node) break; }
-    vocabularyNode_.assign(lexicon.nodes.size(), UINT32_MAX);
-    for (std::size_t node = 0; node < marked.size(); ++node) if (marked[node]) {
-        vocabularyNode_[node] = std::uint32_t(vocabularyParent_.size());
-        vocabularyParent_.push_back(vocabularyNode_[lexicon.parent[node]]);
+    std::vector<char> marked(lex_.nodeCount());
+    for (auto w : modelToWord) if (w >= 0 && lex_.terminal[std::size_t(w)] != UINT32_MAX && std::isfinite(lex_.unigram[std::size_t(w)]))
+        for (auto node = lex_.terminal[std::size_t(w)]; !marked[node]; node = lex_.parent[node]) { marked[node] = 1; if (!node) break; }
+    vocabularyNode.bits.assign((marked.size() + 63) / 64, 0);
+    for (std::size_t node = 0; node < marked.size(); ++node) if (marked[node]) vocabularyNode.bits[node >> 6] |= std::uint64_t(1) << (node & 63);
+    vocabularyNode.before.resize(vocabularyNode.bits.size());
+    std::uint32_t numbered = 0;
+    for (std::size_t block = 0; block < vocabularyNode.bits.size(); ++block) {
+        vocabularyNode.before[block] = numbered; numbered += std::uint32_t(std::popcount(vocabularyNode.bits[block]));
     }
-    vocabularyTerminal_.assign(modelToWord_.size(), UINT32_MAX);
-    for (std::size_t id = 4; id < modelToWord_.size(); ++id) if (const auto w = modelToWord_[id]; w >= 0 && lexicon.terminal[std::size_t(w)] != UINT32_MAX && std::isfinite(lexicon.unigram[std::size_t(w)]))
-        vocabularyTerminal_[id] = vocabularyNode_[lexicon.terminal[std::size_t(w)]];
+    vocabularyParent.reserve(numbered);
+    for (std::size_t node = 0; node < marked.size(); ++node) if (marked[node]) vocabularyParent.push_back(vocabularyNode[lex_.parent[node]]);
+    vocabularyTerminal.assign(modelToWord.size(), UINT32_MAX);
+    for (std::size_t id = 4; id < modelToWord.size(); ++id) if (const auto w = modelToWord[id]; w >= 0 && lex_.terminal[std::size_t(w)] != UINT32_MAX && std::isfinite(lex_.unigram[std::size_t(w)]))
+        vocabularyTerminal[id] = vocabularyNode[lex_.terminal[std::size_t(w)]];
 }
+NeuralFst::NeuralFst(std::shared_ptr<const Tables> tables)
+    : tables_(std::move(tables)), model_(tables_->model), lexicon_(tables_->lexicon), options_(tables_->options),
+      ring_(std::make_unique<ContextRing>(model_)) {}
 void NeuralFst::resetContext() { ring_ = std::make_unique<ContextRing>(model_); context_.clear(); states_.clear(); }
 void NeuralFst::update(std::span<const std::string> context, bool newWord) {
     std::vector<std::int32_t> ids;
@@ -118,8 +135,8 @@ void NeuralFst::modify(std::uint32_t state, std::span<const float> recurrent, st
     e.recurrent.assign(recurrent.begin(), recurrent.end());
     std::vector<std::pair<std::uint32_t, float>> scored;
     for (std::size_t id = 4; id < probabilities.size(); ++id) {
-        if (probabilities[id] < threshold || modelToWord_[id] < 0) continue;
-        const auto word = std::uint32_t(modelToWord_[id]);
+        if (probabilities[id] < threshold || tables_->modelToWord[id] < 0) continue;
+        const auto word = std::uint32_t(tables_->modelToWord[id]);
         if (lexicon_->terminal[word] == UINT32_MAX || !std::isfinite(lexicon_->unigram[word])) continue;
         const auto next = std::uint32_t(states_.size());
         states_.push_back({state, word, SIZE_MAX});
@@ -129,11 +146,14 @@ void NeuralFst::modify(std::uint32_t state, std::span<const float> recurrent, st
     if (options_.exact) {
         // Each word's score at its terminal, then up the tree; parents are numbered first.
         auto& best = e.vocabularyLookahead;
-        best.assign(vocabularyParent_.size(), negInf);
-        for (std::size_t id = 4; id < probabilities.size(); ++id) if (const auto at = vocabularyTerminal_[id]; at != UINT32_MAX) best[at] = std::max(best[at], probabilities[id]);
-        for (std::size_t at = best.size(); at-- > 1;) best[vocabularyParent_[at]] = std::max(best[vocabularyParent_[at]], best[at]);
+        best.assign(tables_->vocabularyParent.size(), negInf);
+        for (std::size_t id = 4; id < probabilities.size(); ++id) if (const auto at = tables_->vocabularyTerminal[id]; at != UINT32_MAX) best[at] = std::max(best[at], probabilities[id]);
+        for (std::size_t at = best.size(); at-- > 1;) best[tables_->vocabularyParent[at]] = std::max(best[tables_->vocabularyParent[at]], best[at]);
         e.distribution = std::move(probabilities);
-    } else e.lookahead.build(*lexicon_, scored, scratch_);
+    } else {
+        if (scratch_.empty()) scratch_.assign(lexicon_->nodeCount(), negInf);   // exact mode never needs it
+        e.lookahead.build(*lexicon_, scored, scratch_);
+    }
     e.count = arcs_.size() - e.begin;
     std::sort(arcs_.begin() + std::ptrdiff_t(e.begin), arcs_.end(), [](const auto& a, const auto& b) { return a.word < b.word; });
     states_[state].expansion = expansions_.size(); expansions_.push_back(std::move(e));
@@ -155,8 +175,8 @@ std::vector<NeuralFst::Transition> NeuralFst::transitions(std::uint32_t state, s
     auto first = arcs_.begin() + std::ptrdiff_t(e.begin), last = first + std::ptrdiff_t(e.count);
     auto found = std::lower_bound(first, last, word, [](const Arc& a, auto w) { return a.word < w; });
     if (options_.exact) {
-        const auto id = wordToModel_[word];
-        if (id < 0) return {{1, double(e.epsilon) + outsideUnigram_[word]}};
+        const auto id = tables_->wordToModel[word];
+        if (id < 0) return {{1, double(e.epsilon) + tables_->outsideUnigram[word]}};
         const double floor = options_.unigramFloor ? double(e.epsilon) + lexicon_->unigram[word] : double(negInf);
         if (found == last || found->word != word) return {{1, std::max(floor, double(e.distribution[std::size_t(id)]))}};
         if (options_.unigramFloor) return {{1, floor}, {found->next, found->logProbability}};
@@ -176,8 +196,8 @@ double NeuralFst::lookahead(std::uint32_t state, std::uint32_t node) const {
     if (index == SIZE_MAX) return lexicon_->lookahead[node];
     const auto& e = expansions_[index];
     if (options_.exact) {
-        const auto at = vocabularyNode_[node];
-        const double bound = std::max(double(e.epsilon) + outsideLookahead_[node], at == UINT32_MAX ? double(negInf) : double(e.vocabularyLookahead[at]));
+        const auto at = tables_->vocabularyNode[node];
+        const double bound = std::max(double(e.epsilon) + tables_->outsideLookahead[node], at == UINT32_MAX ? double(negInf) : double(e.vocabularyLookahead[at]));
         return options_.unigramFloor ? std::max(bound, double(e.epsilon) + lexicon_->lookahead[node]) : bound;
     }
     return std::max(double(e.epsilon) + lexicon_->lookahead[node], double(e.lookahead.at(node)));
@@ -188,9 +208,9 @@ std::vector<std::pair<std::uint32_t, double>> NeuralFst::best(std::uint32_t stat
     auto order = [](const auto& a, const auto& b) { return a.second == b.second ? a.first < b.first : a.second > b.second; };
     if (options_.exact && index != SIZE_MAX) {
         const auto& e = expansions_[index];
-        for (std::size_t id = 4; id < e.distribution.size(); ++id) if (const auto w = modelToWord_[id]; w >= 0 && lexicon_->terminal[std::size_t(w)] != UINT32_MAX && std::isfinite(lexicon_->unigram[std::size_t(w)]))
+        for (std::size_t id = 4; id < e.distribution.size(); ++id) if (const auto w = tables_->modelToWord[id]; w >= 0 && lexicon_->terminal[std::size_t(w)] != UINT32_MAX && std::isfinite(lexicon_->unigram[std::size_t(w)]))
             out.emplace_back(std::uint32_t(w), options_.unigramFloor ? std::max(double(e.distribution[id]), double(e.epsilon) + lexicon_->unigram[std::size_t(w)]) : double(e.distribution[id]));
-        for (std::size_t k = 0; k < topOutside_.size() && k < count; ++k) out.emplace_back(topOutside_[k], double(e.epsilon) + outsideUnigram_[topOutside_[k]]);
+        for (std::size_t k = 0; k < tables_->topOutside.size() && k < count; ++k) out.emplace_back(tables_->topOutside[k], double(e.epsilon) + tables_->outsideUnigram[tables_->topOutside[k]]);
         if (out.size() > count) { std::partial_sort(out.begin(), out.begin() + std::ptrdiff_t(count), out.end(), order); out.resize(count); }
         else std::sort(out.begin(), out.end(), order);
         return out;
@@ -220,11 +240,11 @@ double NeuralFst::typedUnknown() const {
     if (!options_.exact || index == SIZE_MAX) return negInf;
     // Half a count, scaled like the lexicon's counts (1 + ln 0.5 < 1 would be below any word: use 0.5^0 = 1 there).
     const double half = options_.unknownExponent > 0 ? std::pow(0.5, options_.unknownExponent) : 1.0;
-    return double(expansions_[index].epsilon) + std::log(1 - double(model_->unknownLexiconShare())) + std::log(half / outsideMass_);
+    return double(expansions_[index].epsilon) + std::log(1 - double(model_->unknownLexiconShare())) + std::log(half / tables_->outsideMass);
 }
 
 NgramFst::NgramFst(const PackedLexicon& packed, std::shared_ptr<const NeuralLexicon> lex)
-    : packed_(packed), lexicon_(std::move(lex)), scratch_(lexicon_->nodes.size(), negInf) {
+    : packed_(packed), lexicon_(std::move(lex)), scratch_(lexicon_->nodeCount(), negInf) {
     // LanguageModel's Witten–Bell unigram: (frequency + 1) / (sum of frequencies + word count).
     double total = double(packed_.wordCount());
     for (std::uint32_t id = 0; id < packed_.wordCount(); ++id) total += double(packed_.frequency(id));
@@ -388,10 +408,10 @@ std::vector<NeuralFstSearch::Token> NeuralFstSearch::prune(std::vector<Token> in
         if (!seen.insert(keyOf(t)).second) continue;
         out.push_back(t);
         if (!deletions || t.pending) continue;
-        const auto node = lex.nodes[t.node];
+        const auto node = lex.node(t.node);
         for (auto child = node.firstChild; child < node.firstChild + node.childCount; ++child) {
             auto next = t; next.node = child; next.boundary = false;
-            next.cost += deletion(lex.nodes[child].label, node.label, typedLetter);
+            next.cost += deletion(lex.node(child).label, node.label, typedLetter);
             next.upper = bound(next);
             if (next.upper >= floor) queue.push(std::move(next));
         }
@@ -402,7 +422,7 @@ std::vector<NeuralFstSearch::End> NeuralFstSearch::endings(std::span<const Token
     std::vector<End> out;
     const auto& lex = graph_.lexicon();
     for (const auto& t : tokens) {
-        const auto word = lex.nodes[t.node].wordID;
+        const auto word = lex.node(t.node).wordID;
         if (t.pending || !word || lex.packed.blocked(std::uint32_t(*word))) continue;
         for (const auto& edge : graph_.transitions(t.state, std::uint32_t(*word)))
             out.push_back({t, std::uint32_t(*word), edge.next, t.language + edge.logProbability});
@@ -418,20 +438,20 @@ void NeuralFstSearch::advance(std::uint8_t letter, std::optional<TouchOffset> ta
             done.cost += substitution(t.pending, letter, tap, false); next.push_back(std::move(done)); continue;
         }
         auto extra = t;
-        extra.cost += insertion(letter, typed_.empty() ? 0 : std::uint8_t(typed_.back()), lex.nodes[t.node].label);
+        extra.cost += insertion(letter, typed_.empty() ? 0 : std::uint8_t(typed_.back()), lex.node(t.node).label);
         next.push_back(std::move(extra));
         // A space key replaced by c/v/b/n/m consumes a touch without a lexicon letter.
         if (t.boundary && std::string_view("cvbnm").find(char(letter)) != std::string_view::npos) {
             auto space = t; space.boundary = false; space.cost += 0.72 - 1.1; next.push_back(std::move(space));
         }
-        const auto n = lex.nodes[t.node];
+        const auto n = lex.node(t.node);
         for (auto child = n.firstChild; child < n.firstChild + n.childCount; ++child) {
-            const auto c = lex.nodes[child];
+            const auto c = lex.node(child);
             auto sub = t; sub.node = child; sub.boundary = false;
             sub.cost += substitution(c.label, letter, tap, typed_.empty()); next.push_back(std::move(sub));
             // Two-label channel arc for adjacent transposition. The pending input is
             // consumed on the next frame, so no unfinished transposition can emit a word.
-            for (auto grand = c.firstChild; grand < c.firstChild + c.childCount; ++grand) if (lex.nodes[grand].label == letter && c.label != letter) {
+            for (auto grand = c.firstChild; grand < c.firstChild + c.childCount; ++grand) if (lex.node(grand).label == letter && c.label != letter) {
                 auto swap = t; swap.node = grand; swap.pending = c.label; swap.boundary = false;
                 swap.cost += transpositionCost; next.push_back(std::move(swap));
             }
@@ -521,7 +541,7 @@ std::vector<RankedRow> NeuralFstSearch::decode(std::string_view typed, std::span
             remember(e); ends.push_back(e);
         }
         if (visited.size() % 16 == 0) tighten();
-        const auto node = graph_.lexicon().nodes[t.node];
+        const auto node = graph_.lexicon().node(t.node);
         for (auto c = node.firstChild; c < node.firstChild + node.childCount; ++c) {
             auto child = t; child.node = c; child.upper = bound(child);
             if (child.upper >= floor) queue.push(std::move(child));
