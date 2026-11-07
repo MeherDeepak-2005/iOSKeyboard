@@ -319,6 +319,32 @@ final class keyboardUITests: XCTestCase {
 	/// that word in the middle, and the next Space keeps it: the undo must stick. Dictionary
 	/// words only, so the undo it teaches leaves nothing new in the phone's learned words.
 	/// Logs UNDO lines with non-ASCII characters spelled out.
+	/// Keyboard health's "Keyboard memory now" is live while the keyboard is open on that screen,
+	/// and keeps the latest reading, with its age, once the keyboard has gone.
+	@MainActor
+	func testKeyboardHealthFollowsMemoryLive() throws {
+		let app = XCUIApplication()
+		app.launchArguments = []
+		app.launch()
+		let health = app.buttons["Keyboard health"]
+		for _ in 0..<6 where !health.isHittable { app.swipeUp() }
+		guard health.waitForExistence(timeout: 5) else { throw XCTSkip("Keyboard health is a Debug-build screen") }
+		health.tap()
+		let memory = app.descendants(matching: .any)["health.memory.now"]
+		XCTAssertTrue(memory.waitForExistence(timeout: 5))
+		app.textFields["health.memory.probe"].tap()
+		guard app.descendants(matching: .any)["glyph.keyboard"].waitForExistence(timeout: 10) else {
+			throw XCTSkip("Glyph is not the active software keyboard")
+		}
+		expectation(for: NSPredicate(format: "label CONTAINS ' · live'"), evaluatedWith: memory)
+		waitForExpectations(timeout: 6)
+		app.navigationBars.buttons.firstMatch.tap()   // back: the keyboard goes with the field
+		RunLoop.current.run(until: Date().addingTimeInterval(4))
+		health.tap()
+		XCTAssertTrue(memory.waitForExistence(timeout: 5))
+		XCTAssertTrue(memory.label.contains(" ago"), memory.label)
+	}
+
 	/// Types, then opens emoji, GIFs and stickers and returns to the letters, three times, so the
 	/// keyboard's "Memory by surface" log (Keyboard health) shows what each surface leaves behind.
 	/// Opt-in, as it scrolls live GIFs: TEST_RUNNER_KB_MEMORY_TOUR=1.

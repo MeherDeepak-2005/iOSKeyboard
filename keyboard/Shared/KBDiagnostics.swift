@@ -143,6 +143,24 @@ enum KBDiagnostics {
 		metricsQueue.async { Recorder.shared.noteIntegrityEvent(code) }
 	}
 
+	/// The keyboard's footprint as it runs, for Keyboard health to follow live: [megabytes,
+	/// seconds since 1970], written about once a second while the keyboard is on screen.
+	static let liveKey = "kb.diag.live"
+	/// Debug and internal builds call this every second while the keyboard is visible. It also
+	/// keeps the peak honest between decodes (scrolling GIFs runs no decode, so no sample).
+	static func noteLiveFootprint() {
+		metricsQueue.async {
+			let bytes = footprintBytes()
+			Recorder.shared.noteLive(bytes: bytes)
+			store.set([Double(bytes) / 1_048_576, Date().timeIntervalSince1970], forKey: liveKey)
+		}
+	}
+	/// The keyboard's latest live reading and when it was taken, or nil before the first one.
+	static func liveFootprint() -> (megabytes: Double, at: Date)? {
+		guard let reading = store.array(forKey: liveKey) as? [Double], reading.count == 2 else { return nil }
+		return (reading[0], Date(timeIntervalSince1970: reading[1]))
+	}
+
 	/// Records the footprint when the visible surface changes (letters, emoji, GIFs, stickers,
 	/// clipboard), and again a second later, once the previous surface's memory is released.
 	/// Extension only: the app builds keyboard views for previews in its own, roomier process.
@@ -230,6 +248,7 @@ enum KBDiagnostics {
 	static func reset() {
 		store.set(UUID().uuidString, forKey: "kb.diag.reset-generation")
 		store.removeObject(forKey: key)
+		store.removeObject(forKey: liveKey)
 		Recorder.shared.clear()
 	}
 
@@ -498,6 +517,13 @@ enum KBDiagnostics {
 			formatter.dateFormat = "HH:mm:ss"
 			return formatter
 		}()
+		func noteLive(bytes: UInt64) {
+			lock.lock(); synchronizeResetLocked()
+			let megabytes = Double(bytes) / 1_048_576
+			snap.footprintNowMB = megabytes
+			if megabytes > snap.peakFootprintMB { snap.peakFootprintMB = megabytes; persistLocked() }
+			lock.unlock()
+		}
 		func noteSurface(_ surface: String, bytes: UInt64) {
 			lock.lock(); synchronizeResetLocked()
 			let megabytes = Double(bytes) / 1_048_576

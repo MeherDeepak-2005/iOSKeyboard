@@ -455,12 +455,20 @@ struct DiagnosticsView: View {
 	@State private var typingCapture = KBTypingRecorder.enabled
 	@State private var typingExport: URL?
 	@State private var captureStatus = ""
+	@State private var liveProbe = ""
 	private let log = Logger(subsystem: KBSettings.appGroup, category: "diag-app")
 
 	var body: some View {
 		List {
 			Section {
-				row("Footprint now", snap.footprintNowMB.map(mb) ?? "—")
+				// Re-read every second: the keyboard writes a reading a second while on screen.
+				TimelineView(.periodic(from: .now, by: 1)) { context in
+					row("Keyboard memory now", keyboardMemory(at: context.date))
+						.accessibilityElement(children: .combine)
+						.accessibilityIdentifier("health.memory.now")
+				}
+				TextField("Type here to watch it live", text: $liveProbe)
+					.accessibilityIdentifier("health.memory.probe")
 				row("Peak footprint", mb(snap.peakFootprintMB))
 				row("Lowest headroom", snap.minAvailableMB > 0 ? mb(snap.minAvailableMB) : "—")
 				row("Inferred kill limit", snap.limitMB > 0 ? mb(snap.limitMB) : "—")
@@ -470,7 +478,7 @@ struct DiagnosticsView: View {
 			} header: {
 				Text("Memory & CPU")
 			} footer: {
-				Text("iOS can terminate a keyboard extension under memory pressure. \"Now\" is the latest sample; the peak is the highest ever seen and never falls. Peak CPU is sampled while a search is running (can exceed 100% across cores). These counters contain no typed text.")
+				Text("iOS can terminate a keyboard extension under memory pressure. \"Now\" is live while the keyboard is open, otherwise its latest reading and how old it is; the peak is the highest ever seen and never falls. Peak CPU is sampled while a search is running (can exceed 100% across cores). These counters contain no typed text.")
 			}
 
 			if let log = snap.surfaceLog, !log.isEmpty {
@@ -618,6 +626,16 @@ struct DiagnosticsView: View {
 	private func reload() {
 		snap = KBDiagnostics.read()
 		log.notice("diag peakMB=\(Int(snap.peakFootprintMB)) limitMB=\(Int(snap.limitMB)) warn=\(snap.warningCount) crit=\(snap.criticalCount)")
+	}
+	/// Live while the keyboard is on screen (a reading every second), otherwise its latest
+	/// reading and how long ago it was taken.
+	private func keyboardMemory(at now: Date) -> String {
+		if let live = KBDiagnostics.liveFootprint() {
+			let age = now.timeIntervalSince(live.at)
+			return mb(live.megabytes) + (age < 3 ? " · live" : " · " + live.at.formatted(.relative(presentation: .named)))
+		}
+		guard let latest = snap.footprintNowMB else { return "—" }
+		return mb(latest) + " · " + snap.updated.formatted(.relative(presentation: .named))
 	}
 	private func resetDiagnostics() {
 		KBDiagnostics.reset()

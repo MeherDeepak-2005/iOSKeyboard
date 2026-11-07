@@ -229,6 +229,9 @@ final class KeyboardViewController: UIInputViewController {
 
 	deinit {
 		for observer in accessibilityObservers { NotificationCenter.default.removeObserver(observer) }
+		#if DEBUG || INTERNAL_GRU
+		liveMemoryTimer?.invalidate()
+		#endif
 	}
 
 	private func handlePersonalDataReset() {
@@ -380,6 +383,11 @@ final class KeyboardViewController: UIInputViewController {
 	// MARK: State for Clipboard
 	var cursorModeActive = false
 
+	#if DEBUG || INTERNAL_GRU
+	/// Feeds Keyboard health's live memory row while the keyboard is on screen.
+	private var liveMemoryTimer: Timer?
+	#endif
+
 	// MARK: State for Keys
 	/// Timestamp of the last plain space, for the double-space → ". " shortcut.
 	var lastSpaceAt: TimeInterval = 0
@@ -469,10 +477,24 @@ final class KeyboardViewController: UIInputViewController {
 		// and P arrive late, often with their lift, and their balloon never shows.
 		view.window?.gestureRecognizers?.forEach { $0.delaysTouchesBegan = false }
 		if !hostConnectionReady { handleHostCallback() }
+		#if DEBUG || INTERNAL_GRU
+		// Keyboard health follows the footprint live: one reading a second while on screen.
+		liveMemoryTimer?.invalidate()
+		KBDiagnostics.noteLiveFootprint()
+		let timer = Timer(timeInterval: 1, repeats: true) { _ in KBDiagnostics.noteLiveFootprint() }
+		timer.tolerance = 0.25
+		RunLoop.main.add(timer, forMode: .common)
+		liveMemoryTimer = timer
+		#endif
 	}
 
 	override func viewWillDisappear(_ animated: Bool) {
 		super.viewWillDisappear(animated)
+		#if DEBUG || INTERNAL_GRU
+		liveMemoryTimer?.invalidate()
+		liveMemoryTimer = nil
+		KBDiagnostics.noteLiveFootprint()             // the latest reading, shown once the keyboard is gone
+		#endif
 		hostConnectionReady = false
         recoveryMonitor?.stop()
         recoveryMonitor = nil
