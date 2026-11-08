@@ -4,6 +4,8 @@ extension KeyboardView {
 	// MARK: Emoji page (overlay collection view, not a key grid)
 
 	func showEmoji() {
+		// From the letters (not back from a search or another panel): an open, for the A/B counts.
+		let opening = page == .letters && !isEmojiSearching && !isMediaSearching
 		if isEmojiSearching { tearDownEmojiSearch() }   // emoji key pressed mid-search
 		guard page != .emoji else { return }
 		// Coming from the GIF/sticker panel: the switch thumb slides back from that tab.
@@ -30,6 +32,7 @@ extension KeyboardView {
 		if previous != nil { returnPanelMemory() }    // the GIF/sticker panel just went
 		KBDiagnostics.recorder.sample()               // emoji page footprint shows up in health telemetry
 		KBDiagnostics.noteSurface("emoji")
+		if opening { KBDiagnostics.notePanelEvent(.open) }
 	}
 	private func hideEmoji() {
 		emojiView?.removeFromSuperview()
@@ -45,6 +48,7 @@ extension KeyboardView {
 
 	func showMedia(kind: KlipyKind, query: String? = nil, hasFullAccess: Bool) {
 		mediaHasFullAccess = hasFullAccess
+		let opening = page == .letters && !isEmojiSearching && !isMediaSearching
 		if isEmojiSearching { tearDownEmojiSearch() }
 		if isMediaSearching { tearDownMediaSearch() }
 		let previous: PanelTab? = page == .emoji ? .emoji : nil
@@ -68,6 +72,7 @@ extension KeyboardView {
 		setNeedsLayout()
 		returnPanelMemory()                           // the emoji page or previous panel just went
 		KBDiagnostics.noteSurface(kind.rawValue)
+		if opening { KBDiagnostics.notePanelEvent(.open) }
 	}
 
 	private func hideMedia() {
@@ -200,6 +205,7 @@ extension KeyboardView {
 		}
 		header.onPick = { [weak self] e in
 			// Insert into the HOST document (stays in search, Gboard-style).
+			KBDiagnostics.notePanelEvent(.pick)
 			self?.onInsert?(e, nil)
 			KBEmojiRecents.add(e)
 		}

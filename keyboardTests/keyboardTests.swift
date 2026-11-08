@@ -1478,7 +1478,7 @@ struct KeyboardTests {
 	}
 
 	@MainActor @Test func emojiCategoryHighlightFollowsEveryTap() async throws {
-		let store = try #require(EmojiStore(url: emojiBinaryURL()))
+		let store = try #require(EmojiStore.bundled ?? EmojiStore(url: emojiBinaryURL()))
 		let palette = EmojiKeyboardView(theme: .system(dark: true), showsGlobe: false,
 			store: store)
 		palette.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
@@ -1505,6 +1505,78 @@ struct KeyboardTests {
 				#expect(!button.accessibilityTraits.contains(.selected))
 			}
 		}
+	}
+
+	/// The A/B header arms: C (unified) puts the switch inside the search capsule's right
+	/// end in a 44 pt header; A (stacked) puts a full-width switch under it in 86 pt. Both
+	/// keep the tab names VoiceOver and the UI tests use.
+	@MainActor @Test func panelHeaderArmsLayOutTheirSwitch() throws {
+		for style in PanelHeaderStyle.allCases {
+			let header = PanelHeaderView(theme: .system(dark: false), selected: .gifs, style: style)
+			header.frame = CGRect(x: 0, y: 0, width: 390, height: header.height)
+			header.layoutIfNeeded()
+			let views = recursiveSubviews(header)
+			let search = try #require(views.compactMap { $0 as? UIButton }
+				.first { $0.accessibilityIdentifier == "media.search" })
+			let tabs = ["emoji", "gifs", "stickers"].compactMap { id in
+				views.compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "panel.tab.\(id)" }
+			}
+			#expect(tabs.map { $0.accessibilityLabel } == ["Emoji", "GIFs", "Stickers"])
+			#expect(tabs[1].accessibilityTraits.contains(.selected))
+			let track = try #require(tabs[0].superview)
+			let trackFrame = track.convert(track.bounds, to: header)
+			switch style {
+			case .unified:
+				#expect(header.height == 44)
+				#expect(search.frame == CGRect(x: 8, y: 3, width: 374, height: 38))
+				#expect(trackFrame.width == 118)
+				#expect(trackFrame.maxX == search.frame.maxX - 3)        // inside the capsule's right end
+				#expect(trackFrame.midY == search.frame.midY)
+				#expect(tabs[0].image(for: .normal) != nil && tabs[2].image(for: .normal) != nil)
+				#expect(tabs[1].title(for: .normal) == "GIF")
+				// The placeholder stops before the switch.
+				#expect((search.configuration?.contentInsets.trailing ?? 0) >= 118)
+			case .stacked:
+				#expect(header.height == 86)
+				#expect(search.frame == CGRect(x: 8, y: 6, width: 374, height: 36))
+				#expect(trackFrame == CGRect(x: 8, y: 48, width: 374, height: 32))
+				#expect(tabs.map { $0.title(for: .normal) } == ["Emoji", "GIFs", "Stickers"])
+			}
+		}
+		#expect(KBExperiments.arm(forDraw: 0) == .stacked)
+		#expect(KBExperiments.arm(forDraw: 0.49) == .stacked)
+		#expect(KBExperiments.arm(forDraw: 0.5) == .unified)
+		#expect(KBExperiments.arm(forDraw: 0.99) == .unified)
+		#expect(KBExperiments.panelHeader == .unified)                 // tests use the design
+	}
+
+	/// The browse grid scrolls sideways only: columns fill the grid's height, the first
+	/// column starts at the left edge, and a category tab jumps the grid horizontally.
+	@MainActor @Test func emojiGridScrollsHorizontallyOnly() async throws {
+		let store = try #require(EmojiStore.bundled ?? EmojiStore(url: emojiBinaryURL()))
+		let palette = EmojiKeyboardView(theme: .system(dark: true), showsGlobe: false, store: store)
+		palette.frame = CGRect(x: 0, y: 0, width: 390, height: 259)
+		palette.layoutIfNeeded()
+		let grid = try #require(recursiveSubviews(palette).compactMap { $0 as? UICollectionView }.first)
+		grid.layoutIfNeeded()
+		#expect(grid.contentSize.height <= grid.bounds.height + 0.5)
+		#expect(grid.contentSize.width > grid.bounds.width * 4)
+		#expect(!grid.alwaysBounceVertical)
+
+		let first = try #require(grid.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)))
+		#expect(first.frame.minX == 0)
+		let second = try #require(grid.layoutAttributesForItem(at: IndexPath(item: 1, section: 0)))
+		#expect(second.frame.minX == first.frame.minX)              // down the column first
+		#expect(second.frame.minY > first.frame.minY)
+		#expect(abs(first.frame.width - first.frame.height) < 0.5)   // square cells
+
+		let tab = try #require(recursiveSubviews(palette).compactMap { $0 as? UIButton }
+			.first { $0.accessibilityIdentifier == "emoji.category.3" })
+		tab.sendActions(for: .touchUpInside)
+		let target = try #require(grid.layoutAttributesForItem(at: IndexPath(item: 0, section: 3)))
+		#expect(grid.contentOffset.y == 0)
+		#expect(abs(grid.contentOffset.x - min(target.frame.minX,
+			grid.contentSize.width - grid.bounds.width)) < 0.5)
 	}
 
 	/// The re-added clipboard store (afda5b4 UX) with its P0 hardening: dedupe-resurface,

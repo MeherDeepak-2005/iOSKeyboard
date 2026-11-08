@@ -18,6 +18,11 @@ struct keyboardApp: App {
 		if ProcessInfo.processInfo.arguments.contains("-ui-testing-used-keyboard") {
 			KBSettings.hasUsedKeyboard = true
 		}
+		// UI tests pin a panel-header arm ("unified", "stacked") or clear the pin ("random").
+		let arguments = ProcessInfo.processInfo.arguments
+		if let flag = arguments.firstIndex(of: "-panel-header"), arguments.indices.contains(flag + 1) {
+			KBExperiments.panelHeaderOverride = PanelHeaderStyle(rawValue: arguments[flag + 1])
+		}
 		#endif
 	}
 

@@ -60,6 +60,8 @@ enum KBDiagnostics {
 		var keyConfusions: [String: Int]? // "typed>retyped" → a letter erased and replaced by another
 		var backspaceTaps: Int?           // every Backspace, including undo of a correction
 		var interKeyIntervalBins: [Int]?  // gap to the previous key, interKeyThresholds buckets
+		// Panel header A/B test: "arm.event" → count, e.g. "C.open", "A.pick". Counts only.
+		var panelEvents: [String: Int]?
 	}
 
 	static let key = "kb.diag"
@@ -175,6 +177,25 @@ enum KBDiagnostics {
 
 	static func finishTypingSession() {
 		metricsQueue.async { Recorder.shared.finishTypingSession() }
+	}
+
+	/// What a user did with the Emoji, GIF and Sticker panels, counted per header arm.
+	enum PanelEvent: String, CaseIterable, Sendable {
+		/// A panel opened from the letters.
+		case open
+		/// The search field tapped.
+		case search
+		/// Another tab chosen in the header's switch.
+		case tabSwitch = "switch"
+		/// An emoji inserted, or a GIF or sticker copied.
+		case pick
+	}
+
+	/// Counts a panel event against the header arm this keyboard shows. Extension only.
+	static func notePanelEvent(_ event: PanelEvent) {
+		guard LanguagePackHealthInspector.isExtensionProcess else { return }
+		let key = KBExperiments.panelHeader.arm + "." + event.rawValue
+		metricsQueue.async { Recorder.shared.notePanelEvent(key) }
 	}
 
 	/// A key in a general text field. `letter` is a lowercased a–z key or nil for any other
@@ -499,6 +520,13 @@ enum KBDiagnostics {
 		}
 
 		func clear() { lock.lock(); synchronizeResetLocked(); snap = Snapshot(); tick = 0; lastTapUptime = 0; lastCPUSampleUptime = -Double.infinity; lock.unlock() }
+		func notePanelEvent(_ key: String) {
+			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
+			var events = snap.panelEvents ?? [:]
+			events[key, default: 0] += 1
+			snap.panelEvents = events
+			persistLocked()
+		}
 		func noteIntegrityEvent(_ code: String) {
 			lock.lock(); synchronizeResetLocked(); defer { lock.unlock() }
 			var events = snap.integrityEvents ?? [:]

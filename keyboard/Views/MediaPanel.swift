@@ -13,19 +13,44 @@ enum PanelTab: Int, CaseIterable {
 	init(_ kind: KlipyKind) { self = kind == .gifs ? .gifs : .stickers }
 }
 
-/// Stacked panel header: a full-width search capsule, and under it an equal-thirds
-/// Emoji · GIFs · Stickers switch whose thumb slides to the chosen tab.
+/// The panels' shared header, in the A/B arm `KBExperiments.panelHeader` picks:
+///
+/// - `.unified` (C): one capsule, the search on the left and a compact
+///   smiley · GIF · sticker switch inside its right end.
+/// - `.stacked` (A): a full-width search capsule over an equal-thirds
+///   Emoji · GIFs · Stickers switch.
+///
+/// In both, the switch's thumb slides to the chosen tab, and the tabs keep the names
+/// Emoji, GIFs and Stickers for VoiceOver.
 final class PanelHeaderView: UIView {
-	static let height: CGFloat = 86        // 6 + 36 search + 6 + 32 switch + 6
-	private static let searchHeight: CGFloat = 36
-	private static let switchHeight: CGFloat = 32
+	/// The header's height in each arm: 3 + 38 capsule + 3, or 6 + 36 search + 6 + 32 switch + 6.
+	static func height(for style: PanelHeaderStyle) -> CGFloat { style == .unified ? 44 : 86 }
+
+	private struct Metrics {
+		let searchY, searchHeight: CGFloat
+		let switchHeight, switchRadius, thumbRadius: CGFloat
+		/// The unified switch's width inside the capsule; nil spans the header (stacked).
+		let switchWidth: CGFloat?
+	}
+	private static func metrics(for style: PanelHeaderStyle) -> Metrics {
+		style == .unified
+			? Metrics(searchY: 3, searchHeight: 38, switchHeight: 32, switchRadius: 16, thumbRadius: 14,
+				switchWidth: 118)
+			: Metrics(searchY: 6, searchHeight: 36, switchHeight: 32, switchRadius: 10, thumbRadius: 8,
+				switchWidth: nil)
+	}
 	private static let inset: CGFloat = 8
+	/// The gap between the unified switch and the capsule's right end.
+	private static let capsulePadding: CGFloat = 3
 
 	var onSelect: ((PanelTab) -> Void)?
 	var onSearch: (() -> Void)?
 	private(set) var selected: PanelTab
+	let style: PanelHeaderStyle
+	var height: CGFloat { Self.height(for: style) }
 
 	private let theme: KeyboardTheme
+	private let metrics: Metrics
 	private let searchButton = UIButton(type: .custom)
 	private let track = UIView()
 	private let thumb = UIView()
@@ -36,47 +61,50 @@ final class PanelHeaderView: UIView {
 	private let query: String?
 
 	init(theme: KeyboardTheme, selected: PanelTab, from previous: PanelTab? = nil,
-		query: String? = nil, searchEnabled: Bool = true) {
+		query: String? = nil, searchEnabled: Bool = true,
+		style: PanelHeaderStyle = KBExperiments.panelHeader) {
 		self.theme = theme
 		self.selected = selected
 		self.slideFrom = previous == selected ? nil : previous
 		self.query = query
+		self.style = style
+		self.metrics = Self.metrics(for: style)
 		super.init(frame: .zero)
 
 		var cfg = UIButton.Configuration.plain()
 		cfg.image = UIImage(systemName: "magnifyingglass",
 			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
 		cfg.imagePadding = 7
-		let hasQuery = !(query ?? "").isEmpty
-		cfg.attributedTitle = AttributedString(hasQuery ? query! : selected.searchPlaceholder,
-			attributes: AttributeContainer([
-				.font: KeyboardTypography.searchField,
-				.foregroundColor: hasQuery ? theme.keyText : theme.keyText.withAlphaComponent(0.45),
-			]))
+		cfg.attributedTitle = searchTitle(for: selected)
 		cfg.baseForegroundColor = theme.keyText.withAlphaComponent(0.45)
-		cfg.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
+		// The unified capsule's text stops short of the switch inside it.
+		let trailing = metrics.switchWidth.map { $0 + Self.capsulePadding + 8 } ?? 12
+		cfg.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: trailing)
 		cfg.titleLineBreakMode = .byTruncatingTail
 		searchButton.configuration = cfg
 		searchButton.contentHorizontalAlignment = .leading
 		searchButton.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10)
 			: UIColor(white: 1, alpha: 0.62)
-		searchButton.layer.cornerRadius = Self.searchHeight / 2
+		searchButton.layer.cornerRadius = metrics.searchHeight / 2
 		searchButton.layer.cornerCurve = .continuous
 		searchButton.isEnabled = searchEnabled
 		searchButton.accessibilityLabel = selected.searchPlaceholder
-		if hasQuery { searchButton.accessibilityValue = query }
+		if let query, !query.isEmpty { searchButton.accessibilityValue = query }
 		searchButton.accessibilityIdentifier = selected == .emoji ? "emoji.search" : "media.search"
-		searchButton.addAction(UIAction { [weak self] _ in self?.onSearch?() }, for: .touchUpInside)
+		searchButton.addAction(UIAction { [weak self] _ in
+			KBDiagnostics.notePanelEvent(.search)
+			self?.onSearch?()
+		}, for: .touchUpInside)
 		addSubview(searchButton)
 
 		track.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.08)
 			: UIColor(white: 0, alpha: 0.06)
-		track.layer.cornerRadius = 10
+		track.layer.cornerRadius = metrics.switchRadius
 		track.layer.cornerCurve = .continuous
-		addSubview(track)
+		addSubview(track)                              // above the capsule, so its taps reach the tabs
 
 		thumb.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.20) : .white
-		thumb.layer.cornerRadius = 8
+		thumb.layer.cornerRadius = metrics.thumbRadius
 		thumb.layer.cornerCurve = .continuous
 		if !theme.isDark {
 			thumb.layer.shadowColor = UIColor.black.cgColor
@@ -88,8 +116,12 @@ final class PanelHeaderView: UIView {
 
 		for tab in PanelTab.allCases {
 			let button = UIButton(type: .custom)
-			button.setTitle(tab.title, for: .normal)
-			button.titleLabel?.font = KeyboardTypography.panelTab
+			if style == .unified, let icon = Self.compactIcon(for: tab) {
+				button.setImage(icon, for: .normal)
+			} else {
+				button.setTitle(style == .unified ? "GIF" : tab.title, for: .normal)
+				button.titleLabel?.font = KeyboardTypography.panelTab
+			}
 			button.accessibilityLabel = tab.title
 			button.accessibilityIdentifier = "panel.tab.\(tab.title.lowercased())"
 			button.addAction(UIAction { [weak self] _ in self?.tapped(tab) }, for: .touchUpInside)
@@ -100,16 +132,65 @@ final class PanelHeaderView: UIView {
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
+	private func searchTitle(for tab: PanelTab) -> AttributedString {
+		let hasQuery = !(query ?? "").isEmpty
+		return AttributedString(hasQuery ? query! : tab.searchPlaceholder,
+			attributes: AttributeContainer([
+				.font: KeyboardTypography.searchField,
+				.foregroundColor: hasQuery ? theme.keyText : theme.keyText.withAlphaComponent(0.45),
+			]))
+	}
+
+	/// The unified switch's icons: a smiley for Emoji and a peeled sticker for Stickers
+	/// (SF Symbols has no sticker). GIFs is the word "GIF".
+	private static func compactIcon(for tab: PanelTab) -> UIImage? {
+		switch tab {
+		case .emoji:
+			return UIImage(systemName: "face.smiling",
+				withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium))
+		case .gifs:
+			return nil
+		case .stickers:
+			let side: CGFloat = 16
+			return UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
+				let c = side / 2, r: CGFloat = 6.75
+				let corner = CGPoint(x: c + 2.6, y: c + 2.6)
+				// A circle whose lower-right quarter is folded back: the arc from the bottom
+				// round to the right, then the fold's two edges.
+				let outline = UIBezierPath(arcCenter: CGPoint(x: c, y: c), radius: r,
+					startAngle: .pi / 2, endAngle: 0, clockwise: true)
+				outline.addLine(to: corner)
+				outline.close()
+				let flap = UIBezierPath()
+				flap.move(to: CGPoint(x: c + r, y: c))
+				flap.addQuadCurve(to: CGPoint(x: c, y: c + r), controlPoint: CGPoint(x: c + 0.5, y: c + 0.5))
+				for path in [outline, flap] {
+					path.lineWidth = 1.5
+					path.lineJoinStyle = .round
+					path.lineCapStyle = .round
+					UIColor.black.setStroke()
+					path.stroke()
+				}
+			}.withRenderingMode(.alwaysTemplate)
+		}
+	}
+
 	override func layoutSubviews() {
 		super.layoutSubviews()
 		let width = max(0, bounds.width - Self.inset * 2)
-		searchButton.frame = CGRect(x: Self.inset, y: 6, width: width, height: Self.searchHeight)
-		track.frame = CGRect(x: Self.inset, y: 6 + Self.searchHeight + 6,
-			width: width, height: Self.switchHeight)
-		let segment = max(0, (width - 4) / CGFloat(PanelTab.allCases.count))
+		searchButton.frame = CGRect(x: Self.inset, y: metrics.searchY, width: width, height: metrics.searchHeight)
+		if let switchWidth = metrics.switchWidth {
+			track.frame = CGRect(x: searchButton.frame.maxX - Self.capsulePadding - switchWidth,
+				y: metrics.searchY + (metrics.searchHeight - metrics.switchHeight) / 2,
+				width: switchWidth, height: metrics.switchHeight)
+		} else {
+			track.frame = CGRect(x: Self.inset, y: metrics.searchY + metrics.searchHeight + 6,
+				width: width, height: metrics.switchHeight)
+		}
+		let segment = max(0, (track.bounds.width - 4) / CGFloat(PanelTab.allCases.count))
 		for (index, button) in tabButtons.enumerated() {
 			button.frame = CGRect(x: 2 + CGFloat(index) * segment, y: 0,
-				width: segment, height: Self.switchHeight)
+				width: segment, height: metrics.switchHeight)
 		}
 		guard !thumbAnimating else { return }
 		if let from = slideFrom, window != nil {
@@ -128,13 +209,8 @@ final class PanelHeaderView: UIView {
 		updateTabStyles()
 		searchButton.accessibilityLabel = tab.searchPlaceholder
 		searchButton.accessibilityIdentifier = tab == .emoji ? "emoji.search" : "media.search"
-		let hasQuery = !(query ?? "").isEmpty
 		if var cfg = searchButton.configuration {
-			cfg.attributedTitle = AttributedString(hasQuery ? query! : tab.searchPlaceholder,
-				attributes: AttributeContainer([
-					.font: KeyboardTypography.searchField,
-					.foregroundColor: hasQuery ? theme.keyText : theme.keyText.withAlphaComponent(0.45),
-				]))
+			cfg.attributedTitle = searchTitle(for: tab)
 			searchButton.configuration = cfg
 		}
 		if animated { animateThumb() } else { thumb.frame = thumbFrame(for: tab) }
@@ -159,24 +235,25 @@ final class PanelHeaderView: UIView {
 		let width = max(0, track.bounds.width - 4)
 		let segment = width / CGFloat(PanelTab.allCases.count)
 		return CGRect(x: 2 + CGFloat(tab.rawValue) * segment, y: 2,
-			width: segment, height: max(0, Self.switchHeight - 4))
+			width: segment, height: max(0, metrics.switchHeight - 4))
 	}
 
 	private func tapped(_ tab: PanelTab) {
 		guard tab != selected else { return }
+		KBDiagnostics.notePanelEvent(.tabSwitch)
 		onSelect?(tab)
 	}
 
 	private func updateTabStyles() {
 		for (index, button) in tabButtons.enumerated() {
 			let on = index == selected.rawValue
-			button.setTitleColor(on ? theme.keyText : theme.specialKeyText.withAlphaComponent(0.62),
-				for: .normal)
+			let color = on ? theme.keyText : theme.specialKeyText.withAlphaComponent(0.62)
+			button.setTitleColor(color, for: .normal)
+			button.tintColor = color
 			button.accessibilityTraits = on ? [.button, .selected] : .button
 		}
 	}
 }
-
 
 final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
 	var onABC: (() -> Void)?
@@ -204,7 +281,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 	private let globeButton = UIButton(type: .system)
 	private var displayLink: CADisplayLink?
 	private var released = false
-	private let topHeight: CGFloat = PanelHeaderView.height
+	private var topHeight: CGFloat { header.height }
 	private let footerHeight: CGFloat = 36
 
 	/// `previous` is the tab the user came from, so the switch thumb slides from it.
@@ -388,6 +465,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 				return
 			}
 			UIPasteboard.general.setData(data, forPasteboardType: UTType.gif.identifier)
+			KBDiagnostics.notePanelEvent(.pick)
 			completion(true)
 		}
 	}

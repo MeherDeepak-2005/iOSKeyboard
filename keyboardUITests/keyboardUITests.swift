@@ -373,7 +373,7 @@ final class keyboardUITests: XCTestCase {
 		func scroll(_ times: Int) {
 			let grid = keyboard.collectionViews.firstMatch
 			guard grid.waitForExistence(timeout: 5) else { return }
-			for _ in 0..<times { grid.swipeUp(); settle(1.5) }
+			for _ in 0..<times { grid.swipeLeft(); settle(1.5) }
 		}
 		for _ in 0..<3 {
 			type("hello there how are you "); settle(2)
@@ -811,7 +811,7 @@ final class keyboardUITests: XCTestCase {
 		}
 
 		// Scroll the grid and pick again (scroll-tracking selection interplay).
-		grid.swipeUp()
+		grid.swipeLeft()
 		if let visible = grid.cells.allElementsBoundByIndex.first(where: { $0.isHittable }) {
 			let expected = visible.label
 			visible.tap()

@@ -105,18 +105,3 @@ final class EmojiSearchResultCell: UICollectionViewCell {
 		accessibilityLabel = emoji
 	}
 }
-
-final class EmojiHeader: UICollectionReusableView {
-	let label = UILabel()
-	override init(frame: CGRect) {
-		super.init(frame: frame)
-		label.font = KeyboardTypography.sectionHeader
-		label.translatesAutoresizingMaskIntoConstraints = false
-		addSubview(label)
-		NSLayoutConstraint.activate([
-			label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-			label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
-		])
-	}
-	required init?(coder: NSCoder) { fatalError() }
-}

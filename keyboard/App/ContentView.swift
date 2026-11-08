@@ -452,6 +452,8 @@ struct DiagnosticsView: View {
 	@State private var snap = KBDiagnostics.read()
 	@State private var verbose = KBDiagnostics.verbose
 	@State private var glideCapture = KBSettings.glideCapture
+	/// "" follows the random assignment; otherwise a pinned PanelHeaderStyle raw value.
+	@State private var panelHeaderPin = KBExperiments.panelHeaderOverride?.rawValue ?? ""
 	@State private var typingCapture = KBTypingRecorder.enabled
 	@State private var typingExport: URL?
 	@State private var captureStatus = ""
@@ -491,6 +493,32 @@ struct DiagnosticsView: View {
 				} footer: {
 					Text("The keyboard's footprint when it switched surface, and one second later, after the previous surface was released. Newest first.")
 				}
+			}
+
+			Section {
+				row("This device", panelHeaderArmDescription())
+				Picker("Header", selection: $panelHeaderPin) {
+					Text("Random (assigned)").tag("")
+					ForEach(PanelHeaderStyle.allCases, id: \.rawValue) { style in
+						Text(style.displayName).tag(style.rawValue)
+					}
+				}
+				.onChange(of: panelHeaderPin) { _, raw in
+					KBExperiments.panelHeaderOverride = PanelHeaderStyle(rawValue: raw)
+				}
+				.accessibilityIdentifier("health.panelHeader.pin")
+				ForEach(PanelHeaderStyle.allCases, id: \.rawValue) { style in
+					VStack(alignment: .leading, spacing: 2) {
+						Text(style.displayName)
+						Text(panelEventSummary(for: style))
+							.font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+					}
+					.accessibilityElement(children: .combine)
+				}
+			} header: {
+				Text("Panel header A/B test")
+			} footer: {
+				Text("Each install gets the stacked (A) or unified (C) header at random and keeps it. Pin one for a moderated session; it applies the next time a panel opens. Counts per arm: panels opened from the letters, searches started, tab switches, and emoji, GIFs or stickers picked. Counts only, no content.")
 			}
 
 			Section {
@@ -629,6 +657,21 @@ struct DiagnosticsView: View {
 	}
 	/// Live while the keyboard is on screen (a reading every second), otherwise its latest
 	/// reading and how long ago it was taken.
+	private func panelHeaderArmDescription() -> String {
+		let style = KBExperiments.panelHeader
+		return style.displayName + (KBExperiments.panelHeaderOverride == nil ? " (assigned)" : " (pinned)")
+	}
+
+	/// "12 opens · 3 searches · 5 switches · 20 picks (1.7 / open)".
+	private func panelEventSummary(for style: PanelHeaderStyle) -> String {
+		let events = snap.panelEvents ?? [:]
+		func count(_ event: KBDiagnostics.PanelEvent) -> Int { events[style.arm + "." + event.rawValue] ?? 0 }
+		let opens = count(.open), picks = count(.pick)
+		var text = "\(opens) opens · \(count(.search)) searches · \(count(.tabSwitch)) switches · \(picks) picks"
+		if opens > 0 { text += String(format: " (%.1f / open)", Double(picks) / Double(opens)) }
+		return text
+	}
+
 	private func keyboardMemory(at now: Date) -> String {
 		if let live = KBDiagnostics.liveFootprint() {
 			let age = now.timeIntervalSince(live.at)

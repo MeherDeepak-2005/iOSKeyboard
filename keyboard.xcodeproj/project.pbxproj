@@ -152,6 +152,7 @@
 				Shared/HostDocumentReconciler.swift,
 				Shared/KBClipboard.swift,
 				Shared/KBDiagnostics.swift,
+				Shared/KBExperiments.swift,
 				Shared/KBKlipy.swift,
 				Shared/KBMediaCache.swift,
 				Shared/KBPersonalData.swift,

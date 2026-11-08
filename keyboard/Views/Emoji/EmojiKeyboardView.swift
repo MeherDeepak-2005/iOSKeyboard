@@ -3,11 +3,10 @@ import Darwin
 
 // MARK: - Emoji page (browse palette)
 //
-// Gboard-style: a search pill on top, a VERTICALLY scrolling category-sectioned grid
-// in the middle, and a bottom bar (ABC / input mode / category tabs / delete). Shown as an
-// overlay by KeyboardView. The grid is a compositional layout with an exact per-row
-// column count, so rows are always full — the old horizontal flow layout dropped
-// items when cell rounding disagreed with the column height.
+// A search pill on top, a HORIZONTALLY scrolling category-sectioned grid in the
+// middle (columns that fill the height, as the stock emoji keyboard), and a bottom bar
+// (ABC / input mode / category tabs / delete). Shown as an overlay by KeyboardView. The grid is a compositional layout whose columns hold an
+// exact row count, so every column but a category's last is full.
 //
 // Search itself does NOT live here: tapping the pill hands off to KeyboardView's
 // emoji-search mode, which reuses the REAL keyboard for typing (see EmojiSearchHeader)
@@ -25,11 +24,13 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	private let showsGlobe: Bool
 	private var collection: UICollectionView!
 	private let emptyLabel = UILabel()
+	/// The name of the category at the grid's left edge, as the stock emoji keyboard shows it.
+	private let categoryLabel = UILabel()
 	private let header: PanelHeaderView
 	private let bottomBar = UIView()
 	private var tabButtons: [UIButton] = []
 	private var selectedSection = 0
-	private let searchRowHeight: CGFloat = PanelHeaderView.height
+	private var searchRowHeight: CGFloat { header.height }
 	private let barHeight: CGFloat = 44
 
 	/// Recents come from UserDefaults; the catalog comes from the mmap'd EmojiStore.
@@ -94,10 +95,10 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		collection.dataSource = self
 		collection.delegate = self
 		collection.register(EmojiCell.self, forCellWithReuseIdentifier: "e")
-		collection.register(EmojiHeader.self,
-							forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
-							withReuseIdentifier: "h")
 		collection.showsVerticalScrollIndicator = false
+		collection.showsHorizontalScrollIndicator = false
+		collection.alwaysBounceVertical = false
+		collection.contentInsetAdjustmentBehavior = .never
 		emptyLabel.font = KeyboardTypography.emptyState
 		emptyLabel.textColor = theme.specialKeyText.withAlphaComponent(0.55)
 		emptyLabel.textAlignment = .center
@@ -106,6 +107,10 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		emptyLabel.isHidden = !sections.isEmpty
 		collection.backgroundView = emptyLabel
 		addSubview(collection)
+		categoryLabel.font = KeyboardTypography.sectionHeader
+		categoryLabel.textColor = theme.specialKeyText.withAlphaComponent(0.55)
+		categoryLabel.accessibilityTraits = .header
+		addSubview(categoryLabel)
 
 		header.onSearch = { [weak self] in self?.onSearch?() }
 		header.onSelect = { [weak self] tab in
@@ -118,33 +123,50 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	}
 	required init?(coder: NSCoder) { fatalError() }
 
-	/// Vertical grid: N square cells per row (N from the live width), full rows always.
+	/// The space between neighbouring emoji, as a fraction of what a full-width six-column
+	/// grid would leave.
+	private static let gapScale: CGFloat = 0.85
+	/// The strip above the grid that names the current category.
+	private static let categoryLabelHeight: CGFloat = 22
+	/// Space between the last column of one category and the first of the next.
+	private static let sectionSpacing: CGFloat = 12
+
+	/// Horizontal grid, as the stock emoji keyboard: each category is a run of columns that
+	/// fills the grid's height, the categories follow each other left to right, and the
+	/// grid never scrolls vertically. Cells are square, sized from the screen width so
+	/// neighbouring emoji sit `gapScale` as far apart as a full-width six-column grid would
+	/// put them, then adjusted so a whole number of rows fills the height. The first column
+	/// starts at the left edge. The current category is named once, above the grid.
 	private func makeLayout() -> UICollectionViewLayout {
-		UICollectionViewCompositionalLayout { _, env in
-			let width = max(1, env.container.effectiveContentSize.width - 12)
+		let config = UICollectionViewCompositionalLayoutConfiguration()
+		config.scrollDirection = .horizontal
+		config.interSectionSpacing = Self.sectionSpacing
+		return UICollectionViewCompositionalLayout(sectionProvider: { _, env in
+			let size = env.container.effectiveContentSize
+			let width = max(1, size.width - 12)
 			let cols = max(6, Int(width / EmojiAtlas.cellPitch))
-			let side = 1.0 / CGFloat(cols)
+			let glyph = EmojiAtlas.glyphFontSize
+			let ideal = min(width / CGFloat(cols), glyph + (width / CGFloat(cols) - glyph) * Self.gapScale)
+			let available = max(glyph, size.height)
+			let rows = max(1, Int((available / ideal).rounded()))
+			let side = available / CGFloat(rows)
 			let item = NSCollectionLayoutItem(layoutSize: .init(
-				widthDimension: .fractionalWidth(side), heightDimension: .fractionalHeight(1)))
-			let row = NSCollectionLayoutGroup.horizontal(layoutSize: .init(
-				widthDimension: .fractionalWidth(1), heightDimension: .absolute(width * side)),
-				subitems: [item])
-			let sec = NSCollectionLayoutSection(group: row)
-			sec.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 6, bottom: 10, trailing: 6)
-			let header = NSCollectionLayoutBoundarySupplementaryItem(
-				layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(24)),
-				elementKind: UICollectionView.elementKindSectionHeader, alignment: .top)
-			sec.boundarySupplementaryItems = [header]
-			return sec
-		}
+				widthDimension: .fractionalWidth(1), heightDimension: .absolute(side)))
+			let column = NSCollectionLayoutGroup.vertical(layoutSize: .init(
+				widthDimension: .absolute(side), heightDimension: .absolute(available)),
+				repeatingSubitem: item, count: rows)
+			return NSCollectionLayoutSection(group: column)
+		}, configuration: config)
 	}
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
 		header.frame = CGRect(x: 0, y: 0, width: bounds.width, height: searchRowHeight)
 		bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
-		collection.frame = CGRect(x: 0, y: searchRowHeight, width: bounds.width,
-								  height: max(0, bounds.height - searchRowHeight - barHeight))
+		let labelHeight = Self.categoryLabelHeight
+		categoryLabel.frame = CGRect(x: 12, y: searchRowHeight, width: bounds.width - 24, height: labelHeight)
+		collection.frame = CGRect(x: 0, y: searchRowHeight + labelHeight, width: bounds.width,
+								  height: max(0, bounds.height - searchRowHeight - labelHeight - barHeight))
 	}
 
 	// MARK: Collection data
@@ -156,13 +178,6 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		let e = emoji(at: ip)
 		cell.configure(emoji: e, image: atlas?.image(for: e), theme: theme)
 		return cell
-	}
-	func collectionView(_ cv: UICollectionView, viewForSupplementaryElementOfKind kind: String,
-						at ip: IndexPath) -> UICollectionReusableView {
-		let h = cv.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: "h", for: ip) as! EmojiHeader
-		h.label.text = name(of: ip.section).uppercased()
-		h.label.textColor = theme.specialKeyText.withAlphaComponent(0.55)
-		return h
 	}
 	func collectionView(_ cv: UICollectionView, didSelectItemAt ip: IndexPath) {
 		commit(emoji(at: ip))
@@ -181,6 +196,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	}
 
 	private func commit(_ emoji: String) {
+		KBDiagnostics.notePanelEvent(.pick)
 		onPick?(emoji)
 		KBEmojiRecents.add(emoji)
 	}
@@ -250,19 +266,16 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		guard i < sections.count, emojiCount(in: i) > 0 else { return }
 		setSelectedSection(i)
 		collection.layoutIfNeeded()
-		// Land the section HEADER at the top, not the first cell under it.
-		if let attr = collection.layoutAttributesForSupplementaryElement(
-			ofKind: UICollectionView.elementKindSectionHeader, at: IndexPath(item: 0, section: i)) {
-			let maxY = max(0, collection.contentSize.height - collection.bounds.height)
-			collection.setContentOffset(CGPoint(x: 0, y: min(attr.frame.minY, maxY)), animated: false)
-		} else {
-			collection.scrollToItem(at: IndexPath(item: 0, section: i), at: .top, animated: false)
-		}
+		// Land the section's first column at the left edge.
+		guard let first = collection.layoutAttributesForItem(at: IndexPath(item: 0, section: i)) else { return }
+		let maxX = max(0, collection.contentSize.width - collection.bounds.width)
+		collection.setContentOffset(CGPoint(x: min(first.frame.minX, maxX), y: 0), animated: false)
 	}
 
 	private func setSelectedSection(_ i: Int) {
 		guard tabButtons.indices.contains(i) else { return }
 		selectedSection = i
+		categoryLabel.text = name(of: i).uppercased()
 		for (index, button) in tabButtons.enumerated() {
 			let selected = index == i
 			button.isSelected = selected
@@ -281,16 +294,18 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		KBDiagnostics.recorder.sample()
 	}
 
+	/// The category whose columns are at the left edge. At the end of the grid, the last
+	/// category, even when it is too short to reach the left edge.
 	private func sectionAtTop() -> Int? {
 		guard !sections.isEmpty else { return nil }
 		collection.layoutIfNeeded()
-		let top = collection.contentOffset.y + collection.adjustedContentInset.top + 1
+		let left = collection.contentOffset.x + 1
+		if left + collection.bounds.width >= collection.contentSize.width { return sections.count - 1 }
 		var result = 0
-		for section in sections.indices {
-			guard let attributes = collection.layoutAttributesForSupplementaryElement(
-				ofKind: UICollectionView.elementKindSectionHeader,
-				at: IndexPath(item: 0, section: section)) else { continue }
-			if attributes.frame.minY <= top { result = section } else { break }
+		for section in sections.indices where emojiCount(in: section) > 0 {
+			guard let first = collection.layoutAttributesForItem(at: IndexPath(item: 0, section: section))
+			else { continue }
+			if first.frame.minX <= left { result = section } else { break }
 		}
 		return result
 	}
