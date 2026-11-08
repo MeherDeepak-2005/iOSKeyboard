@@ -25,8 +25,7 @@ final class KeyAlternativesView: UIView {
 			label.text = option
 			label.textAlignment = .center
 			label.textColor = theme.popupText
-			label.font = .systemFont(ofSize: 24,
-				weight: UIAccessibility.isBoldTextEnabled ? .medium : .regular)
+			label.font = KeyboardTypography.keyAlternative
 			labels.append(label)
 			addSubview(label)
 		}

@@ -1,7 +1,39 @@
 import UIKit
 
+/// The press balloon, reused from press to press. Allocating it per keystroke cost a view, a
+/// shape layer and a label whose backing store is about 90 KB at 3x, freed 100 ms later; a
+/// reused label redraws into the backing store it already has. Theme colors are set once:
+/// a KeyboardView's theme never changes.
+final class KeyBalloonView: UIView {
+	let outline = CAShapeLayer()
+	let label = UILabel()
+
+	init(theme: KeyboardTheme) {
+		super.init(frame: .zero)
+		isUserInteractionEnabled = false
+		backgroundColor = .clear
+		layer.masksToBounds = false
+		layer.zPosition = 1000
+		outline.fillColor = theme.popupFill.cgColor
+		outline.shadowColor = UIColor.black.cgColor
+		outline.shadowOpacity = theme.isDark ? 0.45 : 0.20
+		outline.shadowRadius = 4
+		outline.shadowOffset = CGSize(width: 0, height: 2)
+		layer.addSublayer(outline)
+		label.textAlignment = .center
+		label.adjustsFontSizeToFitWidth = true
+		label.minimumScaleFactor = 0.65
+		label.textColor = theme.popupText
+		addSubview(label)
+	}
+	required init?(coder: NSCoder) { fatalError() }
+}
+
 extension KeyboardView {
 	// MARK: Multi-touch — fire on contact, track every finger
+
+	/// Two thumbs, each balloon lingering 100 ms after its lift: three cover fast typing.
+	private static let balloonPoolLimit = 3
 
 	private func showPopup(for key: KeyButton, at point: CGPoint, touch: UITouch) {
 		guard let popupView = makeKeyPopup(for: key, at: point) else { return }
@@ -33,12 +65,6 @@ extension KeyboardView {
 			width: max(headX + headWidth, keyFrame.maxX) - min(headX, keyFrame.minX),
 			height: keyFrame.maxY - headTop)
 
-		let popupView = UIView(frame: popupFrame)
-		popupView.isUserInteractionEnabled = false
-		popupView.backgroundColor = .clear
-		popupView.layer.masksToBounds = false
-		popupView.layer.zPosition = 1000
-
 		// Local geometry. Every piece winds the same way, so nonzero fill unions them.
 		let head = CGRect(x: headX - popupFrame.minX, y: 0,
 			width: headWidth, height: headBottom - headTop)
@@ -62,30 +88,18 @@ extension KeyboardView {
 			path.append(neck)
 		}
 
-		let shapeLayer = CAShapeLayer()
-		shapeLayer.frame = popupView.bounds
-		shapeLayer.path = path.cgPath
-		shapeLayer.fillColor = theme.popupFill.cgColor
-
-		shapeLayer.shadowColor = UIColor.black.cgColor
-		shapeLayer.shadowOpacity = theme.isDark ? 0.45 : 0.20
-		shapeLayer.shadowRadius = 4
-		shapeLayer.shadowOffset = CGSize(width: 0, height: 2)
-		shapeLayer.shadowPath = path.cgPath
-
-		popupView.layer.addSublayer(shapeLayer)
-
-		let label = UILabel(frame: head.insetBy(dx: 4, dy: 2))
-		label.text = text
-		label.textAlignment = .center
-		label.font = .systemFont(ofSize: min(text.count > 1 ? 30 : 38, head.height * 0.72),
-			weight: UIAccessibility.isBoldTextEnabled ? .medium : .regular)
-		label.adjustsFontSizeToFitWidth = true
-		label.minimumScaleFactor = 0.65
-		label.textColor = theme.popupText
-
-		popupView.addSubview(label)
-		return popupView
+		let balloon = balloonPool.popLast() ?? KeyBalloonView(theme: theme)
+		balloon.frame = popupFrame
+		// The outline is a standalone layer: without this a reused one animates to its new shape.
+		CATransaction.begin(); CATransaction.setDisableActions(true)
+		balloon.outline.frame = balloon.bounds
+		balloon.outline.path = path.cgPath
+		balloon.outline.shadowPath = path.cgPath
+		CATransaction.commit()
+		balloon.label.frame = head.insetBy(dx: 4, dy: 2)
+		balloon.label.text = text
+		balloon.label.font = KeyboardTypography.keyBalloon(headHeight: head.height, word: text.count > 1)
+		return balloon
 	}
 	private func removePopup(for touch: UITouch, afterMinimumDuration: Bool = false) {
 		if afterMinimumDuration, let popup = touchPopups[touch], let shownAt = popupShownAt[touch] {
@@ -93,14 +107,22 @@ extension KeyboardView {
 			// Keep feedback visible without delaying the already-committed character.
 			let remaining = 0.10 - (ProcessInfo.processInfo.systemUptime - shownAt)
 			if remaining > 0 {
+				// Balloons are reused, so the same view may already show another press: match
+				// the press by its start time too, not by the view alone.
 				DispatchQueue.main.asyncAfter(deadline: .now() + remaining) { [weak self, weak popup] in
-					guard let self, let popup, self.touchPopups[touch] === popup else { return }
+					guard let self, let popup, self.touchPopups[touch] === popup,
+						  self.popupShownAt[touch] == shownAt else { return }
 					self.removePopup(for: touch)
 				}
 				return
 			}
 		}
-		touchPopups.removeValue(forKey: touch)?.removeFromSuperview()
+		if let popup = touchPopups.removeValue(forKey: touch) {
+			popup.removeFromSuperview()
+			if let balloon = popup as? KeyBalloonView, balloonPool.count < Self.balloonPoolLimit {
+				balloonPool.append(balloon)
+			}
+		}
 		popupShownAt[touch] = nil
 		if let key = poppedKeys.removeValue(forKey: touch),
 			!poppedKeys.values.contains(where: { $0 === key }) {
@@ -414,6 +436,23 @@ extension KeyboardView {
 			clearRegisteredKey(for: touch, keepingPopupBriefly: true)
 		}
 	}
+	/// Every touch dictionary here holds its UITouch strongly, and UITouch.view holds this view.
+	/// UIKit should cancel a view's touches when it leaves the window, but in the extension
+	/// some end with no callback at all (the stale-touch pruning in touchesBegan exists for
+	/// them). Such a touch keeps a replaced KeyboardView (buildKeyboard) alive with all its
+	/// keys, and leaves a reused one with a stuck balloon and a covered key. Off-window, no
+	/// finger is tracked: cancel whatever is left through the normal cancellation path.
+	override func didMoveToWindow() {
+		super.didMoveToWindow()
+		guard window == nil else { return }
+		var tracked = Set(touchKeys.keys).union(touchPopups.keys).union(popupShownAt.keys)
+			.union(poppedKeys.keys).union(alternativeTimers.keys).union(alternativePopups.keys)
+			.union(recordedTouches.keys)
+		for touch in [glideTouch, repeatTouch, cursorTouch] { if let touch { tracked.insert(touch) } }
+		if !tracked.isEmpty { touchesCancelled(tracked, with: nil) }
+		balloonPool.removeAll()   // nothing to press while hidden; rebuilt on the first press back
+	}
+
 	override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
 			finishRecordedTouch(touch, cancelled: true)

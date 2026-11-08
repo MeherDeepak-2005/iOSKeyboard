@@ -55,15 +55,14 @@ enum KBStats {
 	private static var dirtyEvents = 0
 	private static let flushEvery = 10
 
+	/// The current stats. Only the keyboard extension records words; while it holds counts it
+	/// has not saved yet, those are the newest. Every other read decodes what was last saved:
+	/// the app used to keep its first read for the life of the process, so its Progress and
+	/// Achievements screens showed stale totals until it was relaunched.
 	static func load() -> KBStatsData {
 		lock.lock(); defer { lock.unlock() }
-		if let cached { return cached }
-		guard let data = KBSettings.sharedDefaults.data(forKey: key),
-			let decoded = try? JSONDecoder().decode(KBStatsData.self, from: data) else {
-			return KBStatsData()
-		}
-		cached = decoded
-		return decoded
+		if let cached, dirtyEvents > 0 { return cached }
+		return decodeStored()
 	}
 
 	static func noteCommitted(glided: Bool) {

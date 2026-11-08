@@ -130,25 +130,6 @@ nonisolated struct TeluguCompositionRules: Sendable {
 	}
 }
 
-/// Locates signed resources in either the containing app or the keyboard extension.
-/// The same helper is used by tests, where `Bundle.main` may be the XCTest bundle.
-nonisolated enum KBPackResources {
-	private final class BundleToken {}
-
-	static func url(resource: String, extension fileExtension: String) -> URL? {
-		var bundles = [Bundle.main, Bundle(for: BundleToken.self)]
-		bundles.append(contentsOf: Bundle.allFrameworks)
-		bundles.append(contentsOf: Bundle.allBundles)
-		var visited = Set<String>()
-		for bundle in bundles where visited.insert(bundle.bundlePath).inserted {
-			if let url = bundle.url(forResource: resource, withExtension: fileExtension) {
-				return url
-			}
-		}
-		return nil
-	}
-}
-
 /// Immutable binary layout/composition pack. It is decoded once (about 5 KB) and
 /// contains every Telugu glyph, accessibility name, and Unicode composition class.
 nonisolated final class TeluguLanguagePack {

@@ -15,7 +15,7 @@ final class EmojiCell: UICollectionViewCell {
 	override init(frame: CGRect) {
 		super.init(frame: frame)
 		label.textAlignment = .center
-		label.font = .systemFont(ofSize: 28)
+		label.font = .systemFont(ofSize: EmojiAtlas.glyphFontSize)
 		label.translatesAutoresizingMaskIntoConstraints = false
 		imageView.contentMode = .scaleAspectFit
 		imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -67,7 +67,7 @@ final class EmojiSearchResultCell: UICollectionViewCell {
 	override init(frame: CGRect) {
 		super.init(frame: frame)
 		label.textAlignment = .center
-		label.font = .systemFont(ofSize: 28)
+		label.font = .systemFont(ofSize: EmojiAtlas.compactGlyphFontSize)
 		label.translatesAutoresizingMaskIntoConstraints = false
 		imageView.contentMode = .scaleAspectFit
 		imageView.translatesAutoresizingMaskIntoConstraints = false
@@ -78,8 +78,8 @@ final class EmojiSearchResultCell: UICollectionViewCell {
 			label.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
 			imageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
 			imageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-			imageView.widthAnchor.constraint(equalToConstant: EmojiAtlas.pointSize),
-			imageView.heightAnchor.constraint(equalToConstant: EmojiAtlas.pointSize),
+			imageView.widthAnchor.constraint(equalToConstant: EmojiAtlas.compactPointSize),
+			imageView.heightAnchor.constraint(equalToConstant: EmojiAtlas.compactPointSize),
 		])
 		isAccessibilityElement = true
 		accessibilityTraits = .button
@@ -110,7 +110,7 @@ final class EmojiHeader: UICollectionReusableView {
 	let label = UILabel()
 	override init(frame: CGRect) {
 		super.init(frame: frame)
-		label.font = .systemFont(ofSize: 11, weight: .semibold)
+		label.font = KeyboardTypography.sectionHeader
 		label.translatesAutoresizingMaskIntoConstraints = false
 		addSubview(label)
 		NSLayoutConstraint.activate([

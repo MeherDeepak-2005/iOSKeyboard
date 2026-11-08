@@ -34,6 +34,7 @@ private struct LeagueMedal: View {
 
 struct AchievementBanner: View {
 	@State private var stats = KBStatsData()
+	@Environment(\.scenePhase) private var scenePhase
 	private var league: KBLeague { .league(for: stats.total) }
 
 	var body: some View {
@@ -62,11 +63,14 @@ struct AchievementBanner: View {
 		}
 		.accessibilityIdentifier("progress.banner")
 		.onAppear { stats = KBStats.load() }
+		// Back from typing in another app: the keyboard saved new words meanwhile.
+		.onChange(of: scenePhase) { _, phase in if phase == .active { stats = KBStats.load() } }
 	}
 }
 
 struct AchievementsView: View {
 	@State private var stats = KBStatsData()
+	@Environment(\.scenePhase) private var scenePhase
 	private let calendar = Calendar.autoupdatingCurrent
 
 	private var league: KBLeague { .league(for: stats.total) }
@@ -90,6 +94,7 @@ struct AchievementsView: View {
 		.navigationTitle("Achievements")
 		.navigationBarTitleDisplayMode(.large)
 		.onAppear { stats = KBStats.load() }
+		.onChange(of: scenePhase) { _, phase in if phase == .active { stats = KBStats.load() } }
 	}
 
 	private var leagueCard: some View {

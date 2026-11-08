@@ -528,9 +528,10 @@ DecodeOutput EngineSession::decodeRaw(const DecodeInput& input, const EngineView
     std::erase_if(ranked, blocked); std::erase_if(complete, blocked);
     double literal;
     bool typedIsWord = false;
-    if (auto id = engine_->packed_->wordID(typed); id && std::isfinite(engine_->neuralLexicon_->unigram[std::size_t(*id)]))
-        literal = graph->wordScore(0, std::uint32_t(*id)), typedIsWord = true;
-    else if (neural && engine_->options_.nssExact && engine_->options_.nssTypedUnknown)
+    if (auto id = engine_->packed_->wordID(typed); id && std::isfinite(engine_->neuralLexicon_->unigram[std::size_t(*id)])) {
+        literal = graph->wordScore(0, std::uint32_t(*id));
+        typedIsWord = true;
+    } else if (neural && engine_->options_.nssExact && engine_->options_.nssTypedUnknown)
         literal = neuralGraph_->typedUnknown();
     else {
         static const PersonalCounts none;

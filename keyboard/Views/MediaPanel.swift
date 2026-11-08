@@ -2,10 +2,187 @@ import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 
+/// The three browse panels. Emoji, GIFs and Stickers share one header so switching
+/// between them never moves the search field or the switch.
+enum PanelTab: Int, CaseIterable {
+	case emoji, gifs, stickers
+
+	var title: String { ["Emoji", "GIFs", "Stickers"][rawValue] }
+	var searchPlaceholder: String { ["Search emoji", "Search GIFs", "Search stickers"][rawValue] }
+	var mediaKind: KlipyKind? { self == .gifs ? .gifs : self == .stickers ? .stickers : nil }
+	init(_ kind: KlipyKind) { self = kind == .gifs ? .gifs : .stickers }
+}
+
+/// Stacked panel header: a full-width search capsule, and under it an equal-thirds
+/// Emoji · GIFs · Stickers switch whose thumb slides to the chosen tab.
+final class PanelHeaderView: UIView {
+	static let height: CGFloat = 86        // 6 + 36 search + 6 + 32 switch + 6
+	private static let searchHeight: CGFloat = 36
+	private static let switchHeight: CGFloat = 32
+	private static let inset: CGFloat = 8
+
+	var onSelect: ((PanelTab) -> Void)?
+	var onSearch: (() -> Void)?
+	private(set) var selected: PanelTab
+
+	private let theme: KeyboardTheme
+	private let searchButton = UIButton(type: .custom)
+	private let track = UIView()
+	private let thumb = UIView()
+	private var tabButtons: [UIButton] = []
+	/// Where the thumb starts on first layout, so a panel that replaces another
+	/// still shows the thumb sliding from the previous tab.
+	private var slideFrom: PanelTab?
+	private let query: String?
+
+	init(theme: KeyboardTheme, selected: PanelTab, from previous: PanelTab? = nil,
+		query: String? = nil, searchEnabled: Bool = true) {
+		self.theme = theme
+		self.selected = selected
+		self.slideFrom = previous == selected ? nil : previous
+		self.query = query
+		super.init(frame: .zero)
+
+		var cfg = UIButton.Configuration.plain()
+		cfg.image = UIImage(systemName: "magnifyingglass",
+			withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+		cfg.imagePadding = 7
+		let hasQuery = !(query ?? "").isEmpty
+		cfg.attributedTitle = AttributedString(hasQuery ? query! : selected.searchPlaceholder,
+			attributes: AttributeContainer([
+				.font: KeyboardTypography.searchField,
+				.foregroundColor: hasQuery ? theme.keyText : theme.keyText.withAlphaComponent(0.45),
+			]))
+		cfg.baseForegroundColor = theme.keyText.withAlphaComponent(0.45)
+		cfg.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
+		cfg.titleLineBreakMode = .byTruncatingTail
+		searchButton.configuration = cfg
+		searchButton.contentHorizontalAlignment = .leading
+		searchButton.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10)
+			: UIColor(white: 1, alpha: 0.62)
+		searchButton.layer.cornerRadius = Self.searchHeight / 2
+		searchButton.layer.cornerCurve = .continuous
+		searchButton.isEnabled = searchEnabled
+		searchButton.accessibilityLabel = selected.searchPlaceholder
+		if hasQuery { searchButton.accessibilityValue = query }
+		searchButton.accessibilityIdentifier = selected == .emoji ? "emoji.search" : "media.search"
+		searchButton.addAction(UIAction { [weak self] _ in self?.onSearch?() }, for: .touchUpInside)
+		addSubview(searchButton)
+
+		track.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.08)
+			: UIColor(white: 0, alpha: 0.06)
+		track.layer.cornerRadius = 10
+		track.layer.cornerCurve = .continuous
+		addSubview(track)
+
+		thumb.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.20) : .white
+		thumb.layer.cornerRadius = 8
+		thumb.layer.cornerCurve = .continuous
+		if !theme.isDark {
+			thumb.layer.shadowColor = UIColor.black.cgColor
+			thumb.layer.shadowOpacity = 0.10
+			thumb.layer.shadowRadius = 2
+			thumb.layer.shadowOffset = CGSize(width: 0, height: 1)
+		}
+		track.addSubview(thumb)
+
+		for tab in PanelTab.allCases {
+			let button = UIButton(type: .custom)
+			button.setTitle(tab.title, for: .normal)
+			button.titleLabel?.font = KeyboardTypography.panelTab
+			button.accessibilityLabel = tab.title
+			button.accessibilityIdentifier = "panel.tab.\(tab.title.lowercased())"
+			button.addAction(UIAction { [weak self] _ in self?.tapped(tab) }, for: .touchUpInside)
+			tabButtons.append(button)
+			track.addSubview(button)
+		}
+		updateTabStyles()
+	}
+	required init?(coder: NSCoder) { fatalError() }
+
+	override func layoutSubviews() {
+		super.layoutSubviews()
+		let width = max(0, bounds.width - Self.inset * 2)
+		searchButton.frame = CGRect(x: Self.inset, y: 6, width: width, height: Self.searchHeight)
+		track.frame = CGRect(x: Self.inset, y: 6 + Self.searchHeight + 6,
+			width: width, height: Self.switchHeight)
+		let segment = max(0, (width - 4) / CGFloat(PanelTab.allCases.count))
+		for (index, button) in tabButtons.enumerated() {
+			button.frame = CGRect(x: 2 + CGFloat(index) * segment, y: 0,
+				width: segment, height: Self.switchHeight)
+		}
+		guard !thumbAnimating else { return }
+		if let from = slideFrom, window != nil {
+			slideFrom = nil
+			thumb.frame = thumbFrame(for: from)
+			animateThumb()
+		} else {
+			thumb.frame = thumbFrame(for: selected)
+		}
+	}
+
+	/// Moves the thumb (the header is kept; used for GIFs ↔ Stickers inside one panel).
+	func setSelected(_ tab: PanelTab, animated: Bool) {
+		guard tab != selected else { return }
+		selected = tab
+		updateTabStyles()
+		searchButton.accessibilityLabel = tab.searchPlaceholder
+		searchButton.accessibilityIdentifier = tab == .emoji ? "emoji.search" : "media.search"
+		let hasQuery = !(query ?? "").isEmpty
+		if var cfg = searchButton.configuration {
+			cfg.attributedTitle = AttributedString(hasQuery ? query! : tab.searchPlaceholder,
+				attributes: AttributeContainer([
+					.font: KeyboardTypography.searchField,
+					.foregroundColor: hasQuery ? theme.keyText : theme.keyText.withAlphaComponent(0.45),
+				]))
+			searchButton.configuration = cfg
+		}
+		if animated { animateThumb() } else { thumb.frame = thumbFrame(for: tab) }
+	}
+
+	private var thumbAnimating = false
+
+	private func animateThumb() {
+		guard !UIAccessibility.isReduceMotionEnabled else {
+			thumb.frame = thumbFrame(for: selected); return
+		}
+		thumbAnimating = true
+		UIView.animate(withDuration: 0.34, delay: 0, usingSpringWithDamping: 0.82,
+			initialSpringVelocity: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+			self.thumb.frame = self.thumbFrame(for: self.selected)
+		} completion: { _ in
+			self.thumbAnimating = false
+		}
+	}
+
+	private func thumbFrame(for tab: PanelTab) -> CGRect {
+		let width = max(0, track.bounds.width - 4)
+		let segment = width / CGFloat(PanelTab.allCases.count)
+		return CGRect(x: 2 + CGFloat(tab.rawValue) * segment, y: 2,
+			width: segment, height: max(0, Self.switchHeight - 4))
+	}
+
+	private func tapped(_ tab: PanelTab) {
+		guard tab != selected else { return }
+		onSelect?(tab)
+	}
+
+	private func updateTabStyles() {
+		for (index, button) in tabButtons.enumerated() {
+			let on = index == selected.rawValue
+			button.setTitleColor(on ? theme.keyText : theme.specialKeyText.withAlphaComponent(0.62),
+				for: .normal)
+			button.accessibilityTraits = on ? [.button, .selected] : .button
+		}
+	}
+}
+
+
 final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
 	var onABC: (() -> Void)?
 	var onNextKeyboard: (() -> Void)?
 	var onSearch: ((KlipyKind) -> Void)?
+	var onEmoji: (() -> Void)?
 
 	private let theme: KeyboardTheme
 	private let showsGlobe: Bool
@@ -18,27 +195,28 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 	private var request: URLSessionDataTask?
 	private var loadGeneration = 0
 	private var collection: UICollectionView!
-	private let topBar = UIView()
+	private let header: PanelHeaderView
 	private let footer = UIView()
 	private let statusLabel = UILabel()
-	private let searchButton = UIButton(type: .system)
 	private let toast = UILabel()
 	private let credit = UILabel()
 	private let abcButton = UIButton(type: .system)
 	private let globeButton = UIButton(type: .system)
-	private var kindButtons: [KlipyKind: UIButton] = [:]
 	private var displayLink: CADisplayLink?
 	private var released = false
-	private let topHeight: CGFloat = 44
-	private let footerHeight: CGFloat = 22
+	private let topHeight: CGFloat = PanelHeaderView.height
+	private let footerHeight: CGFloat = 36
 
+	/// `previous` is the tab the user came from, so the switch thumb slides from it.
 	init(theme: KeyboardTheme, showsGlobe: Bool, hasFullAccess: Bool,
-		kind: KlipyKind, query: String? = nil) {
+		kind: KlipyKind, query: String? = nil, from previous: PanelTab? = nil) {
 		self.theme = theme
 		self.showsGlobe = showsGlobe
 		self.hasFullAccess = hasFullAccess
 		self.kind = kind
 		self.query = query
+		self.header = PanelHeaderView(theme: theme, selected: PanelTab(kind), from: previous,
+			query: query)
 		super.init(frame: .zero)
 		collection = UICollectionView(frame: .zero,
 			collectionViewLayout: Self.layout(for: kind))
@@ -47,7 +225,7 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		collection.delegate = self
 		collection.showsVerticalScrollIndicator = false
 		collection.register(MediaCell.self, forCellWithReuseIdentifier: "media")
-		statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
+		statusLabel.font = KeyboardTypography.status
 		statusLabel.textColor = theme.specialKeyText.withAlphaComponent(0.62)
 		statusLabel.textAlignment = .center
 		statusLabel.numberOfLines = 3
@@ -98,19 +276,16 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		topBar.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topHeight)
+		header.frame = CGRect(x: 0, y: 0, width: bounds.width, height: topHeight)
 		footer.frame = CGRect(x: 0, y: bounds.height - footerHeight,
 			width: bounds.width, height: footerHeight)
 		collection.frame = CGRect(x: 0, y: topHeight, width: bounds.width,
 			height: max(0, bounds.height - topHeight - footerHeight))
-		let y: CGFloat = 5, height = topHeight - 10
-		abcButton.frame = CGRect(x: 6, y: y, width: 42, height: height)
-		kindButtons[.gifs]?.frame = CGRect(x: 52, y: y, width: 46, height: height)
-		kindButtons[.stickers]?.frame = CGRect(x: 102, y: y, width: 62, height: height)
-		searchButton.frame = CGRect(x: 169, y: y, width: max(0, bounds.width - 175), height: height)
-		globeButton.frame = showsGlobe ? CGRect(x: 6, y: 0, width: 34, height: footerHeight) : .zero
-		credit.frame = CGRect(x: showsGlobe ? 44 : 6, y: 0,
-			width: bounds.width - (showsGlobe ? 50 : 12), height: footerHeight)
+		abcButton.frame = CGRect(x: 4, y: 0, width: 52, height: footerHeight)
+		globeButton.frame = showsGlobe ? CGRect(x: 56, y: 0, width: 44, height: footerHeight) : .zero
+		let creditX: CGFloat = showsGlobe ? 104 : 60
+		credit.frame = CGRect(x: creditX, y: 0,
+			width: max(0, bounds.width - creditX - 10), height: footerHeight)
 		toast.frame = CGRect(x: bounds.midX - 108, y: bounds.midY - 18, width: 216, height: 36)
 	}
 
@@ -218,51 +393,34 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 	}
 
 	private func buildChrome() {
-		topBar.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.035)
-			: UIColor(white: 0, alpha: 0.025)
-		footer.backgroundColor = .clear
-		abcButton.setTitle("ABC", for: .normal)
-		abcButton.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
-		abcButton.setTitleColor(theme.specialKeyText, for: .normal)
-		abcButton.addAction(UIAction { [weak self] _ in self?.onABC?() }, for: .touchUpInside)
-		topBar.addSubview(abcButton)
-		for option in KlipyKind.allCases {
-			let button = UIButton(type: .system)
-			button.setTitle(option.displayName, for: .normal)
-			button.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
-			button.addAction(UIAction { [weak self] _ in self?.select(option) }, for: .touchUpInside)
-			kindButtons[option] = button
-			topBar.addSubview(button)
-		}
-		updateKinds()
-		var configuration = UIButton.Configuration.plain()
-		configuration.image = UIImage(systemName: "magnifyingglass")
-		configuration.imagePadding = 5
-		configuration.title = query ?? "Search KLIPY"
-		configuration.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 9, bottom: 0, trailing: 8)
-		searchButton.configuration = configuration
-		searchButton.contentHorizontalAlignment = .leading
-		searchButton.tintColor = theme.keyText.withAlphaComponent(0.55)
-		searchButton.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10)
-			: UIColor(white: 1, alpha: 0.58)
-		searchButton.layer.cornerRadius = 10
-		searchButton.accessibilityIdentifier = "media.search"
-		searchButton.addAction(UIAction { [weak self] _ in
+		header.onSearch = { [weak self] in
 			guard let self else { return }; self.onSearch?(self.kind)
-		}, for: .touchUpInside)
-		topBar.addSubview(searchButton)
+		}
+		header.onSelect = { [weak self] tab in
+			guard let self else { return }
+			if let kind = tab.mediaKind { self.select(kind) } else { self.onEmoji?() }
+		}
+		footer.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.05) : UIColor(white: 0, alpha: 0.04)
+		abcButton.setTitle("ABC", for: .normal)
+		abcButton.titleLabel?.font = KeyboardTypography.panelButton
+		abcButton.setTitleColor(theme.specialKeyText, for: .normal)
+		abcButton.accessibilityLabel = "ABC"
+		abcButton.addAction(UIAction { [weak self] _ in self?.onABC?() }, for: .touchUpInside)
+		footer.addSubview(abcButton)
 		credit.text = "Powered by KLIPY"
-		credit.font = .systemFont(ofSize: 9, weight: .medium)
+		credit.font = KeyboardTypography.caption
 		credit.textColor = theme.specialKeyText.withAlphaComponent(0.45)
 		credit.textAlignment = .right
 		footer.addSubview(credit)
 		if showsGlobe {
-			globeButton.setImage(UIImage(systemName: "keyboard"), for: .normal)
+			globeButton.setImage(UIImage(systemName: "keyboard",
+				withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)), for: .normal)
 			globeButton.tintColor = theme.specialKeyText.withAlphaComponent(0.62)
+			globeButton.accessibilityLabel = "Next Keyboard"
 			globeButton.addAction(UIAction { [weak self] _ in self?.onNextKeyboard?() }, for: .touchUpInside)
 			footer.addSubview(globeButton)
 		}
-		toast.font = .systemFont(ofSize: 14, weight: .semibold)
+		toast.font = KeyboardTypography.toast
 		toast.textAlignment = .center
 		toast.textColor = theme.isDark ? UIColor(hex: 0x1B1B1D) : .white
 		toast.backgroundColor = (theme.isDark ? UIColor(hex: 0xECECF0)
@@ -270,28 +428,16 @@ final class MediaPanelView: UIView, UICollectionViewDataSource, UICollectionView
 		toast.layer.cornerRadius = 18
 		toast.clipsToBounds = true
 		toast.alpha = 0
-		addSubview(topBar); addSubview(footer); addSubview(toast)
+		addSubview(header); addSubview(footer); addSubview(toast)
 	}
 
 	private func select(_ next: KlipyKind) {
 		guard next != kind else { return }
 		kind = next
-		updateKinds()
+		header.setSelected(PanelTab(next), animated: true)
 		collection.setCollectionViewLayout(Self.layout(for: next), animated: false)
 		loadFirstPage()
 		KBDiagnostics.noteSurface(next.rawValue)
-	}
-
-	private func updateKinds() {
-		for (option, button) in kindButtons {
-			let selected = option == kind
-			button.setTitleColor(selected ? theme.keyText : theme.specialKeyText.withAlphaComponent(0.58),
-				for: .normal)
-			button.backgroundColor = selected
-				? (theme.isDark ? UIColor(white: 1, alpha: 0.12) : UIColor(white: 0, alpha: 0.08))
-				: .clear
-			button.layer.cornerRadius = 8
-		}
 	}
 
 	private func showToast(_ text: String, persistent: Bool = false) {
@@ -338,7 +484,7 @@ final class MediaSearchStrip: UIView, UICollectionViewDataSource, UICollectionVi
 		collection.delegate = self
 		collection.register(MediaCell.self, forCellWithReuseIdentifier: "media")
 		addSubview(collection)
-		statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
+		statusLabel.font = KeyboardTypography.status
 		statusLabel.textColor = theme.specialKeyText.withAlphaComponent(0.5)
 		addSubview(statusLabel)
 		search("")

@@ -1,20 +1,59 @@
 #include "../include/SpatialModel.hpp"
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <mutex>
+#include <span>
 #include <cmath>
 #include <string_view>
 namespace kb {
-// Key centres in key widths: rows offset 0, 0.5 and 1.5. Built once; looked up per trie node.
-static constexpr auto keyGrid = [] {
+// Key centres in key widths. Looked up per trie node, so a grid is an immutable table read
+// through one atomic pointer; an installed grid is kept for the life of the process.
+namespace {
+struct KeyGrid {
     std::array<std::optional<GridPoint>, 256> table{};
-    constexpr std::array<std::string_view, 3> rows{"qwertyuiop", "asdfghjkl", "zxcvbnm"};
-    constexpr std::array<double, 3> offsets{0.0, 0.5, 1.5};
+    std::array<char, 27> letters{};   // row by row, NUL-terminated
+};
+constexpr KeyGrid makeGrid(std::span<const std::string_view> rows, std::span<const double> offsets) {
+    KeyGrid out{};
+    std::size_t n = 0;
     for (std::size_t row = 0; row < rows.size(); ++row)
-        for (std::size_t column = 0; column < rows[row].size(); ++column)
-            table[static_cast<unsigned char>(rows[row][column])] = GridPoint{double(column) + offsets[row], double(row)};
-    return table;
-}();
-std::optional<GridPoint> grid(std::uint8_t letter) noexcept { return keyGrid[letter]; }
+        for (std::size_t column = 0; column < rows[row].size(); ++column) {
+            const auto c = static_cast<unsigned char>(rows[row][column]);
+            out.table[c] = GridPoint{double(column) + offsets[row], double(row)};
+            out.letters[n++] = char(c);
+        }
+    return out;
+}
+constexpr std::array<std::string_view, 3> qwertyRows{"qwertyuiop", "asdfghjkl", "zxcvbnm"};
+constexpr std::array<double, 3> qwertyOffsets{0.0, 0.5, 1.5};
+constexpr KeyGrid builtInGrid = makeGrid(qwertyRows, qwertyOffsets);
+std::atomic<const KeyGrid*> activeGrid{&builtInGrid};
+}
+std::optional<GridPoint> grid(std::uint8_t letter) noexcept { return activeGrid.load(std::memory_order_acquire)->table[letter]; }
+std::string_view gridLetters() noexcept { return activeGrid.load(std::memory_order_acquire)->letters.data(); }
+bool installGrid(std::span<const std::string_view> rows, std::span<const double> offsets) noexcept {
+    if (rows.empty() || rows.size() != offsets.size()) return false;
+    std::array<bool, 256> seen{};
+    std::size_t count = 0;
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        if (!std::isfinite(offsets[row]) || offsets[row] < 0 || offsets[row] >= 4) return false;
+        for (char c : rows[row]) {
+            const auto u = static_cast<unsigned char>(c);
+            if (u < 'a' || u > 'z' || seen[u]) return false;
+            seen[u] = true; ++count;
+        }
+    }
+    if (count != 26) return false;
+    static std::mutex installing;
+    std::lock_guard lock(installing);
+    const auto* current = activeGrid.load(std::memory_order_acquire);
+    const auto next = makeGrid(rows, offsets);
+    if (next.letters == current->letters && next.table == current->table) return true;
+    // Leaked on purpose: a decode on another thread may still hold the previous table.
+    activeGrid.store(new KeyGrid(next), std::memory_order_release);
+    return true;
+}
 
 bool spellingConfusion(std::uint8_t a, std::uint8_t b) noexcept {
     constexpr std::string_view vowels = "aeiou";

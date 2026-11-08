@@ -14,7 +14,8 @@ constexpr double maximum = std::numeric_limits<double>::max();
 Point toGrid(Point p, const GlideLayout& layout) {
     if (layout.centers.empty()) return p;
     auto reference = layout.centers.front();
-    for (const auto& key : layout.centers) if (key.first == 'q') { reference = key; break; }
+    const auto first = std::uint8_t(gridLetters().front());   // the grid's (0, 0) key: q on QWERTY
+    for (const auto& key : layout.centers) if (key.first == first) { reference = key; break; }
     auto anchor = center(reference.first).value_or(Point{});
     return {anchor.x + (p.x - reference.second.x) / layout.xPitch, anchor.y + (p.y - reference.second.y) / layout.yPitch};
 }
@@ -46,8 +47,7 @@ std::vector<std::size_t> pivots(std::span<const Point> points, double threshold)
 }
 std::vector<std::uint8_t> lettersNear(Point point, double radius, std::size_t maxCount) {
     std::vector<std::pair<std::uint8_t, double>> values;
-    for (auto row : {"qwertyuiop", "asdfghjkl", "zxcvbnm"}) for (unsigned char c : std::string_view(row))
-        values.emplace_back(c, distance(*center(c), point));
+    for (unsigned char c : gridLetters()) values.emplace_back(c, distance(*center(c), point));
     std::stable_sort(values.begin(), values.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
     std::vector<std::uint8_t> out;
     for (const auto& [letter, d] : values) { if (d > radius || out.size() >= maxCount) break; out.push_back(letter); }
@@ -56,7 +56,7 @@ std::vector<std::uint8_t> lettersNear(Point point, double radius, std::size_t ma
 }
 std::optional<std::uint8_t> nearestLetter(Point point) {
     double best = maximum; std::optional<std::uint8_t> out;
-    for (auto row : {"qwertyuiop", "asdfghjkl", "zxcvbnm"}) for (unsigned char c : std::string_view(row)) {
+    for (unsigned char c : gridLetters()) {
         auto p = *center(c); auto d = (p.x - point.x) * (p.x - point.x) + (p.y - point.y) * (p.y - point.y);
         if (d < best) { best = d; out = c; }
     }

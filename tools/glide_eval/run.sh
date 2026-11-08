@@ -4,13 +4,14 @@ set -eu
 cd "$(dirname "$0")"
 work_dir=$(mktemp -d "${TMPDIR:-/tmp}/kb-glide-eval.XXXXXX")
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
-for source_name in Adaptation CandidateGeneration Engine EngineWire Glide IncrementalSearch LanguageModel Multiword NeuralSearch PackedLexicon Personalization Ranking Safety SpatialModel; do
+for source_name in Adaptation CandidateGeneration Engine EngineWire Glide IncrementalSearch LanguageModel Multiword NeuralFst NeuralLanguageModel NeuralSearch PackedLexicon Personalization Ranking Safety SpatialModel; do
   xcrun clang++ -std=c++20 -O2 -c "../../native/DecoderCore/src/$source_name.cpp" -o "$work_dir/$source_name.o"
 done
 xcrun clang++ -std=c++20 -O2 -fobjc-arc -c ../../native/iOS/KBDecoderBridge.mm -o "$work_dir/bridge.o"
 swiftc -O -module-cache-path "$work_dir/modules" \
   -import-objc-header ../../native/iOS/Keyboard-Bridging-Header.h \
   ../../keyboard/Engine/SpatialModel.swift \
+  ../../keyboard/Views/LatinLayoutPack.swift \
   ../../keyboard/Engine/Trie.swift \
   ../../keyboard/Engine/Vocabulary/IncrementalDecodeSession.swift \
   ../../keyboard/Engine/Vocabulary/LangData.swift \
@@ -22,5 +23,7 @@ swiftc -O -module-cache-path "$work_dir/modules" \
   ../../keyboard/Engine/GlidePath.swift \
   PlatformShim.swift main.swift "$work_dir/"*.o \
   -lc++ -framework Foundation -framework CoreML -o "$work_dir/glide_eval"
+# The letter grid comes from the English layout pack, found next to the binary.
+cp ../../keyboard/english_layout.kbpack "$work_dir/"
 if [ "${1:-}" = "--build-only" ]; then exit 0; fi
 "$work_dir/glide_eval" "$@"

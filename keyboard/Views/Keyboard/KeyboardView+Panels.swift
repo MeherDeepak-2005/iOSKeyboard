@@ -6,12 +6,16 @@ extension KeyboardView {
 	func showEmoji() {
 		if isEmojiSearching { tearDownEmojiSearch() }   // emoji key pressed mid-search
 		guard page != .emoji else { return }
+		// Coming from the GIF/sticker panel: the switch thumb slides back from that tab.
+		let previous = mediaView.map { PanelTab($0.kind) }
+		discardMediaPanel()
 		page = .emoji
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
 		rows = []
-		accessibilityElements = nil                   // the panel, not the removed keys (they stay alive in the list)
+		letterKeys = []                               // the removed keys are freed now, not when the panel closes (reload refills it)
+		accessibilityElements = nil                   // the panel, not the removed keys
 		suggestionBar.isHidden = true
-		let ev = EmojiKeyboardView(theme: theme, showsGlobe: showsGlobe)
+		let ev = EmojiKeyboardView(theme: theme, showsGlobe: showsGlobe, from: previous)
 		ev.onPick = { [weak self] in self?.onInsert?($0, nil) }
 		ev.onDelete = { [weak self] in self?.onDelete?() }
 		ev.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
@@ -21,8 +25,9 @@ extension KeyboardView {
 		ev.onStickers = { [weak self] in self?.onOpenMedia?(.stickers) }
 		addSubview(ev)
 		emojiView = ev
-		onHeightChange?()                             // height snaps back if search was up
+		onHeightChange?(true)                         // the taller browse height
 		setNeedsLayout()
+		if previous != nil { returnPanelMemory() }    // the GIF/sticker panel just went
 		KBDiagnostics.recorder.sample()               // emoji page footprint shows up in health telemetry
 		KBDiagnostics.noteSurface("emoji")
 	}
@@ -33,7 +38,7 @@ extension KeyboardView {
 		shift = .on                                   // sentences resume capitalized
 		suggestionBar.isHidden = !showsSuggestions
 		reload()
-		onHeightChange?()                             // expansion released
+		onHeightChange?(true)                             // expansion released
 		returnPanelMemory()
 		KBDiagnostics.noteSurface("letters")
 	}
@@ -42,21 +47,24 @@ extension KeyboardView {
 		mediaHasFullAccess = hasFullAccess
 		if isEmojiSearching { tearDownEmojiSearch() }
 		if isMediaSearching { tearDownMediaSearch() }
+		let previous: PanelTab? = page == .emoji ? .emoji : nil
 		emojiView?.removeFromSuperview(); emojiView = nil
 		discardMediaPanel()
 		page = .media
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
 		rows = []
-		accessibilityElements = nil                   // the panel, not the removed keys (they stay alive in the list)
+		letterKeys = []                               // the removed keys are freed now, not when the panel closes (reload refills it)
+		accessibilityElements = nil                   // the panel, not the removed keys
 		suggestionBar.isHidden = true
 		let panel = MediaPanelView(theme: theme, showsGlobe: showsGlobe,
-			hasFullAccess: hasFullAccess, kind: kind, query: query)
+			hasFullAccess: hasFullAccess, kind: kind, query: query, from: previous)
 		panel.onABC = { [weak self] in self?.hideMedia() }
+		panel.onEmoji = { [weak self] in self?.showEmoji() }
 		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
 		panel.onSearch = { [weak self] in self?.showMediaSearch(kind: $0) }
 		addSubview(panel)
 		mediaView = panel
-		onHeightChange?()
+		onHeightChange?(true)
 		setNeedsLayout()
 		returnPanelMemory()                           // the emoji page or previous panel just went
 		KBDiagnostics.noteSurface(kind.rawValue)
@@ -68,7 +76,7 @@ extension KeyboardView {
 		page = .letters
 		suggestionBar.isHidden = !showsSuggestions
 		reload()
-		onHeightChange?()
+		onHeightChange?(true)
 		returnPanelMemory()
 		KBDiagnostics.noteSurface("letters")
 	}
@@ -84,7 +92,8 @@ extension KeyboardView {
 		page = .clipboard
 		rows.forEach { $0.forEach { $0.removeFromSuperview() } }
 		rows = []
-		accessibilityElements = nil                   // the panel, not the removed keys (they stay alive in the list)
+		letterKeys = []                               // the removed keys are freed now, not when the panel closes (reload refills it)
+		accessibilityElements = nil                   // the panel, not the removed keys
 		suggestionBar.isHidden = true
 		let panel = ClipboardPanelView(theme: theme, showsGlobe: showsGlobe, hasFullAccess: hasFullAccess)
 		panel.onPick = { [weak self] in self?.onClipboardPick?($0) }
@@ -93,7 +102,7 @@ extension KeyboardView {
 		panel.onNextKeyboard = { [weak self] in self?.onNextKeyboard?() }
 		addSubview(panel)
 		clipboardView = panel
-		onHeightChange?()
+		onHeightChange?(true)
 		setNeedsLayout()
 		returnPanelMemory()
 		KBDiagnostics.noteSurface("clipboard")
@@ -106,7 +115,7 @@ extension KeyboardView {
 		shift = .on
 		suggestionBar.isHidden = !showsSuggestions
 		reload()
-		onHeightChange?()
+		onHeightChange?(true)
 		returnPanelMemory()
 		KBDiagnostics.noteSurface("letters")
 	}
@@ -132,7 +141,7 @@ extension KeyboardView {
 		let strip = MediaSearchStrip(theme: theme, kind: kind, hasFullAccess: mediaHasFullAccess)
 		addSubview(strip)
 		mediaSearchStrip = strip
-		reload(); refreshMediaSearch(); onHeightChange?(); setNeedsLayout()
+		reload(); refreshMediaSearch(); onHeightChange?(true); setNeedsLayout()
 	}
 
 	private func refreshMediaSearch() {
@@ -198,7 +207,7 @@ extension KeyboardView {
 		emojiSearchHeader = header
 		reload()
 		refreshEmojiSearch()
-		onHeightChange?()
+		onHeightChange?(true)
 		setNeedsLayout()
 	}
 
@@ -218,7 +227,7 @@ extension KeyboardView {
 		} else {
 			suggestionBar.isHidden = !showsSuggestions
 			reload()
-			onHeightChange?()
+			onHeightChange?(true)
 			setNeedsLayout()
 		}
 	}
@@ -243,6 +252,7 @@ extension KeyboardView {
 	func releaseTransientMediaForMemoryPressure() {
 		_ = dismissOverlaysIfActive()
 		EmojiAtlas.purgeShared()
+		balloonPool.removeAll()
 	}
 
 

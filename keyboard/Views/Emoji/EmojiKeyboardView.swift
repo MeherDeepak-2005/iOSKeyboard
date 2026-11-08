@@ -25,12 +25,11 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	private let showsGlobe: Bool
 	private var collection: UICollectionView!
 	private let emptyLabel = UILabel()
-	private let searchPill = UIButton(type: .system)
-	private let mediaControl = UISegmentedControl(items: ["Emoji", "GIFs", "Stickers"])
+	private let header: PanelHeaderView
 	private let bottomBar = UIView()
 	private var tabButtons: [UIButton] = []
 	private var selectedSection = 0
-	private let searchRowHeight: CGFloat = 44
+	private let searchRowHeight: CGFloat = PanelHeaderView.height
 	private let barHeight: CGFloat = 44
 
 	/// Recents come from UserDefaults; the catalog comes from the mmap'd EmojiStore.
@@ -71,13 +70,17 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		}
 	}
 
-	/// `store` and `atlas` are injectable for deterministic tests.
+	/// `store` and `atlas` are injectable for deterministic tests. `previous` is the
+	/// panel tab the user came from, so the switch thumb slides from it.
 	init(theme: KeyboardTheme, showsGlobe: Bool,
-		 store: EmojiStore? = EmojiStore.bundled, atlas: EmojiAtlas? = nil) {
+		 store: EmojiStore? = EmojiStore.bundled, atlas: EmojiAtlas? = nil,
+		 from previous: PanelTab? = nil) {
 		self.theme = theme
 		self.showsGlobe = showsGlobe
 		self.store = store
 		self.explicitAtlas = atlas
+		self.header = PanelHeaderView(theme: theme, selected: .emoji, from: previous,
+			searchEnabled: store != nil)            // no catalog → nothing to search
 		super.init(frame: .zero)
 
 		let recents = KBEmojiRecents.all()
@@ -95,7 +98,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 							forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
 							withReuseIdentifier: "h")
 		collection.showsVerticalScrollIndicator = false
-		emptyLabel.font = .systemFont(ofSize: 15, weight: .medium)
+		emptyLabel.font = KeyboardTypography.emptyState
 		emptyLabel.textColor = theme.specialKeyText.withAlphaComponent(0.55)
 		emptyLabel.textAlignment = .center
 		emptyLabel.numberOfLines = 2
@@ -104,10 +107,13 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		collection.backgroundView = emptyLabel
 		addSubview(collection)
 
-		buildSearchPill()
-		buildMediaControl()
+		header.onSearch = { [weak self] in self?.onSearch?() }
+		header.onSelect = { [weak self] tab in
+			if tab == .gifs { self?.onGIF?() }
+			if tab == .stickers { self?.onStickers?() }
+		}
 		buildBottomBar()
-		addSubview(searchPill)
+		addSubview(header)
 		addSubview(bottomBar)
 	}
 	required init?(coder: NSCoder) { fatalError() }
@@ -116,7 +122,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 	private func makeLayout() -> UICollectionViewLayout {
 		UICollectionViewCompositionalLayout { _, env in
 			let width = max(1, env.container.effectiveContentSize.width - 12)
-			let cols = max(6, Int(width / 46))
+			let cols = max(6, Int(width / EmojiAtlas.cellPitch))
 			let side = 1.0 / CGFloat(cols)
 			let item = NSCollectionLayoutItem(layoutSize: .init(
 				widthDimension: .fractionalWidth(side), heightDimension: .fractionalHeight(1)))
@@ -135,49 +141,10 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 
 	override func layoutSubviews() {
 		super.layoutSubviews()
-		mediaControl.frame = CGRect(x: 8, y: 5, width: 170, height: searchRowHeight - 10)
-		searchPill.frame = CGRect(x: 184, y: 2, width: max(0, bounds.width - 192), height: searchRowHeight - 4)
+		header.frame = CGRect(x: 0, y: 0, width: bounds.width, height: searchRowHeight)
 		bottomBar.frame = CGRect(x: 0, y: bounds.height - barHeight, width: bounds.width, height: barHeight)
 		collection.frame = CGRect(x: 0, y: searchRowHeight, width: bounds.width,
 								  height: max(0, bounds.height - searchRowHeight - barHeight))
-	}
-
-	// MARK: Search pill (tap hands off to KeyboardView's emoji-search mode)
-
-	private func buildSearchPill() {
-		var cfg = UIButton.Configuration.plain()
-		cfg.image = UIImage(systemName: "magnifyingglass",
-							withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .medium))
-		cfg.imagePadding = 6
-		cfg.attributedTitle = AttributedString("Search emoji", attributes: AttributeContainer([
-			.font: UIFont.systemFont(ofSize: 15),
-			.foregroundColor: theme.keyText.withAlphaComponent(0.45)
-		]))
-		cfg.baseForegroundColor = theme.keyText.withAlphaComponent(0.45)
-		cfg.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
-		searchPill.configuration = cfg
-		searchPill.contentHorizontalAlignment = .leading
-		searchPill.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.10) : UIColor(white: 1, alpha: 0.55)
-		searchPill.layer.cornerRadius = (searchRowHeight - 4) / 2
-		searchPill.layer.cornerCurve = .continuous
-		searchPill.isEnabled = store != nil          // no catalog → nothing to search
-		searchPill.addAction(UIAction { [weak self] _ in self?.onSearch?() }, for: .touchUpInside)
-	}
-
-	private func buildMediaControl() {
-		mediaControl.selectedSegmentIndex = 0
-		mediaControl.selectedSegmentTintColor = theme.isDark
-			? UIColor(white: 1, alpha: 0.07) : UIColor(white: 0, alpha: 0.045)
-		mediaControl.setTitleTextAttributes([
-			.foregroundColor: theme.specialKeyText,
-			.font: UIFont.systemFont(ofSize: 12, weight: .semibold),
-		], for: .normal)
-		mediaControl.addAction(UIAction { [weak self] _ in
-			guard let self else { return }
-			if self.mediaControl.selectedSegmentIndex == 1 { self.onGIF?() }
-			if self.mediaControl.selectedSegmentIndex == 2 { self.onStickers?() }
-		}, for: .valueChanged)
-		addSubview(mediaControl)
 	}
 
 	// MARK: Collection data
@@ -335,7 +302,7 @@ final class EmojiKeyboardView: UIView, UICollectionViewDataSource, UICollectionV
 		let b = UIButton(type: .custom)
 		if let title {
 			b.setTitle(title, for: .normal)
-			b.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+			b.titleLabel?.font = KeyboardTypography.panelButton
 		}
 		if let symbol {
 			b.setImage(UIImage(systemName: symbol,

@@ -74,10 +74,7 @@ final class SuggestionBar: UIView {
 
 		for i in 0..<3 {
 			let b = UIButton(type: .custom)
-			let base = UIFont.systemFont(ofSize: 17,
-				weight: UIAccessibility.isBoldTextEnabled ? .semibold : .regular)
-			b.titleLabel?.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: base,
-				maximumPointSize: 21)
+			b.titleLabel?.font = KeyboardTypography.suggestion
 			b.titleLabel?.adjustsFontSizeToFitWidth = true
 			b.titleLabel?.minimumScaleFactor = 0.8
 			b.setTitleColor(theme.keyText, for: .normal)

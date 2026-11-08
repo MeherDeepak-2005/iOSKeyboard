@@ -88,12 +88,13 @@ final class TouchSpatialProfile {
 }
 
 nonisolated enum KB {
-	static let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
-	/// Normalized visual center offsets in key pitches. The UIKit deck centers the
-	/// nine-key home row by half a pitch; shift places Z one-and-a-half pitches after Q.
-	/// These values are shared by tap scoring and Glide decoding, so changing layout
-	/// without changing this table is a systematic input error, not a cosmetic issue.
-	static let rowOffset: [Double] = [0.0, 0.5, 1.5]
+	/// Letter rows and their visual offsets in key pitches, from the English layout pack
+	/// (tools/language_packs/sources/en-US/qwerty.json): the UIKit deck centres the nine-key
+	/// home row by half a pitch and shift places Z one-and-a-half pitches after Q. Tap
+	/// scoring and Glide decoding share this grid, and the native decoder is given the same
+	/// one (`installNativeGrid`), so the keys drawn and the keys decoded cannot disagree.
+	static let rows = LatinLayoutPack.english.gridRows
+	static let rowOffset = LatinLayoutPack.english.gridRowOffsets
 	static let sigma = 1.0
 	/// Floor for pressing a different key than the intended one; equals native
 	/// `substitutionBase` (fitted on tools/evaluation/autocorrect, 27 Oct 2026).

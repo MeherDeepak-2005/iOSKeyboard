@@ -152,14 +152,32 @@ final class KeyButton: UIView {
 		else { accessibilityTraits.insert(.notEnabled) }
 	}
 
+	private var alternativeActivation: ((String) -> Void)?
+	private var builtCustomActions: [UIAccessibilityCustomAction]?
+
+	/// Stores the long-press values. Their VoiceOver actions are built when assistive
+	/// technology first asks: every shift change sets these on all letter keys, which used to
+	/// rebuild about 38 action objects each time, whether or not VoiceOver was running.
 	func setAlternatives(_ values: [String], activation: @escaping (String) -> Void) {
 		alternatives = values
-		accessibilityCustomActions = values.map { value in
-			UIAccessibilityCustomAction(name: value) { _ in
-				activation(value)
-				return true
+		alternativeActivation = values.isEmpty ? nil : activation
+		builtCustomActions = nil
+	}
+
+	override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
+		get {
+			guard let activation = alternativeActivation else { return super.accessibilityCustomActions }
+			if let builtCustomActions { return builtCustomActions }
+			let actions = alternatives.map { value in
+				UIAccessibilityCustomAction(name: value) { _ in
+					activation(value)
+					return true
+				}
 			}
+			builtCustomActions = actions
+			return actions
 		}
+		set { super.accessibilityCustomActions = newValue }
 	}
 
 	override func layoutSubviews() {
@@ -190,10 +208,9 @@ final class KeyButton: UIView {
 	}
 
 	private func legendFont(_ text: String) -> UIFont {
-		let bold = UIAccessibility.isBoldTextEnabled
-		if text.count > 1 { return .systemFont(ofSize: 16 * glyphScale, weight: bold ? .semibold : .medium) }
+		if text.count > 1 { return KeyboardTypography.keyWord(scale: glyphScale) }
 		let lowercase = letterBase != nil && text == text.lowercased() && text != text.uppercased()
-		return .systemFont(ofSize: (lowercase ? 25.3 : 23) * glyphScale, weight: bold ? .medium : .regular)
+		return KeyboardTypography.keyCharacter(lowercase: lowercase, scale: glyphScale)
 	}
 
 	static let symbolConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)

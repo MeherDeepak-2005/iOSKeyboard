@@ -7,6 +7,8 @@ final class KeyboardViewController: UIInputViewController {
 
 	var keyboard: KeyboardView!
 	var heightConstraint: NSLayoutConstraint?
+	/// The keyboard view's own height; it is pinned to the bottom of the window.
+	var keyboardHeightConstraint: NSLayoutConstraint?
 	private var heightMismatchActive = false
 	let engine = KeyboardEngine.shared   // process-wide: see KeyboardEngine.shared
 	private var personalDataResetObserver: KBPersonalDataResetObserver?
@@ -148,13 +150,50 @@ final class KeyboardViewController: UIInputViewController {
 		view = root
 	}
 
-	func updateKeyboardHeight() {
+	/// `animated`: a panel opening or closing. iOS draws the keyboard's backdrop and moves
+	/// its top edge in one step whatever we do (per-frame heights are not shown), so the
+	/// height changes at once and the content carries the motion instead: the keyboard
+	/// view is pinned to the bottom, then rises into a taller keyboard or settles into a
+	/// shorter one. Bottom-pinned, it stays whole while the host catches up a frame later.
+	func updateKeyboardHeight(animated: Bool = false) {
 		guard let keyboard else { return }
 		let desired = keyboard.keyboardHeight
 		guard desired.isFinite, desired > 0 else { return }
-		rootInputView?.desiredHeight = desired
-		heightConstraint?.constant = desired
-		let size = CGSize(width: view.bounds.width, height: desired)
+		let current = keyboardHeightConstraint?.constant ?? desired
+		applyKeyboardHeight(desired)
+		guard animated, abs(current - desired) > 1, view.window != nil,
+			!UIAccessibility.isReduceMotionEnabled else { return }
+		UIView.performWithoutAnimation { view.layoutIfNeeded() }
+		animateHeightChange(by: desired - current, in: keyboard)
+	}
+
+	static let heightAnimationDuration: CFTimeInterval = 0.32
+
+	/// Growing: the new content starts where the old top edge was and rises by `delta`.
+	/// Shrinking: it fades in and settles down the last few points.
+	private func animateHeightChange(by delta: CGFloat, in keyboard: UIView) {
+		let rise = CABasicAnimation(keyPath: "transform.translation.y")
+		rise.fromValue = delta > 0 ? delta : min(18, -delta)
+		rise.toValue = 0
+		let fade = CABasicAnimation(keyPath: "opacity")
+		fade.fromValue = delta > 0 ? 0.35 : 0
+		fade.toValue = 1
+		fade.duration = delta > 0 ? 0.18 : 0.22
+		let group = CAAnimationGroup()
+		group.animations = [rise, fade]
+		group.duration = Self.heightAnimationDuration
+		rise.duration = group.duration
+		group.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)
+		group.fillMode = .backwards
+		keyboard.layer.add(group, forKey: "heightChange")
+	}
+
+	/// Sizes the keyboard's window and the keyboard view (pinned to its bottom) together.
+	func applyKeyboardHeight(_ height: CGFloat) {
+		rootInputView?.desiredHeight = height
+		if heightConstraint?.constant != height { heightConstraint?.constant = height }
+		if keyboardHeightConstraint?.constant != height { keyboardHeightConstraint?.constant = height }
+		let size = CGSize(width: view.bounds.width, height: height)
 		if preferredContentSize != size { preferredContentSize = size }
 	}
 
@@ -262,6 +301,7 @@ final class KeyboardViewController: UIInputViewController {
 		// keyboard — deactivate it or every rebuild (theme/globe change) stacks another.
 		heightConstraint?.isActive = false
 		heightConstraint = nil
+		keyboardHeightConstraint = nil
 
 		let theme = currentTheme()
 		view.backgroundColor = .clear
@@ -322,9 +362,9 @@ final class KeyboardViewController: UIInputViewController {
 		// a stale view firing this would size the CURRENT constraint from a DEAD view's
 		// page — e.g. an expanded emoji height under a letters deck, which reads as a
 		// tall keyboard with dead space beneath the keys.
-		kb.onHeightChange   = { [weak self, weak kb] in
+		kb.onHeightChange   = { [weak self, weak kb] animated in
 			guard let self, let kb, self.keyboard === kb else { return }
-			self.updateKeyboardHeight()
+			self.updateKeyboardHeight(animated: animated)
 		}
 		kb.onGeometryChange = { [weak self, weak kb] in
 			guard let self, let kb, self.keyboard === kb else { return }
@@ -338,9 +378,11 @@ final class KeyboardViewController: UIInputViewController {
 		NSLayoutConstraint.activate([
 			kb.leadingAnchor.constraint(equalTo: view.leadingAnchor),
 			kb.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-			kb.topAnchor.constraint(equalTo: view.topAnchor),
 			kb.bottomAnchor.constraint(equalTo: view.bottomAnchor)
 		])
+		let kh = kb.heightAnchor.constraint(equalToConstant: kb.keyboardHeight)
+		kh.isActive = true
+		keyboardHeightConstraint = kh
 		let h = view.heightAnchor.constraint(equalToConstant: kb.keyboardHeight)
 		h.priority = .required - 1
 		h.isActive = true
@@ -350,7 +392,7 @@ final class KeyboardViewController: UIInputViewController {
 		kb.prepareHaptics()
 		if suggestionModeResolved {
 			kb.setShowsSuggestions(suggestionsVisible)
-			h.constant = kb.keyboardHeight
+			applyKeyboardHeight(kb.keyboardHeight)
 		}
 		if hostConnectionReady { updateActionKey() }
 		applySuggestionPresentation(to: kb)
@@ -455,7 +497,7 @@ final class KeyboardViewController: UIInputViewController {
 			keyboard?.setInputKind(.standard)
 		}
 		keyboard?.glideEnabled = activeLanguageMode == .english
-		if let keyboard { heightConstraint?.constant = keyboard.keyboardHeight }
+		if let keyboard { applyKeyboardHeight(keyboard.keyboardHeight) }
 		invalidateDocumentSession()
 		resetEraseTracking()           // a new field/host — stale erase state is meaningless
 		wordTaps.removeAll(keepingCapacity: true)
@@ -513,7 +555,8 @@ final class KeyboardViewController: UIInputViewController {
 		super.didReceiveMemoryWarning()
 		KBDiagnostics.recorder.memoryPressure(critical: false)
 		keyboard?.releaseTransientMediaForMemoryPressure()
-		KBMediaCache.purge()
+		// The GIF/sticker cache is on disk only (no in-memory copy, urlCache nil): deleting it
+		// here freed no RAM and forced re-downloads later. Personal-data reset still clears it.
 		engine.handleMemoryPressure()
 	}
 

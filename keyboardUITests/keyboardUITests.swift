@@ -345,6 +345,43 @@ final class keyboardUITests: XCTestCase {
 		XCTAssertTrue(memory.label.contains(" ago"), memory.label)
 	}
 
+	/// TEMP (panel redesign check): screenshots of the emoji, GIF and sticker panels and the
+	/// suggestion bar. Opt-in: TEST_RUNNER_KB_PANEL_SHOTS=1.
+	@MainActor
+	func testPanelHeaderScreenshots() throws {
+		try XCTSkipUnless(ProcessInfo.processInfo.environment["KB_PANEL_SHOTS"] == "1", "opt-in")
+		let app = XCUIApplication()
+		if ProcessInfo.processInfo.environment["KB_PANEL_SKIP_ATLAS"] != "1" {
+			app.launch()                               // the app regenerates the emoji atlas
+			RunLoop.current.run(until: Date().addingTimeInterval(20))
+			app.terminate()
+		}
+		let host = launchRuntimeHost()
+		let keyboard = host.descendants(matching: .any)["glyph.keyboard"]
+		if !keyboard.waitForExistence(timeout: 8) { _ = activate(.glyph, in: host) }
+		if !keyboard.waitForExistence(timeout: 15) {
+			let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+			a.name = "00-no-glyph"; a.lifetime = .keepAlways; add(a)
+			throw XCTSkip("Glyph is not active")
+		}
+		func settle(_ seconds: Double) { RunLoop.current.run(until: Date().addingTimeInterval(seconds)) }
+		func shot(_ name: String) {
+			let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+			a.name = name; a.lifetime = .keepAlways; add(a)
+		}
+		func control(_ name: String) -> XCUIElement { keyboard.descendants(matching: .any)[name].firstMatch }
+		for character in "hel" { tapLetter(String(character), in: host) }
+		shot("01-suggestions-hel"); settle(0.08); shot("01b-suggestions-mid")
+		settle(1); tapLetter("l", in: host); settle(1); shot("02-suggestions-hell")
+		key("Emoji", in: host).tap(); shot("03-emoji-opening"); settle(1.5); shot("04-emoji")
+		control("GIFs").tap(); shot("05-gifs-opening"); settle(4); shot("06-gifs")
+		control("Stickers").tap(); settle(0.15); shot("07-stickers-sliding"); settle(4); shot("08-stickers")
+		control("Emoji").tap(); settle(1.5); shot("09-emoji-again")
+		control("emoji.search").tap(); settle(1); shot("10-emoji-search")
+		control("Back").tap(); settle(1.5); control("ABC").tap(); settle(1.5); shot("11-letters")
+		if ProcessInfo.processInfo.environment["KB_PANEL_RECORD"] == "1" { XCTFail("keep the screen recording") }
+	}
+
 	/// Types, then opens emoji, GIFs and stickers and returns to the letters, three times, so the
 	/// keyboard's "Memory by surface" log (Keyboard health) shows what each surface leaves behind.
 	/// Opt-in, as it scrolls live GIFs: TEST_RUNNER_KB_MEMORY_TOUR=1.

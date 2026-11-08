@@ -21,7 +21,9 @@ final class KeyboardView: UIView {
 	/// Fired whenever `keyboardHeight` changes out from under the controller (entering
 	/// or leaving emoji search, which swaps the 34 pt strip for the 86 pt search header)
 	/// so it can update its height constraint.
-	var onHeightChange:   (() -> Void)?
+	/// `animated`: a panel or search opened/closed (spring the height); false for
+	/// geometry changes such as rotation, which must snap.
+	var onHeightChange:   ((_ animated: Bool) -> Void)?
 	/// Width/orientation changed the physical layout profile. The controller includes
 	/// this revision in decode requests so no touch model survives a geometry change.
 	var onGeometryChange: (() -> Void)?
@@ -148,7 +150,10 @@ final class KeyboardView: UIView {
 	var headerSpace: CGFloat {
 		(isEmojiSearching || isMediaSearching) ? EmojiSearchHeader.height : stripSpace
 	}
-	private var expansionSpace: CGFloat { page == .media ? Self.mediaExpansion : 0 }
+	/// Emoji, GIFs and Stickers all browse at the same, taller height.
+	private var expansionSpace: CGFloat {
+		page == .media || page == .emoji ? Self.mediaExpansion : 0
+	}
 	private var keyRowCount: Int {
 		guard languageMode == .telugu,
 			  page == .letters || page == .alternateLetters else { return 4 }
@@ -174,6 +179,8 @@ final class KeyboardView: UIView {
 	// two-thumb typing shows both. Quick taps retain 100ms of visual feedback;
 	// cancellation and glide classification dismiss immediately.
 	var touchPopups: [UITouch: UIView] = [:]
+	/// Lifted balloons waiting for the next press (KeyBalloonView); emptied off-screen.
+	var balloonPool: [KeyBalloonView] = []
 	var popupShownAt: [UITouch: TimeInterval] = [:]
 	var poppedKeys: [UITouch: KeyButton] = [:]   // key whose glyph is hidden under its balloon
 	var alternativeTimers: [UITouch: Timer] = [:]

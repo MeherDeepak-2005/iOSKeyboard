@@ -451,43 +451,52 @@ extension KeyboardEngine {
 				DispatchQueue.main.async { completion(snapshot) }
 			}
 
+            // The shared engine is built once, when initialization finishes on this queue; it is
+            // nil only when the language data did not load, and rebuilding it per keystroke
+            // would repeat a failed dictionary walk on every key.
             if self.candidateBackend == .cpp,
-               request.requestedModelTier == .ngram || request.requestedModelTier == .neuralSearchSpace {
+               request.requestedModelTier == .ngram || request.requestedModelTier == .neuralSearchSpace,
+               let engine = self.sharedEngine {
                 let view = self.lexicon.nativeGenerationView()
-                if self.sharedEngine == nil { self.sharedEngine = self.makeSharedEngine() }
-                if let engine = self.sharedEngine {
-                    let tier: DecodeModelTier = request.requestedModelTier == .neuralSearchSpace
-                        && engine.supportsNeuralSearchSpace ? .neuralSearchSpace : .ngram
-                    let identity = [request.fieldRevision, request.documentRevision, request.wordSessionID,
-                        request.generation, request.layoutRevision, self.lexicon.vocabularyRevision, KBPersonalData.currentEpoch]
-                    var offsets = [0]
-                    for ch in lw { offsets.append(offsets.last! + String(ch).utf8.count) }
-                    let flags = Data(lw.flatMap { ch in Array(repeating: UInt8(ch.isLetter ? 1 : 0), count: String(ch).utf8.count) })
-                    let buffers = NativeTapBuffers(taps: taps, expectedCount: lw.utf8.count)
-                    do {
-                        let result = try engine.decode(word: currentWord, normalized: lw, context: context.map { $0.lowercased() },
-                            identity: identity.withUnsafeBytes { Data($0) }, characterOffsets: offsets.map { NSNumber(value: $0) },
-                            letterFlags: flags, tapOffsets: buffers?.offsets, tapValidity: buffers?.validity,
-                            lexicon: view, personal: self.user.nativeCountsSnapshot(),
-                            topWords: self.lexicon.topWords.map { $0.lowercased() }, kept: self.isKept(lw),
-                            modelTier: tier.rawValue, token: nativeToken)
-                        guard !result.cancelled, self.isLatest(gen) else { return }
-                        let typedScore = result.rows.first(where: { $0.word == lw })?.score ?? 0
-                        let evidence = zip(result.rows, result.sources).map { row, source in
-                            DecodeCandidateEvidence(word: row.word, score: row.score, spatialCost: row.cost,
-                                logFrequency: row.logFrequency, logLanguageProbability: row.language,
-                                source: DecodeCandidateSource(rawValue: source) ?? .fuzzyLexicon, typedWordMargin: row.score - typedScore)
-                        }
-                        let decision = result.correction
-                        if let kind = decision.kind.flatMap(CorrectionGateEvidence.Kind.init(rawValue:)), let candidate = decision.candidate {
-                            self.correctionObserver?(CorrectionGateEvidence(typed: lw, candidate: candidate, kind: kind,
-                                typedMargin: decision.margin, candidateGap: decision.gap?.doubleValue,
-                                spatialCost: decision.cost, allowsCloseRescue: decision.allowsCloseRescue))
-                        }
-                        publishEnglish(result.suggestions, evidence, decision.word, decision.margin, tier)
-                        return
-                    } catch { KBDiagnostics.recorder.storageFailure(operation: "native-decode") }
+                let tier: DecodeModelTier = request.requestedModelTier == .neuralSearchSpace
+                    && engine.supportsNeuralSearchSpace ? .neuralSearchSpace : .ngram
+                let identity = [request.fieldRevision, request.documentRevision, request.wordSessionID,
+                    request.generation, request.layoutRevision, self.lexicon.vocabularyRevision, KBPersonalData.currentEpoch]
+                // Grapheme boundaries as UTF-8 byte offsets, and a letter flag per byte: one pass,
+                // no String or Array per character.
+                var offsets = [NSNumber(value: 0)]
+                var flags = Data(capacity: lw.utf8.count)
+                var end = 0
+                for ch in lw {
+                    let width = ch.utf8.count
+                    end += width
+                    offsets.append(NSNumber(value: end))
+                    flags.append(contentsOf: repeatElement(ch.isLetter ? 1 : 0, count: width))
                 }
+                let buffers = NativeTapBuffers(taps: taps, expectedCount: lw.utf8.count)
+                do {
+                    let result = try engine.decode(word: currentWord, normalized: lw, context: context.map { $0.lowercased() },
+                        identity: identity.withUnsafeBytes { Data($0) }, characterOffsets: offsets,
+                        letterFlags: flags, tapOffsets: buffers?.offsets, tapValidity: buffers?.validity,
+                        lexicon: view, personal: self.user.nativeCountsSnapshot(),
+                        topWords: self.lexicon.topWords.map { $0.lowercased() }, kept: self.isKept(lw),
+                        modelTier: tier.rawValue, token: nativeToken)
+                    guard !result.cancelled, self.isLatest(gen) else { return }
+                    let typedScore = result.rows.first(where: { $0.word == lw })?.score ?? 0
+                    let evidence = zip(result.rows, result.sources).map { row, source in
+                        DecodeCandidateEvidence(word: row.word, score: row.score, spatialCost: row.cost,
+                            logFrequency: row.logFrequency, logLanguageProbability: row.language,
+                            source: DecodeCandidateSource(rawValue: source) ?? .fuzzyLexicon, typedWordMargin: row.score - typedScore)
+                    }
+                    let decision = result.correction
+                    if let kind = decision.kind.flatMap(CorrectionGateEvidence.Kind.init(rawValue:)), let candidate = decision.candidate {
+                        self.correctionObserver?(CorrectionGateEvidence(typed: lw, candidate: candidate, kind: kind,
+                            typedMargin: decision.margin, candidateGap: decision.gap?.doubleValue,
+                            spatialCost: decision.cost, allowsCloseRescue: decision.allowsCloseRescue))
+                    }
+                    publishEnglish(result.suggestions, evidence, decision.word, decision.margin, tier)
+                    return
+                } catch { KBDiagnostics.recorder.storageFailure(operation: "native-decode") }
             }
 
 			if currentWord.isEmpty {

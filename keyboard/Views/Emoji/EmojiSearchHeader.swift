@@ -72,7 +72,7 @@ final class EmojiSearchHeader: UIView, UICollectionViewDataSource, UICollectionV
 		glass.translatesAutoresizingMaskIntoConstraints = false
 		pill.addSubview(glass)
 
-		queryLabel.font = .systemFont(ofSize: 16)
+		queryLabel.font = KeyboardTypography.searchField
 		queryLabel.translatesAutoresizingMaskIntoConstraints = false
 		queryLabel.setContentHuggingPriority(.required, for: .horizontal)
 		queryLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -101,7 +101,7 @@ final class EmojiSearchHeader: UIView, UICollectionViewDataSource, UICollectionV
 		resultsCollection.translatesAutoresizingMaskIntoConstraints = false
 		addSubview(resultsCollection)
 
-		statusLabel.font = .systemFont(ofSize: 14, weight: .medium)
+		statusLabel.font = KeyboardTypography.status
 		statusLabel.textColor = theme.specialKeyText.withAlphaComponent(0.5)
 		statusLabel.translatesAutoresizingMaskIntoConstraints = false
 		addSubview(statusLabel)

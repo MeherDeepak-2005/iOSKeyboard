@@ -103,6 +103,18 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSArray<KBChannelCandidate *> *)candidatesWithMaxCost:(double)maxCost error:(NSError **)error;
 @end
 
+// The decoders' letter grid (native SpatialModel). The app installs its layout pack's grid
+// once, before decoding; the built-in grid is QWERTY.
+@interface KBKeyGrid : NSObject
+// rows: distinct lowercase ASCII letters, all 26; offsets: one per row, in key widths.
+// Returns NO, keeping the current grid, for anything else.
++ (BOOL)installRows:(NSArray<NSString *> *)rows offsets:(NSArray<NSNumber *> *)offsets;
+// The installed grid's letters, row by row ("qwertyuiopasdfghjklzxcvbnm").
++ (NSString *)letters;
+// Column (with the row offset) and row of a letter; NO for a letter off the grid.
++ (BOOL)position:(uint8_t)letter x:(double *)x y:(double *)y;
+@end
+
 #if DEBUG || KB_REFERENCE_DECODER_YES
 @interface KBSpatialAudit : NSObject
 // Batched audit seam; no per-key Swift callback. Byte keys, Double dx/dy, byte flags.
@@ -400,10 +412,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, readonly) NSUInteger byteCount;
 @end
 @interface KBSharedEngine : NSObject
-- (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model
+// Nil when the engine cannot be built (no dictionary, or a corrupt one); the reason is logged.
+- (nullable instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model
     policy:(NSArray<NSNumber *> *)policy safety:(nullable KBNativeSafetyLexicon *)safety profile:(BOOL)profile;
 // With `neural`, requests whose model tier is "nss" decode in the neural search space.
-- (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model
+- (nullable instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model
     neural:(nullable KBNeuralWordModel *)neural policy:(NSArray<NSNumber *> *)policy
     safety:(nullable KBNativeSafetyLexicon *)safety profile:(BOOL)profile;
 @property(nonatomic, readonly) BOOL supportsNeuralSearchSpace;

@@ -22,9 +22,7 @@ extension KeyboardViewController {
 
 		suggestionsVisible = true
 		keyboard?.setShowsSuggestions(true)
-		if let h = heightConstraint, let kb = keyboard, h.constant != kb.keyboardHeight {
-			h.constant = kb.keyboardHeight
-		}
+		if let kb = keyboard { applyKeyboardHeight(kb.keyboardHeight) }
 	}
 
 	func updateActionKey() {

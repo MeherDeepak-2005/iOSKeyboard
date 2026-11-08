@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "format": "latin-layout",
+  "identifier": "en-US.qwerty",
+  "version": 1,
+  "locale": "en-US",
+  "normalization": "NFC",
+  "source": {
+    "name": "Apple iOS English (US) QWERTY keyboard",
+    "note": "Key order, pages, long-press variants and per-field keys match the stock iOS English keyboard."
+  },
+  "letterGrid": {
+    "comment": "Visual centre of each letter row's first key, in key pitches from Q. The keyboard centres the nine-key home row by half a pitch, and shift puts Z one and a half pitches in. Tap scoring and Glide decoding read this grid; a layout change without it is a systematic input error.",
+    "rowOffsets": [0.0, 0.5, 1.5]
+  },
+  "pages": [
+    {
+      "id": "letters",
+      "rows": [
+        ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+        ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
+        [{"control": "shift"}, "z", "x", "c", "v", "b", "n", "m", {"control": "delete"}]
+      ],
+      "bottomRow": [
+        {"control": "page", "target": "numbers", "label": "123"},
+        {"control": "globe"},
+        {"control": "emoji"},
+        {"control": "fieldExtras"},
+        {"control": "space"},
+        {"control": "return"}
+      ]
+    },
+    {
+      "id": "numbers",
+      "rows": [
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+        ["-", "/", ":", ";", "(", ")", {"control": "currency"}, "&", "@", "\""],
+        [
+          {"control": "page", "target": "symbols", "label": "#+=", "width": "modifier"},
+          {"key": ".", "width": "flex"},
+          {"key": ",", "width": "flex"},
+          {"key": "?", "width": "flex"},
+          {"key": "!", "width": "flex"},
+          {"key": "'", "width": "flex"},
+          {"control": "delete"}
+        ]
+      ],
+      "bottomRow": [
+        {"control": "page", "target": "letters", "label": "ABC"},
+        {"control": "globe"},
+        {"control": "emoji"},
+        {"control": "space"},
+        {"control": "return"}
+      ]
+    },
+    {
+      "id": "symbols",
+      "rows": [
+        ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="],
+        ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•"],
+        [
+          {"control": "page", "target": "numbers", "label": "123", "width": "modifier"},
+          {"key": ".", "width": "flex"},
+          {"key": ",", "width": "flex"},
+          {"key": "?", "width": "flex"},
+          {"key": "!", "width": "flex"},
+          {"key": "'", "width": "flex"},
+          {"control": "delete"}
+        ]
+      ],
+      "bottomRow": [
+        {"control": "page", "target": "letters", "label": "ABC"},
+        {"control": "globe"},
+        {"control": "emoji"},
+        {"control": "space"},
+        {"control": "return"}
+      ]
+    },
+    {
+      "id": "numberPad",
+      "longPressVariants": false,
+      "rows": [
+        [{"key": "1", "width": "flex"}, {"key": "2", "width": "flex"}, {"key": "3", "width": "flex"}],
+        [{"key": "4", "width": "flex"}, {"key": "5", "width": "flex"}, {"key": "6", "width": "flex"}],
+        [{"key": "7", "width": "flex"}, {"key": "8", "width": "flex"}, {"key": "9", "width": "flex"}],
+        [
+          {"control": "page", "target": "letters", "label": "ABC"},
+          {"control": "padAuxiliary"},
+          {"key": "0", "width": "flex"},
+          {"control": "delete"},
+          {"control": "return"}
+        ]
+      ]
+    }
+  ],
+  "fieldExtras": {
+    "email": ["@", "."],
+    "url": ["/", "."],
+    "webSearch": ["."],
+    "twitter": ["@", "#"]
+  },
+  "alternatives": {
+    "a": ["á", "à", "â", "ä", "ã", "å", "æ"],
+    "c": ["ç", "ć", "č"],
+    "e": ["é", "è", "ê", "ë"],
+    "i": ["í", "ì", "î", "ï"],
+    "n": ["ñ", "ń"],
+    "o": ["ó", "ò", "ô", "ö", "õ", "ø", "œ"],
+    "s": ["ß", "ś", "š"],
+    "u": ["ú", "ù", "û", "ü"],
+    "y": ["ý", "ÿ"],
+    "z": ["ž", "ź"],
+    ".": ["…"],
+    "?": ["¿"],
+    "!": ["¡"],
+    "-": ["–", "—"],
+    "'": ["’", "‘", "\""],
+    "\"": ["“", "”", "'"],
+    "/": ["\\"]
+  }
+}

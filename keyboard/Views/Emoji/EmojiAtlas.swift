@@ -19,10 +19,19 @@ import Darwin
 // grid falls back to live text rendering until the app regenerates.
 final class EmojiAtlas {
 	/// Logical tile side in points (matches the grid's glyph box); pixels = pt × scale.
-	nonisolated static let pointSize: CGFloat = 36
-	/// Glyph font inside a tile: 28 pt at display size — identical to the UILabel path
-	/// it replaces, so atlas cells and text-fallback cells look the same.
+	/// 47 pt (was 36) draws browse-grid emoji ~30% larger; the new size changes the file
+	/// name, so the app regenerates the atlas and old tiles are never mapped.
+	nonisolated static let pointSize: CGFloat = 47
+	/// Glyph font inside a tile: 36.5 pt at display size — the same as `glyphFontSize`,
+	/// so atlas cells and text-fallback cells look the same.
 	private nonisolated static let glyphFraction: CGFloat = 28.0 / 36.0
+	nonisolated static let glyphFontSize: CGFloat = pointSize * glyphFraction
+	/// Browse-grid column pitch: the grid fits as many cells of at least this width as
+	/// the row allows (6 on a 393 pt phone).
+	nonisolated static let cellPitch: CGFloat = 60
+	/// The search results strip keeps the old, compact size (44 pt cells).
+	nonisolated static let compactPointSize: CGFloat = 36
+	nonisolated static let compactGlyphFontSize: CGFloat = 28
 
 	let count: Int
 	private let tilePx: Int

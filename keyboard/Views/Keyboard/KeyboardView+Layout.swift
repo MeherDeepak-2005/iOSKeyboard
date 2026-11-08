@@ -13,7 +13,7 @@ extension KeyboardView {
 			lastLayoutWidth = bounds.width
 			DispatchQueue.main.async { [weak self] in
 				guard let self else { return }
-				self.onHeightChange?()
+				self.onHeightChange?(false)
 				if wasResolved { self.onGeometryChange?() }
 			}
 		}

@@ -62,10 +62,6 @@ enum KBMediaCache {
 		return task
 	}
 
-	static func purge() {
-		ioQueue.async { try? FileManager.default.removeItem(at: directory) }
-	}
-
 	private static func fileSize(_ url: URL) -> Int? {
 		(try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize
 	}

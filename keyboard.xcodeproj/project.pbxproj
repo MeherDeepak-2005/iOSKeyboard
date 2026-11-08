@@ -146,6 +146,7 @@
 				"Engine/Vocabulary/LangData+NodeWalk.swift",
 				"Engine/Vocabulary/LangData+PackedTrie.swift",
 				Engine/Vocabulary/ModifiedKneserNeyModel.swift,
+				english_layout.kbpack,
 				langdata.bin,
 				safety.kbguard,
 				Shared/HostDocumentReconciler.swift,
@@ -184,7 +185,9 @@
 				"Views/Keyboard/KeyboardView+Touch.swift",
 				Views/KeyboardLayout.swift,
 				Views/KeyboardTheme.swift,
+				Views/KeyboardTypography.swift,
 				Views/KeyButton.swift,
+				Views/LatinLayoutPack.swift,
 				Views/MediaPanel.swift,
 				Views/SuggestionBar.swift,
 			);

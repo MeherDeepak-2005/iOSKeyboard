@@ -2,10 +2,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
+#include <string_view>
 #include "Tuning.hpp"
 namespace kb {
 struct TouchOffset { double dx, dy; };
-struct GridPoint { double x, y; };
+struct GridPoint { double x, y; bool operator==(const GridPoint&) const = default; };
 inline constexpr std::uint8_t apostrophe = '\'';
 // Fitted on the tune half of tools/evaluation/autocorrect (tune.py, 27 Oct 2026; doubled letters
 // and vowels 28 Oct with the Wikipedia misspelling list's tune half); the Swift
@@ -65,7 +67,16 @@ inline double deletionCostAt(std::uint8_t letter, std::uint8_t previous, std::ui
 inline double insertionCostAt(std::uint8_t typedLetter, std::uint8_t previous, std::uint8_t candidateLetter) noexcept {
     return typedLetter == previous && typedLetter == candidateLetter ? doubledInsertionCost : insertionCost;
 }
+// Key centres in key widths: column + the row's offset, row. The built-in grid is QWERTY
+// (rows offset 0, 0.5, 1.5), for native tests and tools; the app installs the grid from its
+// layout pack (tools/language_packs/sources/en-US/qwerty.json) before decoding.
 std::optional<GridPoint> grid(std::uint8_t letter) noexcept;
+// The grid's letters, row by row.
+std::string_view gridLetters() noexcept;
+// Replaces the grid: one string of distinct lowercase ASCII letters per row, one offset per
+// row, all 26 letters. Returns false (and keeps the current grid) for anything else. Install
+// before decoding starts: a decode running across an install may mix the two grids.
+bool installGrid(std::span<const std::string_view> rows, std::span<const double> offsets) noexcept;
 // typedFirst: the typed letter is the word's first, where vowel for vowel costs
 // firstVowelSubstitutionCost instead. A finite tap is scored as touchSubstitutionCost at
 // touchSigma; with touchSigma 0, or a non-finite tap, from the intended key's centre.

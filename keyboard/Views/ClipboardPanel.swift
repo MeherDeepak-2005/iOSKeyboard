@@ -42,7 +42,7 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		table.sectionHeaderTopPadding = 4
 		addSubview(table)
 
-		emptyLabel.font = .systemFont(ofSize: 14, weight: .medium)
+		emptyLabel.font = KeyboardTypography.status
 		emptyLabel.textColor = theme.specialKeyText.withAlphaComponent(0.55)
 		emptyLabel.textAlignment = .center
 		emptyLabel.numberOfLines = 3
@@ -51,7 +51,7 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
         pasteCurrentButton.setTitle("Paste current clipboard", for: .normal)
         pasteCurrentButton.setImage(UIImage(systemName: "doc.on.clipboard"), for: .normal)
         pasteCurrentButton.tintColor = theme.keyText
-        pasteCurrentButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
+        pasteCurrentButton.titleLabel?.font = KeyboardTypography.panelAction
         pasteCurrentButton.accessibilityIdentifier = "clipboard.pasteCurrent"
         pasteCurrentButton.isEnabled = hasFullAccess
         pasteCurrentButton.addAction(UIAction { [weak self] _ in
@@ -74,8 +74,10 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 								 width: bounds.width, height: barHeight)
 	}
 
-	private func reload() {
-		let items = hasFullAccess ? (injectedItems ?? KBClipboard.all()) : []
+	/// `current`: the list a delete or pin just wrote, so the panel shows it without decoding
+	/// the whole file again (up to 60 items of 10,000 characters).
+	private func reload(_ current: [KBClipboardItem]? = nil) {
+		let items = hasFullAccess ? (current ?? injectedItems ?? KBClipboard.all()) : []
 		pinnedItems = items.filter(\.pinned)
 		recentItems = items.filter { !$0.pinned }
 		if items.isEmpty {
@@ -95,10 +97,25 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 	/// whitespace-padded copy (an address, a code block, formatted text) shows as one
 	/// clean line instead of ragged wrapped rows. Insertion still uses the RAW text —
 	/// only the row label is normalized.
-	nonisolated static func displayText(_ text: String) -> String {
-		text.components(separatedBy: .whitespacesAndNewlines)
-			.filter { !$0.isEmpty }
-			.joined(separator: " ")
+	///
+	/// A row shows two lines, and an item can be 10,000 characters, so this stops at the
+	/// first word boundary past `limit` scalars: exactly the start of the fully collapsed
+	/// text, without splitting the rest into words that are never drawn.
+	nonisolated static func displayText(_ text: String, limit: Int = 400) -> String {
+		let separators = CharacterSet.whitespacesAndNewlines
+		var out = String.UnicodeScalarView()
+		var length = 0, pendingSpace = false
+		for scalar in text.unicodeScalars {
+			if separators.contains(scalar) {
+				if length >= limit { break }
+				pendingSpace = length > 0
+				continue
+			}
+			if pendingSpace { out.append(" "); length += 1; pendingSpace = false }
+			out.append(scalar); length += 1
+			if length >= limit * 4 { break }   // one enormous word, far past two lines
+		}
+		return String(out)
 	}
 
 	private func items(in section: Int) -> [KBClipboardItem] {
@@ -115,8 +132,9 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		let cell = tv.dequeueReusableCell(withIdentifier: "c", for: ip)
 		let item = items(in: ip.section)[ip.row]
 		var cfg = cell.defaultContentConfiguration()
-		cfg.text = Self.displayText(item.text)
-		cfg.textProperties.font = .systemFont(ofSize: 15)
+		let shown = Self.displayText(item.text)
+		cfg.text = shown
+		cfg.textProperties.font = KeyboardTypography.listItem
 		cfg.textProperties.color = theme.keyText
 		cfg.textProperties.numberOfLines = 2
 		cfg.textProperties.lineBreakMode = .byTruncatingTail
@@ -124,7 +142,8 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		cell.backgroundColor = theme.isDark ? UIColor(white: 1, alpha: 0.08) : UIColor(white: 1, alpha: 0.65)
 		cell.selectionStyle = .none
 		cell.isAccessibilityElement = true
-		cell.accessibilityLabel = (item.pinned ? "Pinned clipboard item. " : "Clipboard item. ") + item.text
+		// The shown text, not all 10,000 characters: VoiceOver reads the whole label on focus.
+		cell.accessibilityLabel = (item.pinned ? "Pinned clipboard item. " : "Clipboard item. ") + shown
 		cell.accessibilityHint = "Inserts this text"
 		// Per-row delete: a VISIBLE affordance on every clip. Swipe-to-delete alone was
 		// undiscoverable, and one global "clear" is the wrong granularity — each item
@@ -133,8 +152,7 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 			tint: theme.keyText.withAlphaComponent(0.35), accessibilityLabel: "Delete clipboard item") {
 			[weak self] in
 			guard let self else { return }
-			if injectedItems == nil { KBClipboard.remove(item.text) }
-			reload()
+			reload(injectedItems == nil ? KBClipboard.remove(item.text) : nil)
 		}
 		return cell
 	}
@@ -161,8 +179,8 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		-> UISwipeActionsConfiguration? {
 		let item = items(in: ip.section)[ip.row]
 		let pin = UIContextualAction(style: .normal, title: item.pinned ? "Unpin" : "Pin") { [weak self] _, _, done in
-			if self?.injectedItems == nil { KBClipboard.togglePin(item.text) }
-			self?.reload()
+			guard let self else { done(false); return }
+			reload(injectedItems == nil ? KBClipboard.togglePin(item.text) : nil)
 			done(true)
 		}
 		pin.backgroundColor = .systemOrange
@@ -178,7 +196,7 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 
 		let title = UILabel()
 		title.text = "Clipboard"
-		title.font = .systemFont(ofSize: 14, weight: .semibold)
+		title.font = KeyboardTypography.panelTitle
 		title.textColor = theme.specialKeyText.withAlphaComponent(0.7)
 		title.textAlignment = .center
 
@@ -214,7 +232,7 @@ final class ClipboardPanelView: UIView, UITableViewDataSource, UITableViewDelega
 		let b = UIButton(type: .system)
 		if let title {
 			b.setTitle(title, for: .normal)
-			b.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
+			b.titleLabel?.font = KeyboardTypography.panelButton
 		}
 		if let symbol {
 			b.setImage(UIImage(systemName: symbol,

@@ -33,7 +33,8 @@ enum KBClipboard {
 	/// secret does not sit in the shared container indefinitely.
 	static let retentionInterval: TimeInterval = 3600
 
-	private static var store: UserDefaults { UserDefaults(suiteName: KBSettings.appGroup) ?? .standard }
+	/// The one App Group defaults object (KBSettings explains why it is never recreated).
+	private static var store: UserDefaults { KBSettings.sharedDefaults }
 
 	/// `override` is for tests; production uses the App Group container.
 	static func fileURL(_ override: URL? = nil) -> URL {
@@ -90,19 +91,27 @@ enum KBClipboard {
 		return true
 	}
 
-	static func togglePin(_ text: String, at url: URL? = nil) {
+	/// Returns the history as stored afterwards (unchanged when the pin limit is reached), so a
+	/// caller showing it need not decode the file again.
+	@discardableResult
+	static func togglePin(_ text: String, at url: URL? = nil) -> [KBClipboardItem] {
 		var items = all(at: url)
-		guard let i = items.firstIndex(where: { $0.text == text }) else { return }
-		if !items[i].pinned, items.filter(\.pinned).count >= maxPins { return }
+		guard let i = items.firstIndex(where: { $0.text == text }) else { return items }
+		if !items[i].pinned, items.filter(\.pinned).count >= maxPins { return items }
 		items[i].pinned.toggle()
 		// A freshly pinned item restarts its clock at pin time; unpinning lets it age
 		// from now, not from an original copy that may already be past the window.
 		items[i].date = Date()
 		save(items, at: url)
+		return items
 	}
 
-	static func remove(_ text: String, at url: URL? = nil) {
-		save(all(at: url).filter { $0.text != text }, at: url)
+	/// Returns the history as stored afterwards.
+	@discardableResult
+	static func remove(_ text: String, at url: URL? = nil) -> [KBClipboardItem] {
+		let items = all(at: url).filter { $0.text != text }
+		save(items, at: url)
+		return items
 	}
 
 	// MARK: Sensitive-content filter

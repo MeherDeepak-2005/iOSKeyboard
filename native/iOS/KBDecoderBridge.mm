@@ -1,10 +1,15 @@
 #import "KBDecoderBridge.h"
+#import <os/log.h>
 #include "../DecoderCore/include/PackedLexicon.hpp"
 #include "../DecoderCore/include/IncrementalSearch.hpp"
 #include "../DecoderCore/include/CandidateGeneration.hpp"
 #include "../DecoderCore/include/Engine.hpp"
 #include "../DecoderCore/include/Personalization.hpp"
 #include "../DecoderCore/include/Safety.hpp"
+#include "../DecoderCore/include/SpatialModel.hpp"
+#include <string>
+#include <string_view>
+#include <vector>
 #include <memory>
 #include <cmath>
 #include <stdexcept>
@@ -30,6 +35,31 @@ static std::vector<std::optional<kb::TouchOffset>> KBTaps(NSData *, NSData *, st
 static void KBSetError(NSError **error, const std::exception& failure) {
     if (error) *error = [NSError errorWithDomain:@"KBDecoderCore" code:1
         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithUTF8String:failure.what()] ?: @"Native read failed"}];
+}
+
+// The two string crossings every bridge call makes. They are total functions on purpose:
+// a C++ exception thrown here would unwind through Swift frames and terminate the keyboard.
+//
+// NSString -> UTF-8 in one allocation and one pass (-dataUsingEncoding: made an autoreleased
+// NSData copy, then std::string copied it again). Swift strings are always valid UTF-16, so
+// the lossy option only matters for an unpaired surrogate from Foundation, which becomes '?'.
+// The engine validates the UTF-8 of every decode request itself.
+static std::string KBText(NSString *text) {
+    const NSUInteger length = text.length;
+    if (!length) return {};
+    std::string out([text maximumLengthOfBytesUsingEncoding:NSUTF8StringEncoding], '\0');
+    NSUInteger used = 0;
+    [text getBytes:out.data() maxLength:out.size() usedLength:&used encoding:NSUTF8StringEncoding
+           options:NSStringEncodingConversionAllowLossy range:NSMakeRange(0, length) remainingRange:nullptr];
+    out.resize(used);
+    return out;
+}
+// UTF-8 -> NSString, never nil (a nil element raises in NSArray, and the properties that
+// carry these strings are nonnull in Swift). Engine output is lexicon text or validated
+// input, so the Latin-1 fallback, which maps every byte, is unreachable in practice.
+static NSString *KBString(std::string_view text) {
+    return [[NSString alloc] initWithBytes:text.data() length:text.size() encoding:NSUTF8StringEncoding]
+        ?: [[NSString alloc] initWithBytes:text.data() length:text.size() encoding:NSISOLatin1StringEncoding];
 }
 #if DEBUG || KB_REFERENCE_DECODER_YES
 @interface KBNgramRead ()
@@ -84,16 +114,16 @@ static void KBSetError(NSError **error, const std::exception& failure) {
 - (NSDictionary<NSString *, NSNumber *> *)residualPenaltiesFromSafety:(KBNativeSafetyLexicon *)safety {
     NSMutableDictionary<NSString *, NSNumber *> *out = [NSMutableDictionary dictionary];
     for (const auto& [term, penalty] : [safety nativeLexicon]->penalties())
-        if (std::isfinite(penalty) && _reader->wordID(term)) out[[[NSString alloc] initWithBytes:term.data() length:term.size() encoding:NSUTF8StringEncoding]] = @(penalty);
+        if (std::isfinite(penalty) && _reader->wordID(term)) out[KBString(term)] = @(penalty);
     return out;
 }
 - (NSArray<NSString *> *)anchorWordsWithFirst:(NSData *)first last:(NSData *)last perBucket:(NSUInteger)cap {
     auto words = _reader->anchorWords({static_cast<const std::uint8_t *>(first.bytes), first.length}, {static_cast<const std::uint8_t *>(last.bytes), last.length}, cap);
-    NSMutableArray *out = [NSMutableArray array]; for (const auto& word : words) [out addObject:[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]]; return out;
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:words.size()]; for (const auto& word : words) [out addObject:KBString(word)]; return out;
 }
 - (NSArray<KBChannelCandidate *> *)completionsForPrefix:(NSString *)prefix limit:(NSUInteger)limit {
-    NSData *data = [prefix dataUsingEncoding:NSUTF8StringEncoding]; auto rows = _reader->completions({static_cast<const char *>(data.bytes), data.length}, limit);
-    NSMutableArray *out = [NSMutableArray array]; for (const auto& row : rows) [out addObject:[[KBChannelCandidate alloc] initWithCandidate:row]]; return out;
+    auto rows = _reader->completions(KBText(prefix), limit);
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:rows.size()]; for (const auto& row : rows) [out addObject:[[KBChannelCandidate alloc] initWithCandidate:row]]; return out;
 }
 - (const void *)backingAddress { return _reader->backingAddress(); }
 - (const kb::PackedLexicon *)nativeLexicon { return _reader.get(); }
@@ -144,24 +174,19 @@ static void KBSetError(NSError **error, const std::exception& failure) {
     fundedWords:(NSArray<NSString *> *)words fundedBonuses:(NSArray<NSNumber *> *)bonuses
     shouldCancel:(BOOL (^)(void))cancel error:(NSError **)error {
     try {
-        NSData *utf8 = [word dataUsingEncoding:NSUTF8StringEncoding];
-        if (!utf8) throw std::invalid_argument("invalid search UTF-8");
-        auto taps = KBTaps(offsets, validity, utf8.length);
+        const auto text = KBText(word);
+        auto taps = KBTaps(offsets, validity, text.size());
         if ((words == nil) != (bonuses == nil) || words.count != bonuses.count)
             throw std::invalid_argument("invalid search funding shape");
         std::vector<kb::WordFunding> funding;
-        for (NSUInteger index = 0; index < words.count; ++index) {
-            NSData *label = [words[index] dataUsingEncoding:NSUTF8StringEncoding];
-            if (!label) throw std::invalid_argument("invalid funding UTF-8");
-            funding.push_back({std::string(static_cast<const char *>(label.bytes) ?: "", label.length),
-                               bonuses[index].doubleValue});
-        }
+        funding.reserve(words.count);
+        for (NSUInteger index = 0; index < words.count; ++index)
+            funding.push_back({KBText(words[index]), bonuses[index].doubleValue});
         std::optional<std::span<const kb::WordFunding>> view;
         if (words != nil) view = funding;
         std::function<bool()> cancellation;
         if (cancel) cancellation = [cancel] { return bool(cancel()); };
-        auto candidates = _reader->search(std::string_view(static_cast<const char *>(utf8.bytes) ?: "", utf8.length),
-                                         cost, taps, view, cancellation);
+        auto candidates = _reader->search(text, cost, taps, view, cancellation);
         NSMutableArray *out = [NSMutableArray arrayWithCapacity:candidates.size()];
         for (const auto& candidate : candidates) [out addObject:[[KBChannelCandidate alloc] initWithCandidate:candidate]];
         return [out copy];
@@ -207,10 +232,7 @@ static void KBSetError(NSError **error, const std::exception& failure) {
             double count = counts[index].doubleValue;
             if (!std::isfinite(count) || count < 0 || count > UINT32_MAX || std::floor(count) != count)
                 throw std::invalid_argument("invalid personalization boost count");
-            NSData *utf8 = [words[index] dataUsingEncoding:NSUTF8StringEncoding];
-            if (!utf8) throw std::invalid_argument("invalid boost UTF-8");
-            boosts.push_back({std::string(static_cast<const char *>(utf8.bytes) ?: "", utf8.length),
-                             static_cast<std::uint32_t>(count)});
+            boosts.push_back({KBText(words[index]), static_cast<std::uint32_t>(count)});
         }
         auto seeds = _reader->incrementalSeeds(first,
             hasTap ? std::optional{kb::TouchOffset{dx, dy}} : std::nullopt, cap, boosts, second, maxCost);
@@ -239,13 +261,11 @@ static void KBSetError(NSError **error, const std::exception& failure) {
 
 @implementation KBChannelCandidate
 + (instancetype)candidateWithWord:(NSString *)word cost:(double)cost logFrequency:(double)frequency {
-    NSData *bytes = [word dataUsingEncoding:NSUTF8StringEncoding];
-    return [[self alloc] initWithCandidate:{std::string(static_cast<const char *>(bytes.bytes), bytes.length), cost, frequency}];
+    return [[self alloc] initWithCandidate:{KBText(word), cost, frequency}];
 }
 - (instancetype)initWithCandidate:(const kb::ChannelCandidate&)candidate {
     if ((self = [super init])) {
-        _word = [[NSString alloc] initWithBytes:candidate.word.data() length:candidate.word.size() encoding:NSUTF8StringEncoding];
-        if (!_word) throw std::invalid_argument("invalid UTF-8 candidate label");
+        _word = KBString(candidate.word);
         _cost = candidate.cost; _logFrequency = candidate.logFrequency;
     }
     return self;
@@ -298,12 +318,8 @@ static std::vector<std::optional<kb::TouchOffset>> KBTaps(NSData *offsets, NSDat
             std::vector<kb::LexiconSeed> seeds;
             seeds.reserve(words.count);
             for (NSUInteger i = 0; i < words.count; ++i) {
-                NSData *label = [words[i] dataUsingEncoding:NSUTF8StringEncoding];
-                if (!label) throw std::invalid_argument("invalid UTF-8 seed label");
-                const char *labelBytes = static_cast<const char *>(label.bytes);
                 const char *spellingBytes = static_cast<const char *>(spellings[i].bytes);
-                seeds.push_back({std::string(labelBytes ?: "", label.length),
-                    std::string(spellingBytes ?: "", spellings[i].length), frequencies[i].doubleValue});
+                seeds.push_back({KBText(words[i]), std::string(spellingBytes ?: "", spellings[i].length), frequencies[i].doubleValue});
             }
             _search = std::make_unique<kb::IncrementalSearch>(std::move(seeds));
         } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
@@ -311,22 +327,45 @@ static std::vector<std::optional<kb::TouchOffset>> KBTaps(NSData *offsets, NSDat
     return self;
 }
 - (NSUInteger)seedCount { return _search->seedCount(); }
-- (NSString *)typed { return [NSString stringWithUTF8String:_search->typed().c_str()]; }
+- (NSString *)typed { return KBString(_search->typed()); }
 - (BOOL)advanceNormalizedWord:(NSString *)word tapOffsets:(NSData *)offsets tapValidity:(NSData *)validity error:(NSError **)error {
     try {
-        NSData *utf8 = [word dataUsingEncoding:NSUTF8StringEncoding];
-        if (!utf8) throw std::invalid_argument("invalid UTF-8 input");
-        auto taps = KBTaps(offsets, validity, utf8.length);
-        return _search->advanceNormalized(std::string_view(static_cast<const char *>(utf8.bytes) ?: "", utf8.length), taps);
+        const auto text = KBText(word);
+        return _search->advanceNormalized(text, KBTaps(offsets, validity, text.size()));
     } catch (const std::exception& failure) { KBSetError(error, failure); return NO; }
 }
 - (NSArray<KBChannelCandidate *> *)candidatesWithMaxCost:(double)maxCost error:(NSError **)error {
     try {
-        NSMutableArray *out = [NSMutableArray array];
-        for (const auto& candidate : _search->candidates(maxCost))
-            [out addObject:[[KBChannelCandidate alloc] initWithCandidate:candidate]];
-        return [out copy];
+        const auto candidates = _search->candidates(maxCost);
+        NSMutableArray *out = [NSMutableArray arrayWithCapacity:candidates.size()];
+        for (const auto& candidate : candidates) [out addObject:[[KBChannelCandidate alloc] initWithCandidate:candidate]];
+        return out;
     } catch (const std::exception& failure) { KBSetError(error, failure); return nil; }
+}
+@end
+
+@implementation KBKeyGrid
++ (BOOL)installRows:(NSArray<NSString *> *)rows offsets:(NSArray<NSNumber *> *)offsets {
+    std::vector<std::string> storage; std::vector<std::string_view> views; std::vector<double> values;
+    for (NSString *row in rows) {
+        const char *utf8 = row.UTF8String;
+        if (!utf8) return NO;
+        storage.emplace_back(utf8);
+    }
+    for (const auto& row : storage) views.emplace_back(row);
+    for (NSNumber *offset in offsets) values.push_back(offset.doubleValue);
+    return kb::installGrid(views, values);
+}
++ (NSString *)letters {
+    const auto letters = kb::gridLetters();
+    return [[NSString alloc] initWithBytes:letters.data() length:letters.size() encoding:NSASCIIStringEncoding];
+}
++ (BOOL)position:(uint8_t)letter x:(double *)x y:(double *)y {
+    const auto point = kb::grid(letter);
+    if (!point) return NO;
+    if (x) *x = point->x;
+    if (y) *y = point->y;
+    return YES;
 }
 @end
 
@@ -375,11 +414,6 @@ static std::vector<std::optional<kb::TouchOffset>> KBTaps(NSData *offsets, NSDat
 }
 @end
 
-static std::string KBText(NSString *word) {
-    NSData *bytes = [word dataUsingEncoding:NSUTF8StringEncoding];
-    if (!bytes) throw std::invalid_argument("invalid UTF-8 input");
-    return std::string(static_cast<const char *>(bytes.bytes), bytes.length);
-}
 static NSArray<KBChannelCandidate *> *KBCandidates(const std::vector<kb::ChannelCandidate>& values) {
     NSMutableArray *out = [NSMutableArray arrayWithCapacity:values.size()];
     for (const auto& value : values) [out addObject:[[KBChannelCandidate alloc] initWithCandidate:value]];
@@ -492,7 +526,7 @@ static std::optional<std::vector<kb::WordFunding>> KBFunding(NSArray<NSString *>
 - (kb::GenerationLexicon)nativeLexicon {
     return {[_packed nativeLexicon], _base.get(), _supplementary.get(), _personal.get(), [_snapshot nativeSnapshot]};
 }
-- (BOOL)containsWord:(NSString *)word { auto view=[self nativeLexicon];return view.contains(word.UTF8String ?: ""); }
+- (BOOL)containsWord:(NSString *)word { return [self nativeLexicon].contains(KBText(word)); }
 @end
 @implementation KBCandidateGenerator
 + (NSArray<NSNumber *> *)rankFundingBonusesWithCount:(NSUInteger)count {
@@ -575,8 +609,8 @@ static kb::CountRows KBCountRows(NSArray<NSString *> *words, NSArray<NSNumber *>
 @implementation KBSuccessorCounts
 - (instancetype)initWithRows:(const kb::CountRows&)rows {
     if ((self = [super init])) {
-        NSMutableArray *words = [NSMutableArray array], *counts = [NSMutableArray array];
-        for (const auto& [word, count] : rows) { [words addObject:[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]]; [counts addObject:@(count)]; }
+        NSMutableArray *words = [NSMutableArray arrayWithCapacity:rows.size()], *counts = [NSMutableArray arrayWithCapacity:rows.size()];
+        for (const auto& [word, count] : rows) { [words addObject:KBString(word)]; [counts addObject:@(count)]; }
         _words = words; _counts = counts;
     }
     return self;
@@ -625,8 +659,8 @@ static kb::CountRows KBCountRows(NSArray<NSString *> *words, NSArray<NSNumber *>
 + (NSArray<NSString *> *)nextWordsWithTrigramWords:(NSArray<NSString *> *)triWords counts:(NSArray<NSNumber *> *)triCounts
     bigramWords:(NSArray<NSString *> *)biWords counts:(NSArray<NSNumber *> *)biCounts limit:(NSUInteger)limit {
     auto values = kb::LanguageModel::nextWords(KBCountRows(triWords, triCounts), KBCountRows(biWords, biCounts), limit);
-    NSMutableArray *out = [NSMutableArray array];
-    for (const auto& word : values) [out addObject:[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]];
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:values.size()];
+    for (const auto& word : values) [out addObject:KBString(word)];
     return out;
 }
 @end
@@ -642,7 +676,7 @@ static kb::RankedRow KBRankedRow(KBScoredRow *row) {
 @implementation KBScoredRow
 - (instancetype)initWithRanked:(const kb::RankedRow&)row {
     if ((self = [super init])) {
-        _word = [[NSString alloc] initWithBytes:row.channel.word.data() length:row.channel.word.size() encoding:NSUTF8StringEncoding];
+        _word = KBString(row.channel.word);
         _cost = row.channel.cost; _logFrequency = row.channel.logFrequency;
         _language = row.language; _neural = row.neural ? @(*row.neural) : nil; _score = row.score;
     } return self;
@@ -672,12 +706,14 @@ static kb::CorrectionKind KBKind(NSString *kind) {
 @implementation KBCorrectionResult
 - (instancetype)initWithCorrection:(const kb::CorrectionResult&)result {
     if ((self = [super init])) {
-        if (result.word) _word = [[NSString alloc] initWithBytes:result.word->data() length:result.word->size() encoding:NSUTF8StringEncoding];
+        // Indexed by kb::CorrectionKind. Constant strings: no array is built per result.
+        static NSString *const kinds[] = {@"realWord", @"close", @"loose", @"severe"};
+        if (result.word) _word = KBString(*result.word);
         _margin = result.margin; _threshold = result.threshold;
         if (result.gate) {
             const auto& gate = *result.gate;
-            _kind = @[@"realWord", @"close", @"loose", @"severe"][static_cast<NSUInteger>(gate.kind)];
-            _candidate = [[NSString alloc] initWithBytes:gate.candidate.data() length:gate.candidate.size() encoding:NSUTF8StringEncoding];
+            _kind = kinds[static_cast<std::size_t>(gate.kind)];
+            _candidate = KBString(gate.candidate);
             _cost = gate.cost; _gap = gate.gap ? @(*gate.gap) : nil; _allowsCloseRescue = gate.allowsCloseRescue;
         }
     } return self;
@@ -1069,11 +1105,15 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
 @implementation KBEngineResult
 - (instancetype)initWithOutput:(const kb::DecodeOutput&)output {
     if ((self = [super init])) {
-        NSMutableArray *suggestions = [NSMutableArray array], *rows = [NSMutableArray array], *sources = [NSMutableArray array];
-        for (const auto& word : output.suggestions) [suggestions addObject:[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]];
+        // Indexed by kb::CandidateSource; the raw values of Swift's DecodeCandidateSource.
+        static NSString *const sourceNames[] = {@"typed", @"fuzzyLexicon", @"completion", @"contextInjection", @"broadRecovery", @"splitCorrection"};
+        NSMutableArray *suggestions = [NSMutableArray arrayWithCapacity:output.suggestions.size()];
+        NSMutableArray *rows = [NSMutableArray arrayWithCapacity:output.candidates.size()];
+        NSMutableArray *sources = [NSMutableArray arrayWithCapacity:output.candidates.size()];
+        for (const auto& word : output.suggestions) [suggestions addObject:KBString(word)];
         for (const auto& row : output.candidates) {
             [rows addObject:[[KBScoredRow alloc] initWithRanked:row.ranked]];
-            [sources addObject:@[@"typed", @"fuzzyLexicon", @"completion", @"contextInjection", @"broadRecovery", @"splitCorrection"][static_cast<NSUInteger>(row.source)]];
+            [sources addObject:sourceNames[static_cast<std::size_t>(row.source)]];
         }
         _suggestions = suggestions; _rows = rows; _sources = sources;
         _correction = [[KBCorrectionResult alloc] initWithCorrection:output.correction];
@@ -1099,8 +1139,9 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
 - (uint8_t)languageForNormalized:(NSString *)term { auto language = _lexicon->language(KBText(term)); return language ? static_cast<uint8_t>(*language) : 0; }
 - (double)penaltyForNormalized:(NSString *)term { return _lexicon->penalty(KBText(term)); }
 - (NSArray<NSString *> *)blockedTerms {
-    NSMutableArray<NSString *> *out = [NSMutableArray array];
-    for (const auto& term : _lexicon->blockedTerms()) [out addObject:[[NSString alloc] initWithBytes:term.data() length:term.size() encoding:NSUTF8StringEncoding]];
+    const auto terms = _lexicon->blockedTerms();
+    NSMutableArray<NSString *> *out = [NSMutableArray arrayWithCapacity:terms.size()];
+    for (const auto& term : terms) [out addObject:KBString(term)];
     return out;
 }
 - (const kb::SafetyLexicon *)nativeLexicon { return _lexicon.get(); }
@@ -1140,11 +1181,17 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
 }
 - (instancetype)initWithLexicon:(KBGenerationLexicon *)lexicon model:(KBNativeLanguageModel *)model neural:(KBNeuralWordModel *)neural
     policy:(NSArray<NSNumber *> *)policy safety:(KBNativeSafetyLexicon *)safety profile:(BOOL)profile {
-    if ((self = [super init])) {
+    if (!(self = [super init])) return nil;
+    // kb::Engine throws for a missing or corrupt dictionary: raw and NSS decoding need the
+    // packed trie, which is absent when langdata.bin failed to map or validate. Escaping, the
+    // exception unwinds through Swift and terminates the extension on every launch; nil lets
+    // the keyboard keep running (KeyboardEngine records "native-engine" in Keyboard health).
+    try {
         _resourceOwner = [lexicon packedOwner];
-        auto view = [lexicon nativeLexicon];
-        // _resourceOwner retains the mapping, EngineSession retains Engine.
-        auto packed = std::shared_ptr<const kb::PackedLexicon>(view.packed, [owner = _resourceOwner](const kb::PackedLexicon *) { (void)owner; });
+        const auto view = [lexicon nativeLexicon];
+        // The engine borrows the mapped dictionary; this deleter only keeps its owner alive.
+        // EngineSession retains Engine.
+        std::shared_ptr<const kb::PackedLexicon> packed(view.packed, [owner = _resourceOwner](const kb::PackedLexicon *) { (void)owner; });
         kb::EngineOptions options; options.correction = KBPolicy(policy); options.profile = profile;
 #if KB_NSS_RAW
         // The extension's official NSS configuration (KB_NSS_RAW=1, Config/Extension.xcconfig):
@@ -1164,7 +1211,11 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
                 if (std::isfinite(penalty) && view.packed && view.packed->wordID(term)) residual->emplace(term, penalty);
         }
         _penalties = std::move(residual);
-    } return self;
+    } catch (const std::exception& failure) {
+        os_log_error(OS_LOG_DEFAULT, "KBSharedEngine unavailable: %{public}s", failure.what());
+        return nil;
+    }
+    return self;
 }
 - (BOOL)supportsNeuralSearchSpace { return _engine->supportsNeuralSearchSpace(); }
 - (void)prepareNeuralSearchSpace {
@@ -1193,15 +1244,15 @@ NSDictionary *KBWordScores(const std::vector<kb::NeuralWord>& rows) {NSMutableDi
 @end
 static NSDictionary *KBExportCounts(const std::unordered_map<std::string, std::int64_t>& counts) {
     NSMutableDictionary *out = [NSMutableDictionary dictionaryWithCapacity:counts.size()];
-    for (const auto& [key,count] : counts) out[[[NSString alloc] initWithBytes:key.data() length:key.size() encoding:NSUTF8StringEncoding]] = @(count);
+    for (const auto& [key,count] : counts) out[KBString(key)] = @(count);
     return out;
 }
 static NSDictionary *KBExportContexts(const std::unordered_map<std::string, kb::CountRows>& rows) {
     NSMutableDictionary *out = [NSMutableDictionary dictionaryWithCapacity:rows.size()];
     for (const auto& [key,row] : rows) {
         NSMutableDictionary *counts = [NSMutableDictionary dictionaryWithCapacity:row.size()];
-        for (const auto& [word,count] : row) counts[[[NSString alloc] initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]] = @(count);
-        out[[[NSString alloc] initWithBytes:key.data() length:key.size() encoding:NSUTF8StringEncoding]] = counts;
+        for (const auto& [word,count] : row) counts[KBString(word)] = @(count);
+        out[KBString(key)] = counts;
     } return out;
 }
 @implementation KBPersonalState { kb::Personalization _state; }
@@ -1263,6 +1314,11 @@ static NSDictionary *KBExportContexts(const std::unordered_map<std::string, kb::
     auto& mutablePersonal=[personal nativeMutable];kb::GenerationLexicon lexicon{[packed nativeLexicon],baseline.get(),supp.get(),&mutablePersonal,nullptr};
     return _state.noteUse(lexicon,mutablePersonal,KBText(word),count,allow,threshold,glide);
 }
-- (NSArray<NSString *> *)dynamicWords:(NSUInteger)limit {NSMutableArray*out=[NSMutableArray array];for(const auto&word:_state.dynamicWords(limit))[out addObject:[[NSString alloc]initWithBytes:word.data() length:word.size() encoding:NSUTF8StringEncoding]];return out;}
+- (NSArray<NSString *> *)dynamicWords:(NSUInteger)limit {
+    const auto words = _state.dynamicWords(limit);
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:words.size()];
+    for (const auto& word : words) [out addObject:KBString(word)];
+    return out;
+}
 - (void)resetPersonalization {_state.resetPersonalization();}
 @end

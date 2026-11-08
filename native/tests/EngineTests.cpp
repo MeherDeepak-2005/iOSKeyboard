@@ -1,6 +1,7 @@
 #include "../DecoderCore/include/Engine.hpp"
 #include "../DecoderCore/include/EngineWire.hpp"
 #include "../DecoderCore/include/Safety.hpp"
+#include "../DecoderCore/include/SpatialModel.hpp"
 #include "MiniJson.hpp"
 #include <algorithm>
 #include <cctype>
@@ -156,8 +157,24 @@ static void testBlockedGeneration(const std::shared_ptr<const PackedLexicon>& re
     assert(!session->decode(input("biitch"), view).correction.word && !session->decode(input("masterbation"), view).correction.word);
     std::cout << "Blocked generation: 279 dictionary words excluded from search, completions, seeds and successors; typed literal kept; blocked-aimed typos left alone\n";
 }
+// The app installs its layout pack's grid; a bad grid is refused and the current one kept.
+static void testInstalledGrid() {
+    using Rows = std::array<std::string_view, 3>; using Offsets = std::array<double, 3>;
+    const Rows qwerty{"qwertyuiop", "asdfghjkl", "zxcvbnm"}; const Offsets offsets{0.0, 0.5, 1.5};
+    assert(gridLetters() == "qwertyuiopasdfghjklzxcvbnm");
+    assert(installGrid(qwerty, offsets) && grid('a')->x == 0.5 && grid('z')->x == 1.5);
+    assert(!installGrid(Rows{"qwertyuiop", "asdfghjkl", "zxcvbn"}, offsets));          // 25 letters
+    assert(!installGrid(Rows{"qwertyuiop", "asdfghjkl", "zxcvbnmq"}, offsets));        // repeated q
+    assert(!installGrid(Rows{"qwertyuiop", "asdfghjkl", "zxcvbnM"}, offsets));         // not lowercase
+    assert(!installGrid(qwerty, std::array<double, 2>{0.0, 0.5}));
+    assert(gridLetters() == "qwertyuiopasdfghjklzxcvbnm" && grid('m')->x == 7.5);
+    const Rows azerty{"azertyuiop", "qsdfghjklm", "wxcvbn"};
+    assert(installGrid(azerty, offsets) && grid('q')->y == 1 && grid('m')->x == 9.5 && !neighbouringKeys('q', 'w'));
+    assert(installGrid(qwerty, offsets) && grid('q')->x == 0 && grid('q')->y == 0 && neighbouringKeys('q', 'w'));
+}
 int main(int argc,char**argv) {
     assert(argc == 2 || argc == 4);
+    testInstalledGrid();
     Personalization user; user.reset(4);
     user.learn(std::vector<std::string>{"the","old"}, "word"); auto old=user.counts();
     user.learn(std::vector<std::string>{"a","new"}, "word");

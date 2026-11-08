@@ -66,7 +66,10 @@ extension KeyboardView {
 		applyActionKeyState()
 	}
 
+	/// Every host callback asks (updateActionKey); re-styling an unchanged key each time
+	/// reset its title, font and gradient for nothing. A new key gets its state from reload().
 	func setActionEnabled(_ enabled: Bool) {
+		guard enabled != actionEnabled else { return }
 		actionEnabled = enabled
 		applyActionKeyState()
 	}

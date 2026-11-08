@@ -231,18 +231,32 @@ final class KeyboardEngine {
 		neuralTierLock.lock(); defer { neuralTierLock.unlock() }
 		return neuralTierReady
 	}
+	/// Built once, on `queue`, when initialization finishes. Nil when the language data did not
+	/// load (the native engine needs its dictionary); English then decodes without it.
 	func makeSharedEngine() -> KBSharedEngine? {
 		let engine = ngram.makeSharedEngine(lexicon: lexicon.nativeGenerationView(), policy: correctionPolicy.nativeValues,
 			safety: lexicon.nativeSafety, neural: neuralWordModel)
+		if engine == nil { KBDiagnostics.recorder.storageFailure(operation: "native-engine") }
 		neuralTierLock.lock(); neuralTierReady = engine?.supportsNeuralSearchSpace == true; neuralTierLock.unlock()
 		return engine
 	}
+
+	/// Gives the native decoders the English layout pack's letter grid (the one `KB` and the
+	/// keys on screen use), once per process and before any decode.
+	static let nativeKeyGridInstalled: Bool = {
+		let pack = LatinLayoutPack.english
+		let installed = KBKeyGrid.installRows(pack.gridRows,
+			offsets: pack.gridRowOffsets.map { NSNumber(value: $0) })
+		assert(installed, "the native decoder refused layout \(pack.identifier)'s grid")
+		return installed
+	}()
 
 	init(languageDataURL: URL? = nil, searchPrior: NeuralSearchPrior? = nil, neuralWordModelURL: URL? = nil,
          correctionPolicy: CorrectionPolicy = .baseline, userModel: UserModel? = nil,
          smoothing: NgramSmoothing = .wittenBell,
          candidateBackend: DecoderCoreBackend = .cpp,
          correctionObserver: ((CorrectionGateEvidence) -> Void)? = nil) {
+        _ = Self.nativeKeyGridInstalled
         let personal = userModel ?? UserModel()
         self.user = personal
         self.candidateBackend = candidateBackend

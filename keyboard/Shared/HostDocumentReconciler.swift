@@ -36,14 +36,23 @@ nonisolated struct HostDocumentSnapshot: Equatable, Sendable {
     func matches(_ other: Self) -> Bool {
         guard documentID == other.documentID else { return false }
         if isEmpty && other.isEmpty { return true }
-        return hasText == other.hasText && Self.folded(before) == Self.folded(other.before)
+        guard hasText == other.hasText else { return false }
+        // The recovery monitor compares an unchanged document 5 times a second: equal text needs
+        // no folding. Only a difference is checked again with smart punctuation folded away.
+        if before == other.before && after == other.after && selection == other.selection { return true }
+        return Self.folded(before) == Self.folded(other.before)
             && Self.folded(after) == Self.folded(other.after) && Self.folded(selection) == Self.folded(other.selection)
     }
 
+    private static let smartPunctuation: Set<Unicode.Scalar> = ["\u{2019}", "\u{2018}", "\u{02BC}", "\u{201C}", "\u{201D}"]
+
     /// The text as the keyboard wrote it: smart punctuation's ’ ‘ ʼ and “ ” back to ' and ".
-    /// One character for one, so lengths and suffixes are unchanged.
+    /// One character for one, so lengths and suffixes are unchanged. Text without any of those
+    /// marks is returned as it is, without building a copy.
     static func folded(_ text: String?) -> String {
-        String((text ?? "").map { character -> Character in
+        guard let text else { return "" }
+        guard text.unicodeScalars.contains(where: smartPunctuation.contains) else { return text }
+        return String(text.map { character -> Character in
             switch character {
             case "\u{2019}", "\u{2018}", "\u{02BC}": return "'"
             case "\u{201C}", "\u{201D}": return "\""
@@ -98,6 +107,8 @@ nonisolated struct HostDocumentReconciler {
         let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
+        // It runs whenever the field has text; tolerance lets iOS batch its wakeups with others.
+        timer.tolerance = 0.05
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
     }
